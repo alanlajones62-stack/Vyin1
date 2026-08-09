@@ -1,6 +1,6 @@
 // ============================================================
-// story-creator-modal.js - VERSIÓN REDISEÑADA COMPLETA
-// (INTERFAZ LIMPIA, MODERNA Y RESPONSIVE)
+// story-creator-modal.js - VERSIÓN CORREGIDA
+// (SIN ZOOM, SIN INTERFERENCIAS, BOTÓN DE GIRAR INDEPENDIENTE)
 // ============================================================
 
 import { getToken, getCurrentUser, showToast } from './auth.js';
@@ -17,7 +17,7 @@ let mediaType = null;
 let previewUrl = null;
 let cameraStream = null;
 let cameraVideo = null;
-let facingMode = 'user';
+let facingMode = 'user'; // 'user' = frontal, 'environment' = trasera
 let isRecording = false;
 let mediaRecorder = null;
 let recordedChunks = [];
@@ -27,7 +27,9 @@ let processedVideoData = null;
 let selectedTextBg = '#1a1a2e';
 let captureMode = 'video';
 let isPublishing = false;
-let currentStep = 'camera'; // 'camera', 'preview', 'text'
+let currentStep = 'camera';
+let audioContext = null;
+let audioStream = null;
 
 // ============================================================
 // PALETA DE COLORES PARA TEXTO
@@ -93,6 +95,16 @@ export function closeCreator() {
     if (mediaRecorder?.state === 'recording') mediaRecorder.stop();
     if (timerInterval) clearInterval(timerInterval);
 
+    // Limpiar audio
+    if (audioContext) {
+        audioContext.close();
+        audioContext = null;
+    }
+    if (audioStream) {
+        audioStream.getTracks().forEach(track => track.stop());
+        audioStream = null;
+    }
+
     const overlay = safeGetElement('creatorOverlay');
     if (overlay) overlay.classList.remove('active');
     
@@ -119,7 +131,7 @@ function resetCreatorState() {
     }
 
     // Ocultar todos los paneles
-    ['inputArea', 'captureActions', 'textTools', 'subtitlesStatus', 'previewActions'].forEach(id => {
+    ['inputArea', 'captureActions', 'textTools', 'subtitlesStatus', 'previewActions', 'textEditorContainer'].forEach(id => {
         const el = safeGetElement(id);
         if (el) el.style.display = 'none';
     });
@@ -145,7 +157,7 @@ function resetCreatorState() {
 }
 
 // ============================================================
-// CREAR HTML - DISEÑO MODERNO
+// CREAR HTML - DISEÑO MODERNO CORREGIDO
 // ============================================================
 
 function createCreatorHTML() {
@@ -173,18 +185,22 @@ function createCreatorHTML() {
                 </button>
             </div>
 
-            <!-- ========== MODE SELECTOR ========== -->
+            <!-- ========== MODE SELECTOR (SOLO VIDEO Y FOTO) ========== -->
             <div class="mode-selector" id="modeSelector">
                 <button class="mode-btn active" data-mode="video">
                     <i class="fas fa-video"></i>
+                    <span>Video</span>
                 </button>
                 <button class="mode-btn" data-mode="photo">
                     <i class="fas fa-camera"></i>
-                </button>
-                <button class="mode-btn flip-btn" id="flipCameraBtn">
-                    <i class="fas fa-sync-alt"></i>
+                    <span>Foto</span>
                 </button>
             </div>
+
+            <!-- ========== BOTÓN GIRAR CÁMARA (INDEPENDIENTE) ========== -->
+            <button class="btn-flip-camera" id="flipCameraBtn" title="Girar cámara">
+                <i class="fas fa-sync-alt"></i>
+            </button>
 
             <!-- ========== RECORDING INDICATOR ========== -->
             <div class="recording-indicator" id="recordingIndicator">
@@ -312,6 +328,7 @@ function setupCreatorEvents() {
         });
     });
 
+    // 🔥 BOTÓN GIRAR CÁMARA (INDEPENDIENTE)
     const flipBtn = safeGetElement('flipCameraBtn');
     flipBtn?.addEventListener('click', () => {
         if (cameraStream && !mediaType) {
@@ -355,7 +372,7 @@ function setupCreatorEvents() {
 }
 
 // ============================================================
-// CÁMARA
+// 🔥 CÁMARA - SIN ZOOM, SIN INTERFERENCIAS
 // ============================================================
 
 async function startCamera() {
@@ -372,22 +389,42 @@ async function startCamera() {
         video.setAttribute('playsinline', '');
         video.style.width = '100%';
         video.style.height = '100%';
-        video.style.objectFit = 'cover';
-        video.style.transform = 'scaleX(-1)';
+        // 🔥 IMPORTANTE: object-fit: contain para NO recortar (sin zoom)
+        video.style.objectFit = 'contain';
+        // 🔥 Efecto espejo solo en cámara frontal
+        video.style.transform = facingMode === 'user' ? 'scaleX(-1)' : 'scaleX(1)';
         preview.appendChild(video);
         cameraVideo = video;
 
+        // 🔥 Configuración de cámara SIN ZOOM
         const constraints = {
             video: { 
                 facingMode: facingMode,
-                width: { ideal: 1080 },
-                height: { ideal: 1920 }
+                width: { ideal: 1280 },
+                height: { ideal: 720 },
+                // 🔥 NO usar zoom
+                zoom: { ideal: 1 }
             },
-            audio: true
+            audio: {
+                echoCancellation: true,
+                noiseSuppression: true,
+                autoGainControl: true,
+                sampleRate: 44100
+            }
         };
 
         const stream = await navigator.mediaDevices.getUserMedia(constraints);
         cameraStream = stream;
+
+        // 🔥 Separar audio y video para evitar interferencias
+        const videoTrack = stream.getVideoTracks()[0];
+        const audioTracks = stream.getAudioTracks();
+        
+        // Si hay audio, crear un stream separado para el audio
+        if (audioTracks.length > 0) {
+            audioStream = new MediaStream(audioTracks);
+        }
+
         video.srcObject = stream;
 
         await new Promise(resolve => {
@@ -422,11 +459,15 @@ function stopCamera() {
         cameraStream.getTracks().forEach(track => track.stop());
         cameraStream = null;
     }
+    if (audioStream) {
+        audioStream.getTracks().forEach(track => track.stop());
+        audioStream = null;
+    }
     cameraVideo = null;
 }
 
 // ============================================================
-// GIRAR CÁMARA
+// 🔥 GIRAR CÁMARA (SIN ZOOM)
 // ============================================================
 
 async function flipCamera() {
@@ -438,12 +479,18 @@ async function flipCamera() {
     facingMode = facingMode === 'user' ? 'environment' : 'user';
     showToast(facingMode === 'user' ? '📸 Cámara frontal' : '📸 Cámara trasera');
 
+    // Detener cámara actual
     stopCamera();
+    
+    // Esperar un momento para liberar recursos
+    await new Promise(resolve => setTimeout(resolve, 300));
+    
+    // Iniciar con nuevo modo
     await startCamera();
 }
 
 // ============================================================
-// CAPTURAR FOTO
+// CAPTURAR FOTO (SIN ZOOM)
 // ============================================================
 
 function capturePhoto() {
@@ -451,10 +498,12 @@ function capturePhoto() {
 
     const video = cameraVideo;
     const canvas = document.createElement('canvas');
-    canvas.width = video.videoWidth || 1080;
-    canvas.height = video.videoHeight || 1920;
+    // 🔥 Usar el tamaño real del video, no recortar
+    canvas.width = video.videoWidth || 1280;
+    canvas.height = video.videoHeight || 720;
     const ctx = canvas.getContext('2d');
     
+    // 🔥 Dibujar la imagen completa sin recortar
     if (facingMode === 'user') {
         ctx.translate(canvas.width, 0);
         ctx.scale(-1, 1);
@@ -476,20 +525,19 @@ function capturePhoto() {
             previewUrl = URL.createObjectURL(blob);
 
             if (preview) {
-                preview.innerHTML = `<img src="${previewUrl}" style="width:100%;height:100%;object-fit:cover;" />`;
+                preview.innerHTML = `<img src="${previewUrl}" style="width:100%;height:100%;object-fit:contain;" />`;
                 const img = preview.querySelector('img');
                 if (img) img.style.transform = 'scaleX(1)';
             }
 
-            // Cambiar a modo preview
             showPreviewActions();
             stopCamera();
         }
-    }, 'image/jpeg', 0.9);
+    }, 'image/jpeg', 0.95);
 }
 
 // ============================================================
-// GRABAR VIDEO
+// GRABAR VIDEO (SIN INTERFERENCIAS)
 // ============================================================
 
 function startRecording() {
@@ -522,7 +570,42 @@ function startRecording() {
     const modeSelector = safeGetElement('modeSelector');
     if (modeSelector) modeSelector.style.display = 'none';
 
-    mediaRecorder = new MediaRecorder(cameraStream, { mimeType: 'video/webm' });
+    // 🔥 Configurar MediaRecorder con buena calidad y sin eco
+    const options = {
+        mimeType: 'video/webm;codecs=vp9,opus',
+        videoBitsPerSecond: 2500000,
+        audioBitsPerSecond: 128000
+    };
+
+    try {
+        // 🔥 Usar solo el stream de video + audio separado para evitar eco
+        const videoTrack = cameraStream.getVideoTracks()[0];
+        let recordStream = new MediaStream();
+        
+        if (videoTrack) {
+            recordStream.addTrack(videoTrack);
+        }
+        
+        // Si hay audio stream, agregarlo
+        if (audioStream) {
+            const audioTrack = audioStream.getAudioTracks()[0];
+            if (audioTrack) {
+                recordStream.addTrack(audioTrack);
+            }
+        } else {
+            // Fallback: usar el audio de cameraStream
+            const audioTrack = cameraStream.getAudioTracks()[0];
+            if (audioTrack) {
+                recordStream.addTrack(audioTrack);
+            }
+        }
+
+        mediaRecorder = new MediaRecorder(recordStream, options);
+    } catch (e) {
+        // Fallback a configuración más simple
+        mediaRecorder = new MediaRecorder(cameraStream, { mimeType: 'video/webm' });
+    }
+
     mediaRecorder.ondataavailable = (event) => {
         if (event.data.size > 0) recordedChunks.push(event.data);
     };
@@ -539,7 +622,7 @@ function startRecording() {
         clearInterval(timerInterval);
     };
 
-    mediaRecorder.start();
+    mediaRecorder.start(1000); // Grabar en segmentos de 1 segundo
     
     timerInterval = setInterval(() => {
         recordingSeconds++;
@@ -649,7 +732,6 @@ window.createTextStory = function() {
         preview.style.background = selectedTextBg;
     }
 
-    // Mostrar editor de texto
     const editor = safeGetElement('textEditorContainer');
     if (editor) {
         editor.style.display = 'flex';
@@ -661,7 +743,6 @@ window.createTextStory = function() {
         }
     }
 
-    // Ocultar controles de cámara
     const modeSelector = safeGetElement('modeSelector');
     if (modeSelector) modeSelector.style.display = 'none';
     
@@ -677,11 +758,9 @@ window.createTextStory = function() {
         publishBtn.textContent = 'Publicar';
     }
 
-    // Mostrar herramientas de texto
     const textTools = safeGetElement('textTools');
     if (textTools) textTools.style.display = 'flex';
     
-    // Ocultar otros paneles
     ['captureActions', 'inputArea', 'subtitlesStatus', 'previewActions'].forEach(id => {
         const el = safeGetElement(id);
         if (el) el.style.display = 'none';
@@ -707,7 +786,6 @@ window.confirmText = function() {
     mediaType = 'text';
     mediaFile = null;
     
-    // Mostrar preview del texto
     const preview = safeGetElement('creatorPreview');
     if (preview) {
         preview.innerHTML = `
@@ -717,7 +795,6 @@ window.confirmText = function() {
         `;
     }
     
-    // Ocultar editor y mostrar input
     const editor = safeGetElement('textEditorContainer');
     if (editor) editor.style.display = 'none';
     
@@ -796,7 +873,7 @@ window.openGallery = function() {
             previewUrl = URL.createObjectURL(file);
             const preview = safeGetElement('creatorPreview');
             if (preview) {
-                preview.innerHTML = `<img src="${previewUrl}" style="width:100%;height:100%;object-fit:cover;" />`;
+                preview.innerHTML = `<img src="${previewUrl}" style="width:100%;height:100%;object-fit:contain;" />`;
             }
             showPreviewActions();
             stopCamera();
@@ -820,7 +897,7 @@ async function handleVideoFile(file) {
     if (preview) {
         preview.innerHTML = `
             <video src="${previewUrl}" controls autoplay muted 
-                   style="width:100%;height:100%;object-fit:cover;"></video>
+                   style="width:100%;height:100%;object-fit:contain;"></video>
         `;
     }
 
@@ -908,7 +985,7 @@ async function processVideoWithSubtitles(file) {
                 if (preview) {
                     preview.innerHTML = `
                         <video src="${result.videoUrl}" controls autoplay muted 
-                               style="width:100%;height:100%;object-fit:cover;"></video>
+                               style="width:100%;height:100%;object-fit:contain;"></video>
                     `;
                 }
                 mediaFile = result.videoUrl;
@@ -1113,7 +1190,7 @@ window.confirmMedia = function() {
 };
 
 // ============================================================
-// INYECTAR ESTILOS MODERNOS
+// INYECTAR ESTILOS MODERNOS CORREGIDOS
 // ============================================================
 
 function injectStyles() {
@@ -1168,7 +1245,7 @@ function injectStyles() {
         .creator-preview img {
             width: 100%;
             height: 100%;
-            object-fit: cover;
+            object-fit: contain !important;
         }
         .creator-preview .text-preview {
             width: 100%;
@@ -1250,7 +1327,7 @@ function injectStyles() {
         .top-controls .btn-next i { font-size: 12px; }
 
         /* ============================================================
-           MODE SELECTOR
+           MODE SELECTOR - SOLO VIDEO Y FOTO
         ============================================================ */
         .mode-selector {
             position: absolute;
@@ -1270,23 +1347,49 @@ function injectStyles() {
             background: none;
             border: none;
             color: rgba(255,255,255,0.4);
-            font-size: 14px;
-            padding: 8px 16px;
+            font-size: 12px;
+            padding: 6px 16px;
             border-radius: 50px;
             cursor: pointer;
             transition: all 0.3s;
             display: flex;
             align-items: center;
             gap: 6px;
+            font-weight: 500;
         }
-        .mode-selector .mode-btn i { font-size: 16px; }
+        .mode-selector .mode-btn i { font-size: 14px; }
         .mode-selector .mode-btn.active {
             background: #fff;
             color: #000;
         }
         .mode-selector .mode-btn:active { transform: scale(0.95); }
-        .mode-selector .flip-btn {
-            border-left: 1px solid rgba(255,255,255,0.08);
+
+        /* ============================================================
+           BOTÓN GIRAR CÁMARA - INDEPENDIENTE
+        ============================================================ */
+        .btn-flip-camera {
+            position: absolute;
+            top: 68px;
+            right: 20px;
+            z-index: 21;
+            background: rgba(255,255,255,0.08);
+            border: none;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            color: #fff;
+            font-size: 16px;
+            cursor: pointer;
+            backdrop-filter: blur(10px);
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border: 1px solid rgba(255,255,255,0.05);
+        }
+        .btn-flip-camera:active { 
+            transform: scale(0.9); 
+            background: rgba(255,255,255,0.15);
         }
 
         /* ============================================================
@@ -1692,8 +1795,9 @@ function injectStyles() {
             .top-controls .btn-close { width: 32px; height: 32px; font-size: 14px; }
             .top-controls .btn-next { font-size: 12px; padding: 6px 16px; }
             .mode-selector { top: 54px; padding: 3px; }
-            .mode-selector .mode-btn { font-size: 12px; padding: 6px 12px; }
-            .mode-selector .mode-btn i { font-size: 14px; }
+            .mode-selector .mode-btn { font-size: 11px; padding: 5px 12px; }
+            .mode-selector .mode-btn i { font-size: 12px; }
+            .btn-flip-camera { top: 62px; right: 12px; width: 34px; height: 34px; font-size: 14px; }
             .capture-actions { bottom: 130px; gap: 30px; }
             .capture-actions .btn-retake i,
             .capture-actions .btn-use i { width: 40px; height: 40px; font-size: 15px; }
@@ -1721,8 +1825,9 @@ function injectStyles() {
             .bottom-controls .btn-capture .capture-inner { width: 40px; height: 40px; }
             .bottom-controls .btn-capture.recording .capture-inner { width: 20px; height: 20px; }
             .mode-selector { top: 48px; }
-            .mode-selector .mode-btn { font-size: 11px; padding: 4px 10px; }
-            .mode-selector .mode-btn i { font-size: 12px; }
+            .mode-selector .mode-btn { font-size: 10px; padding: 4px 10px; }
+            .mode-selector .mode-btn i { font-size: 11px; }
+            .btn-flip-camera { top: 56px; right: 10px; width: 30px; height: 30px; font-size: 12px; }
             .text-editor-container textarea { font-size: 18px; height: 50%; }
             .capture-actions { bottom: 110px; }
             .preview-actions { bottom: 110px; }
@@ -1740,7 +1845,7 @@ function injectStyles() {
                 margin: 0 auto;
                 border-radius: 0;
             }
-            .mode-selector .mode-btn { padding: 10px 20px; }
+            .mode-selector .mode-btn { padding: 8px 20px; }
             .text-editor-container textarea { font-size: 32px; }
         }
     `;
