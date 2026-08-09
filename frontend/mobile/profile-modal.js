@@ -1,4 +1,4 @@
-// profile-modal.js - Modal para ver perfil de usuario (VERSIÓN CORREGIDA)
+// profile-modal.js - Modal para ver perfil de usuario (VERSIÓN COMPLETA CORREGIDA)
 // CON SISTEMA DE BLOQUEO Y PRIVACIDAD COMPLETO
 
 import {
@@ -174,7 +174,6 @@ async function loadProfileData(userId, silent = false) {
                 const privacy = errorData.privacy || 'private';
                 
                 // 🔥 PERFIL TOTALMENTE PRIVADO - NADIE PUEDE VERLO
-                // Solo el dueño lo puede ver
                 showPrivateProfileUI(userId, true);
                 return;
             } else {
@@ -233,13 +232,11 @@ function showPrivateProfileUI(userId, isStrictPrivate = false) {
 
     // 🔥 SI ES EL DUEÑO DEL PERFIL, PUEDE VERLO COMPLETO
     if (isOwnProfile) {
-        // Recargar el perfil normalmente (el backend devuelve todos los datos para el dueño)
         loadProfileData(userId);
         return;
     }
 
     // 🔥 PERFIL TOTALMENTE PRIVADO - NADIE PUEDE VERLO
-    // Ni seguidores, ni no seguidores, ni nadie
     if (isStrictPrivate) {
         container.innerHTML = `
             <div class="profile-private-container">
@@ -254,7 +251,6 @@ function showPrivateProfileUI(userId, isStrictPrivate = false) {
     }
 
     // 🔥 PERFIL "SOLO SEGUIDORES" - Mostrar opción de seguir
-    // Solo si el usuario NO es seguidor
     container.innerHTML = `
         <div class="profile-private-container">
             <div class="private-lock-icon">
@@ -518,10 +514,6 @@ function updateProfileModalUI(user, stories) {
         showPrivateProfileUI(user.id, false);
         return;
     }
-
-    // 🔥 CASO 4: El usuario actual bloqueó al dueño del perfil
-    // → El bloqueador puede ver el perfil, pero con indicador
-    // → Mostrar perfil normal con botón "Desbloquear"
 
     const followersCount = user.followersCount || 0;
     const followingCount = user.followingCount || 0;
@@ -1133,6 +1125,51 @@ function openStoryFromProfileOverlay(storyId, storiesJson, profileUserId) {
 }
 
 // ============================================================
+// 🔥 PRE-CARGAR PERFIL DEL USUARIO ACTUAL
+// ============================================================
+
+function preloadCurrentUserProfile() {
+    const currentUser = getCurrentUser();
+    if (!currentUser || !currentUser.id) return;
+    
+    const userId = currentUser.id;
+    
+    if (profileCache.has(userId)) return;
+    
+    console.log(`🔄 Pre-cargando perfil de ${currentUser.fullName}...`);
+    
+    setTimeout(async () => {
+        try {
+            const token = getToken();
+            if (!token) return;
+
+            const res = await fetch(`${API_URL}/api/users/profile/${userId}?includeStories=true&minimal=true`, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+
+            if (res.ok) {
+                const data = await res.json();
+                const user = data.user || data;
+                const stories = data.stories || [];
+                
+                profileCache.set(userId, {
+                    data: user,
+                    timestamp: Date.now()
+                });
+                storiesCache.set(userId, {
+                    data: stories,
+                    timestamp: Date.now()
+                });
+                cleanCache();
+                console.log(`✅ Perfil ${userId} pre-cargado`);
+            }
+        } catch (e) {
+            // Silencioso
+        }
+    }, 1000);
+}
+
+// ============================================================
 // FUNCIONES GLOBALES (window)
 // ============================================================
 
@@ -1145,6 +1182,7 @@ window.openEditProfileFromModal = openEditProfileFromModal;
 window.clearProfileCache = clearProfileCache;
 window.handleBlockUser = window.handleBlockUser;
 window.handleFollowPrivate = window.handleFollowPrivate;
+window.preloadCurrentUserProfile = preloadCurrentUserProfile;
 
 // ============================================================
 // EXPORTAR
@@ -1156,5 +1194,6 @@ export {
     loadProfileData, 
     handleFollowUser,
     openFollowersFromProfile,
-    clearProfileCache
+    clearProfileCache,
+    preloadCurrentUserProfile
 };
