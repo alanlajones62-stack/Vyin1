@@ -3,7 +3,7 @@
 // (CON BARRA DE BÚSQUEDA Y FILTROS)
 // ============================================================
 
-import { getToken, getCurrentUser, showToast, getAvatar, escapeHtml, formatDate } from './auth.js';
+import { getToken, getCurrentUser, showToast, getAvatar, escapeHtml } from './auth.js';
 
 const API_URL = window.location.origin;
 
@@ -13,7 +13,7 @@ const API_URL = window.location.origin;
 
 let isFollowersModalOpen = false;
 let currentUserId = null;
-let currentFilter = 'followers'; // 'followers' o 'following'
+let currentFilter = 'followers';
 let followersList = [];
 let followingList = [];
 let filteredList = [];
@@ -39,6 +39,8 @@ export async function openFollowersModal(userId, filter = 'followers') {
         return;
     }
 
+    console.log(`📊 Abriendo modal de seguidores: userId=${userId}, filter=${filter}`);
+
     currentUserId = userId;
     currentFilter = filter;
     searchQuery = '';
@@ -53,6 +55,7 @@ export async function openFollowersModal(userId, filter = 'followers') {
     if (modalOverlay) {
         modalOverlay.style.display = 'flex';
         modalOverlay.classList.add('active');
+        modalOverlay.style.zIndex = '10004';
     }
 
     document.body.style.overflow = 'hidden';
@@ -65,6 +68,7 @@ export async function openFollowersModal(userId, filter = 'followers') {
 // ============================================================
 
 export function closeFollowersModal() {
+    console.log('🔒 Cerrando modal de seguidores');
     isFollowersModalOpen = false;
     currentUserId = null;
     followersList = [];
@@ -76,6 +80,7 @@ export function closeFollowersModal() {
     if (overlay) {
         overlay.classList.remove('active');
         overlay.style.display = 'none';
+        overlay.style.zIndex = '';
     }
 
     document.body.style.overflow = '';
@@ -87,6 +92,8 @@ export function closeFollowersModal() {
 
 function createFollowersModalHTML() {
     if (document.getElementById('followersModalOverlay')) return;
+
+    console.log('🏗️ Creando HTML del modal de seguidores');
 
     const html = `
         <div id="followersModalOverlay" class="followers-modal-overlay" onclick="window.closeFollowersModal()">
@@ -165,6 +172,11 @@ function createFollowersModalHTML() {
     // Funciones globales
     window.closeFollowersModal = closeFollowersModal;
     window.switchFollowersTab = switchFollowersTab;
+    window.handleFollowersFollow = handleFollowersFollow;
+    window.openProfileFromFollowers = openProfileFromFollowers;
+    
+    // Inyectar estilos
+    injectFollowersStyles();
 }
 
 // ============================================================
@@ -219,6 +231,7 @@ async function loadFollowersData(userId) {
         if (followersRes.ok) {
             followersList = await followersRes.json();
             document.getElementById('followersCount').textContent = followersList.length;
+            console.log(`📊 Seguidores cargados: ${followersList.length}`);
         }
 
         // Cargar seguidos
@@ -229,6 +242,7 @@ async function loadFollowersData(userId) {
         if (followingRes.ok) {
             followingList = await followingRes.json();
             document.getElementById('followingCount').textContent = followingList.length;
+            console.log(`📊 Siguiendo cargados: ${followingList.length}`);
         }
 
         // Actualizar título
@@ -343,7 +357,7 @@ function renderList(users) {
 // MANEJAR SEGUIR/DESSEGUIR DESDE EL MODAL
 // ============================================================
 
-window.handleFollowersFollow = async function(userId, btn) {
+async function handleFollowersFollow(userId, btn) {
     const token = getToken();
     if (!token) {
         showToast('Inicia sesión para seguir', true);
@@ -352,7 +366,7 @@ window.handleFollowersFollow = async function(userId, btn) {
 
     const isFollowing = btn.classList.contains('following');
     const url = isFollowing ? `${API_URL}/api/follows/unfollow` : `${API_URL}/api/follows/follow`;
-    const method = 'DELETE';
+    const method = isFollowing ? 'DELETE' : 'POST';
 
     btn.disabled = true;
     const originalText = btn.innerHTML;
@@ -368,35 +382,15 @@ window.handleFollowersFollow = async function(userId, btn) {
             body: JSON.stringify({ userId })
         });
 
+        const data = await res.json();
         if (res.ok) {
             if (isFollowing) {
                 btn.classList.remove('following');
                 btn.innerHTML = '<i class="fas fa-plus"></i> Seguir';
-                // Actualizar listas locales
-                const userIndex = followersList.findIndex(u => u.id === userId);
-                if (userIndex !== -1) {
-                    followersList[userIndex].isFollowing = false;
-                }
-                const followingIndex = followingList.findIndex(u => u.id === userId);
-                if (followingIndex !== -1) {
-                    followingList.splice(followingIndex, 1);
-                }
                 showToast('💔 Dejaste de seguir');
             } else {
                 btn.classList.add('following');
                 btn.innerHTML = '<i class="fas fa-check"></i> Siguiendo';
-                // Actualizar listas locales
-                const userIndex = followersList.findIndex(u => u.id === userId);
-                if (userIndex !== -1) {
-                    followersList[userIndex].isFollowing = true;
-                }
-                // Añadir a following si no está
-                if (!followingList.find(u => u.id === userId)) {
-                    const user = followersList.find(u => u.id === userId) || followingList.find(u => u.id === userId);
-                    if (user) {
-                        followingList.push({ ...user, isFollowing: true });
-                    }
-                }
                 showToast('✅ Ahora sigues a este usuario');
             }
         } else {
@@ -411,13 +405,13 @@ window.handleFollowersFollow = async function(userId, btn) {
         btn.innerHTML = originalText;
         btn.disabled = false;
     }
-};
+}
 
 // ============================================================
 // ABRIR PERFIL DESDE EL MODAL DE SEGUIDORES
 // ============================================================
 
-window.openProfileFromFollowers = function(userId) {
+function openProfileFromFollowers(userId) {
     if (!userId) return;
     closeFollowersModal();
     setTimeout(() => {
@@ -431,7 +425,7 @@ window.openProfileFromFollowers = function(userId) {
             }
         });
     }, 100);
-};
+}
 
 // ============================================================
 // INYECTAR ESTILOS
@@ -444,7 +438,7 @@ function injectFollowersStyles() {
     styles.id = 'followersModalStyles';
     styles.textContent = `
         /* ============================================================
-           OVERLAY
+           FOLLOWERS MODAL - Z-INDEX MÁS ALTO
         ============================================================ */
         .followers-modal-overlay {
             position: fixed;
@@ -452,10 +446,10 @@ function injectFollowersStyles() {
             left: 0;
             width: 100vw;
             height: 100dvh;
-            background: rgba(0,0,0,0.8);
-            backdrop-filter: blur(20px);
-            -webkit-backdrop-filter: blur(20px);
-            z-index: 10003;
+            background: rgba(0, 0, 0, 0.85);
+            backdrop-filter: blur(24px);
+            -webkit-backdrop-filter: blur(24px);
+            z-index: 10004;
             display: none;
             align-items: center;
             justify-content: center;
@@ -770,11 +764,8 @@ function injectFollowersStyles() {
     document.head.appendChild(styles);
 }
 
-// Inyectar estilos
-injectFollowersStyles();
-
 // ============================================================
-// EXPORTACIONES
+// ✅ EXPORTACIONES - UNA SOLA VEZ
 // ============================================================
 
 export { openFollowersModal, closeFollowersModal };
