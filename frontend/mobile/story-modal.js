@@ -1,6 +1,6 @@
 // ============================================================
 // story-modal.js - Modal para ver historias con navegación 
-// (VERSIÓN COMPLETA CON ELIMINAR)
+// (VERSIÓN COMPLETA CON ELIMINAR - CORREGIDA)
 // ============================================================
 
 import {
@@ -396,10 +396,10 @@ function setupModalEvents() {
 }
 
 // ============================================================
-// 🔥 ELIMINAR HISTORIA
+// 🔥 ELIMINAR HISTORIA - SIN EXPORT (solo función interna)
 // ============================================================
 
-export async function deleteStory(storyId) {
+async function deleteStory(storyId) {
     if (!storyId) {
         showToast('Historia no encontrada', true);
         return;
@@ -1490,7 +1490,14 @@ window.openProfileFromModal = function() {
 };
 
 // ============================================================
-// EXPORTACIONES
+// ✅ EXPORTACIONES - ÚNICA VEZ
 // ============================================================
 
-export { loadStoryData, handleModalLike, deleteStory };
+export { 
+    openStoryModal, 
+    closeStoryModal, 
+    navigateStory, 
+    loadStoryData, 
+    handleModalLike,
+    deleteStory
+};
