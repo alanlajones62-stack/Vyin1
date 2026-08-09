@@ -539,7 +539,7 @@ function hideNewStoriesBadge() {
 }
 
 // ============================================================
-// 🔥 FETCH FEED POR CURSOR (NUEVO)
+// 🔥 FETCH FEED POR CURSOR
 // ============================================================
 
 async function fetchFeedByCursor(filter, cursor = null) {
@@ -669,6 +669,10 @@ async function fetchFeedByCursor(filter, cursor = null) {
     }
 }
 
+// ============================================================
+// 🔥 FETCH USERS (PARA ENRIQUECER HISTORIAS)
+// ============================================================
+
 async function fetchUsers(userIds) {
     try {
         const token = getToken();
@@ -691,6 +695,61 @@ async function fetchUsers(userIds) {
     } catch (error) {
         console.warn('Error fetching users:', error);
         return [];
+    }
+}
+
+// ============================================================
+// 🔥 LOAD PUBLIC FEED (PARA USUARIOS NO AUTENTICADOS)
+// ============================================================
+
+async function loadPublicFeed() {
+    try {
+        console.log('📡 Cargando feed público...');
+        
+        // Obtener historias públicas del backend
+        const res = await fetch(`${API_URL}/api/stories/public?limit=20`);
+        
+        if (!res.ok) {
+            throw new Error(`HTTP ${res.status}`);
+        }
+        
+        const data = await res.json();
+        
+        if (data.data && data.data.length > 0) {
+            // Enriquecer con datos de usuario
+            const users = await fetchUsers(data.data.map(s => s.userId));
+            const userMap = {};
+            users.forEach(u => { userMap[u.id] = u; });
+            
+            const enrichedStories = data.data.map(story => {
+                const owner = userMap[story.userId] || story.userData || story.user || {};
+                return {
+                    ...story,
+                    userData: {
+                        id: owner.id || story.userId,
+                        username: owner.username || story.username || 'usuario',
+                        fullName: owner.fullName || story.fullName || 'Usuario',
+                        avatar: owner.avatar || story.avatar || getAvatar(owner.fullName || 'U'),
+                        isVerified: owner.isVerified || false,
+                        accountType: owner.accountType || 'personal'
+                    },
+                    hasSubtitles: story.hasSubtitles || false,
+                    subtitles: story.subtitles || null,
+                    language: story.language || 'es'
+                };
+            });
+            
+            displayedStories = enrichedStories;
+            currentFilter = 'public';
+            renderFeed(displayedStories);
+            console.log(`📊 Feed público: ${displayedStories.length} historias`);
+        } else {
+            showEmptyState('No hay historias públicas disponibles. Inicia sesión para ver más contenido.');
+        }
+        
+    } catch (error) {
+        console.error('Error cargando feed público:', error);
+        showEmptyState('Error al cargar el feed público');
     }
 }
 
@@ -914,13 +973,14 @@ function renderFeed(storiesData) {
     if (!storiesData || storiesData.length === 0) {
         const messages = {
             ranked: 'No hay más historias para ti',
-            recent: 'No hay historias recientes'
+            recent: 'No hay historias recientes',
+            public: 'No hay historias públicas disponibles'
         };
         container.innerHTML = `
             <div class="empty-state">
                 <i class="fas fa-camera"></i>
                 <h3>${messages[currentFilter] || 'No hay historias'}</h3>
-                <p>${currentFilter === 'ranked' ? 'Vuelve más tarde para ver nuevas historias' : currentFilter === 'recent' ? 'Espera a que alguien publique en tu país/región' : ''}</p>
+                <p>${currentFilter === 'ranked' ? 'Vuelve más tarde para ver nuevas historias' : currentFilter === 'recent' ? 'Espera a que alguien publique en tu país/región' : currentFilter === 'public' ? 'Inicia sesión para ver más contenido' : ''}</p>
             </div>
         `;
         return;
