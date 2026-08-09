@@ -1,6 +1,4 @@
-// ============================================================
-// app.js - VERSIÓN COMPLETA CON FEED INFINITO POR CURSOR
-// (CORREGIDO: REDIRIGE A LOGIN SIN SESIÓN)
+// app.js - VERSIÓN MODIFICADA CON PERFIL NATIVO
 // ============================================================
 
 import {
@@ -21,6 +19,9 @@ import { openEditProfileModal, closeEditProfileModal } from './edit-profile-moda
 import { openCreator, closeCreator } from './story-creator-modal.js';
 import { openExploreModal, closeExploreModal } from './explore-modal.js';
 import { openActivityModal, closeActivityModal, updateBadge } from './activity-modal.js';
+
+// 🔥 IMPORTAR PERFIL NATIVO
+import { showProfileNative, hideProfileNative } from './profile-native.js';
 
 const API_URL = window.location.origin;
 
@@ -230,7 +231,6 @@ function restoreFeedCursor() {
         if (!saved) return null;
         
         const data = JSON.parse(saved);
-        // Solo restaurar si es el mismo filtro y no pasó más de 5 minutos
         if (data.filter === currentFilter && (Date.now() - data.timestamp) < 300000) {
             console.log(`🔄 Restaurando cursor: ${data.cursor}`);
             return data.cursor;
@@ -290,6 +290,12 @@ function restoreNavToHome() {
     document.querySelectorAll('.bottom-nav button').forEach(b => b.classList.remove('active'));
     const navFeed = document.getElementById('navFeed');
     if (navFeed) navFeed.classList.add('active');
+    
+    // 🔥 Ocultar perfil nativo si está visible
+    const section = document.getElementById('sectionProfile');
+    if (section && !section.classList.contains('hidden')) {
+        hideProfileNative();
+    }
 }
 
 window.restoreNavToHome = restoreNavToHome;
@@ -335,7 +341,6 @@ async function init() {
             initSocket();
             updateHeaderUI(getCurrentUser());
             
-            // Intentar restaurar el cursor guardado
             feedCursor = restoreFeedCursor();
             
             await fetchFeedByCursor('ranked', feedCursor);
@@ -350,7 +355,6 @@ async function init() {
             }
         }
     } else {
-        // 🔥 SIN SESIÓN: Mostrar pantalla de login mejorada
         updateUIForLoggedOut();
         showLoginScreen();
     }
@@ -361,7 +365,7 @@ async function init() {
 }
 
 // ============================================================
-// 🔥 SHOW LOGIN SCREEN - MEJORADA
+// 🔥 SHOW LOGIN SCREEN
 // ============================================================
 
 function showLoginScreen() {
@@ -370,7 +374,6 @@ function showLoginScreen() {
 
     container.innerHTML = `
         <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:70vh;padding:40px 24px;text-align:center;animation:fadeIn 0.6s ease;">
-            <!-- Logo -->
             <div style="width:100px;height:100px;background:linear-gradient(135deg,#c084fc,#db2777);border-radius:50%;display:flex;align-items:center;justify-content:center;margin-bottom:28px;box-shadow:0 12px 48px rgba(192,132,252,0.25);">
                 <i class="fas fa-camera" style="font-size:42px;color:#fff;"></i>
             </div>
@@ -380,24 +383,8 @@ function showLoginScreen() {
                 Descubre historias, conecta con amigos y comparte momentos únicos
             </p>
             
-            <!-- Botón de login mejorado -->
             <button onclick="window.location.href='/login.html'" 
-                    style="background:linear-gradient(135deg,#c084fc,#db2777);
-                           border:none;
-                           color:#fff;
-                           padding:16px 48px;
-                           border-radius:50px;
-                           font-size:17px;
-                           font-weight:700;
-                           cursor:pointer;
-                           display:flex;
-                           align-items:center;
-                           gap:12px;
-                           transition:all 0.3s ease;
-                           box-shadow:0 8px 32px rgba(192,132,252,0.3);
-                           position:relative;
-                           overflow:hidden;
-                           letter-spacing:0.5px;">
+                    style="background:linear-gradient(135deg,#c084fc,#db2777);border:none;color:#fff;padding:16px 48px;border-radius:50px;font-size:17px;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:12px;transition:all 0.3s ease;box-shadow:0 8px 32px rgba(192,132,252,0.3);position:relative;overflow:hidden;letter-spacing:0.5px;">
                 <i class="fas fa-sign-in-alt" style="font-size:18px;"></i>
                 Iniciar sesión
                 <span style="position:absolute;top:-50%;left:-50%;width:200%;height:200%;background:radial-gradient(circle,rgba(255,255,255,0.1) 0%,transparent 70%);transform:scale(0);transition:transform 0.5s ease;"></span>
@@ -411,7 +398,6 @@ function showLoginScreen() {
                 </a>
             </div>
             
-            <!-- Características -->
             <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-top:40px;width:100%;max-width:320px;">
                 <div style="background:rgba(255,255,255,0.03);border-radius:12px;padding:12px 8px;border:1px solid rgba(255,255,255,0.04);">
                     <i class="fas fa-camera" style="color:#c084fc;font-size:16px;margin-bottom:4px;display:block;"></i>
@@ -429,7 +415,6 @@ function showLoginScreen() {
         </div>
     `;
 
-    // Agregar animación fadeIn
     const style = document.createElement('style');
     style.textContent = `
         @keyframes fadeIn {
@@ -446,7 +431,6 @@ function showLoginScreen() {
     `;
     document.head.appendChild(style);
 
-    // Agregar efecto hover al botón
     const loginBtn = container.querySelector('button');
     if (loginBtn) {
         loginBtn.classList.add('login-btn-hover');
@@ -477,7 +461,6 @@ function updateHeaderUI(user) {
     const name = document.getElementById('headerName');
     
     if (!user) {
-        // Usuario NO logueado
         if (userBadge) userBadge.style.display = 'none';
         if (navProfile) navProfile.style.display = 'none';
         if (loginBtn) {
@@ -491,7 +474,6 @@ function updateHeaderUI(user) {
         return;
     }
 
-    // Usuario logueado
     if (loginBtn) {
         loginBtn.style.display = 'none';
     }
@@ -576,7 +558,6 @@ function initSocket() {
         
         allStories.push(data);
         
-        // Solo mostrar badge si la historia es relevante y estamos en RECIENTES
         if (currentFilter === 'recent') {
             const storyCountry = data.country || null;
             const storyRegion = data.region || 'other';
@@ -598,7 +579,6 @@ function initSocket() {
             }
         }
         
-        // En PARA TI, actualizar en segundo plano
         if (currentFilter === 'ranked') {
             refreshFeedInBackground();
         }
@@ -675,7 +655,7 @@ function hideNewStoriesBadge() {
 }
 
 // ============================================================
-// 🔥 FETCH FEED POR CURSOR (SOLO CON SESIÓN)
+// 🔥 FETCH FEED POR CURSOR
 // ============================================================
 
 async function fetchFeedByCursor(filter, cursor = null) {
@@ -729,47 +709,34 @@ async function fetchFeedByCursor(filter, cursor = null) {
 
         console.log(`📡 Recibidas ${stories.length} historias (más: ${hasMoreStories}, restantes: ${totalRemaining})`);
 
-        // ============================================================
-        // 🔥 FILTRAR POR TIEMPO SEGÚN EL MODO
-        // ============================================================
-        
         const now = Date.now();
 
         if (filter === 'recent') {
-            // RECIENTES: Solo historias con menos de 10 minutos
             stories = stories.filter(s => {
                 const createdAt = new Date(s.createdAt).getTime();
                 const age = now - createdAt;
                 return age < TEN_MINUTES;
             });
             console.log(`📊 [RECIENTES] ${stories.length} historias con menos de 10 minutos`);
-            
-            // 🔥 RECIENTES: Filtrar historias vistas en RECIENTES
             stories = stories.filter(s => !isViewedInRecent(s.id));
             
         } else if (filter === 'ranked') {
-            // PARA TI: Solo historias con más de 10 minutos
             stories = stories.filter(s => {
                 const createdAt = new Date(s.createdAt).getTime();
                 const age = now - createdAt;
                 return age >= TEN_MINUTES;
             });
             console.log(`📊 [PARA TI] ${stories.length} historias con más de 10 minutos`);
-            
-            // 🔥 PARA TI: Filtrar historias ya vistas GLOBALMENTE
             stories = stories.filter(s => !isStoryViewed(s.id));
         }
 
-        // 🔥 FILTRAR historias del propio usuario
         const currentUser = getCurrentUser();
         if (currentUser) {
             stories = stories.filter(s => s.userId !== currentUser.id);
         }
 
-        // 🔥 FILTRAR historias ocultas
         stories = stories.filter(s => !s.hidden);
 
-        // Enriquecer con datos de usuario
         const users = await fetchUsers(stories.map(s => s.userId));
         const userMap = {};
         users.forEach(u => { userMap[u.id] = u; });
@@ -794,17 +761,14 @@ async function fetchFeedByCursor(filter, cursor = null) {
             };
         });
 
-        // Si es la primera carga o no hay cursor, reemplazar todo
         if (cursor === null || cursor === 'null') {
             displayedStories = enrichedStories;
         } else {
-            // Agregar solo historias que no estén ya en displayedStories
             const existingIds = new Set(displayedStories.map(s => s.id));
             const newStories = enrichedStories.filter(s => !existingIds.has(s.id));
             displayedStories = [...displayedStories, ...newStories];
         }
 
-        // 🔥 Guardar el nuevo cursor
         if (nextCursor) {
             feedCursor = nextCursor;
             saveFeedCursor(feedCursor);
@@ -817,7 +781,6 @@ async function fetchFeedByCursor(filter, cursor = null) {
         renderFeed(displayedStories);
         isLoading = false;
 
-        // 🔥 Pre-cargar siguiente página si hay más
         if (hasMoreStories && displayedStories.length > 0) {
             preloadNextPage();
         }
@@ -832,7 +795,7 @@ async function fetchFeedByCursor(filter, cursor = null) {
 }
 
 // ============================================================
-// 🔥 FETCH USERS (PARA ENRIQUECER HISTORIAS)
+// 🔥 FETCH USERS
 // ============================================================
 
 async function fetchUsers(userIds) {
@@ -877,7 +840,7 @@ function preloadNextPage() {
 }
 
 // ============================================================
-// 🔥 LOAD MORE STORIES (SOLO CON SESIÓN)
+// 🔥 LOAD MORE STORIES
 // ============================================================
 
 async function loadMoreStories(preload = false) {
@@ -914,30 +877,22 @@ async function loadMoreStories(preload = false) {
         totalRemaining = pagination.totalRemaining || 0;
         const nextCursor = pagination.nextCursor || null;
         
-        // ============================================================
-        // 🔥 FILTRAR POR TIEMPO SEGÚN EL MODO
-        // ============================================================
-        
         const now = Date.now();
 
         if (currentFilter === 'recent') {
-            // RECIENTES: Solo historias con menos de 10 minutos
             stories = stories.filter(s => {
                 const createdAt = new Date(s.createdAt).getTime();
                 const age = now - createdAt;
                 return age < TEN_MINUTES;
             });
-            // RECIENTES: Filtrar historias vistas en RECIENTES
             stories = stories.filter(s => !isViewedInRecent(s.id));
             
         } else if (currentFilter === 'ranked') {
-            // PARA TI: Solo historias con más de 10 minutos
             stories = stories.filter(s => {
                 const createdAt = new Date(s.createdAt).getTime();
                 const age = now - createdAt;
                 return age >= TEN_MINUTES;
             });
-            // PARA TI: Filtrar historias ya vistas GLOBALMENTE
             stories = stories.filter(s => !isStoryViewed(s.id));
         }
         
@@ -947,7 +902,6 @@ async function loadMoreStories(preload = false) {
         }
         stories = stories.filter(s => !s.hidden);
         
-        // Enriquecer
         const users = await fetchUsers(stories.map(s => s.userId));
         const userMap = {};
         users.forEach(u => { userMap[u.id] = u; });
@@ -972,7 +926,6 @@ async function loadMoreStories(preload = false) {
             };
         });
         
-        // Solo agregar historias nuevas
         const existingIds = new Set(displayedStories.map(s => s.id));
         const newStories = enrichedStories.filter(s => !existingIds.has(s.id));
         
@@ -1018,20 +971,18 @@ function refreshFeedInBackground() {
     if (refreshTimeout) clearTimeout(refreshTimeout);
     refreshTimeout = setTimeout(() => {
         console.log('🔄 Actualizando feed en segundo plano...');
-        // Recargar desde el cursor actual (no perder posición)
         fetchFeedByCursor(currentFilter, feedCursor);
         refreshTimeout = null;
     }, 5000);
 }
 
 // ============================================================
-// 🔥 APLICAR FILTRO (VERIFICA SESIÓN)
+// 🔥 APLICAR FILTRO
 // ============================================================
 
 function applyFilter(filter) {
     const token = getToken();
     
-    // 🔥 Sin sesión: redirigir a login
     if (!token) {
         console.log('🔒 Sin sesión - Redirigiendo a login');
         showToast('Inicia sesión para ver historias', true);
@@ -1041,7 +992,6 @@ function applyFilter(filter) {
         return;
     }
 
-    // 🔥 Con sesión: aplicar filtros normales
     currentFilter = filter;
     displayedStories = [];
     feedCursor = null;
@@ -1056,7 +1006,6 @@ function applyFilter(filter) {
         hideNewStoriesBadge();
     }
 
-    // Intentar restaurar cursor guardado para este filtro
     const savedCursor = restoreFeedCursor();
     if (savedCursor && savedCursor !== 'null') {
         feedCursor = savedCursor;
@@ -1067,7 +1016,7 @@ function applyFilter(filter) {
 }
 
 // ============================================================
-// 🔥 FUNCIÓN: REGIONES CERCANAS
+// REGIONES CERCANAS
 // ============================================================
 
 const REGION_NEARBY_MAP = {
@@ -1106,7 +1055,7 @@ function showEmptyState(message) {
 }
 
 // ============================================================
-// 🔥 RENDER FEED CON DETECCIÓN DE FINAL
+// 🔥 RENDER FEED
 // ============================================================
 
 function renderFeed(storiesData) {
@@ -1274,7 +1223,6 @@ function renderFeed(storiesData) {
         `;
     });
 
-    // 🔥 Añadir elemento de fin de feed si hay más
     html += `
         <div id="feedEnd" style="height: 20px; display: ${hasMoreStories ? 'block' : 'none'};">
             <div style="text-align:center;padding:10px;color:rgba(255,255,255,0.1);font-size:12px;">
@@ -1285,13 +1233,8 @@ function renderFeed(storiesData) {
 
     container.innerHTML = html;
 
-    // 🔥 Observador para detectar cuando el usuario llega al final
     setupInfiniteScroll();
 
-    // ============================================================
-    // 🔥 REGISTRO AUTOMÁTICO DE VISTAS
-    // ============================================================
-    
     const observer = new IntersectionObserver((entries) => {
         entries.forEach(entry => {
             if (entry.isIntersecting) {
@@ -1312,10 +1255,6 @@ function renderFeed(storiesData) {
     });
 
     window._viewObserver = observer;
-
-    // ============================================================
-    // EVENTOS
-    // ============================================================
 
     container.querySelectorAll('.btn-like').forEach(btn => {
         btn.addEventListener('click', (e) => {
@@ -1401,7 +1340,7 @@ function setupInfiniteScroll() {
 }
 
 // ============================================================
-// 🔥 REGISTRAR VISTA (actualiza el cursor)
+// 🔥 REGISTRAR VISTA
 // ============================================================
 
 async function registerView(storyId) {
@@ -1429,7 +1368,6 @@ async function registerView(storyId) {
             console.log(`📌 [VIEW] Historia ${storyId} vista en PARA TI`);
         }
 
-        // 🔥 Actualizar el cursor con esta historia
         feedCursor = storyId;
         saveFeedCursor(feedCursor);
 
@@ -1456,7 +1394,7 @@ async function registerView(storyId) {
 }
 
 // ============================================================
-// FUNCIONES DE TRADUCCIÓN
+// TRADUCCIÓN
 // ============================================================
 
 window.translateStory = async function(storyId) {
@@ -1731,7 +1669,6 @@ async function refreshFeed() {
         if (countEl) countEl.textContent = '0';
     }
     
-    // 🔥 No resetear el cursor, recargar desde donde estábamos
     displayedStories = [];
     await fetchFeedByCursor(currentFilter, feedCursor);
 }
@@ -1763,12 +1700,34 @@ window.closeExploreModal = closeExploreModal;
 window.openActivityModal = openActivityModal;
 window.closeActivityModal = closeActivityModal;
 
+// 🔥 PERFIL NATIVO
+window.showProfileNative = showProfileNative;
+window.hideProfileNative = hideProfileNative;
+
 window.loadPendingStories = () => {
     refreshFeed();
 };
 
 window.goToProfileUser = (userId) => {
     if (!userId) return;
+    
+    const currentUser = getCurrentUser();
+    
+    // 🔥 Si es el propio usuario, mostrar perfil nativo
+    if (currentUser?.id === userId) {
+        closeExploreModal();
+        closeActivityModal();
+        closeStoryModal();
+        closeCreator();
+        closeEditProfileModal();
+        closeProfileModal();
+        
+        // Mostrar perfil nativo
+        showProfileNative(userId);
+        return;
+    }
+    
+    // Si es otro usuario, usar modal
     closeExploreModal();
     closeActivityModal();
     closeStoryModal();
@@ -1811,7 +1770,10 @@ function setupEvents() {
             closeStoryModal();
             closeCreator();
             closeEditProfileModal();
-            openProfileModal(user.id);
+            closeProfileModal();
+            
+            // 🔥 Mostrar perfil nativo
+            showProfileNative(user.id);
         } else {
             showToast('Inicia sesión', true);
             setTimeout(() => {
@@ -1828,13 +1790,13 @@ function setupEvents() {
             closeStoryModal();
             closeCreator();
             closeEditProfileModal();
+            closeProfileModal();
             
             document.querySelectorAll('.bottom-nav button').forEach(b => b.classList.remove('active'));
             document.getElementById('navProfile').classList.add('active');
             
-            setTimeout(() => {
-                openProfileModal(user.id);
-            }, 100);
+            // 🔥 Mostrar perfil nativo
+            showProfileNative(user.id);
         } else {
             showToast('Inicia sesión', true);
             setTimeout(() => {
@@ -1859,7 +1821,6 @@ function setupEvents() {
         openCreator();
     });
 
-    // 🔥 FILTRO: PARA TI
     document.getElementById('filterRanked')?.addEventListener('click', () => {
         const token = getToken();
         if (!token) {
@@ -1876,7 +1837,6 @@ function setupEvents() {
         applyFilter('ranked');
     });
 
-    // 🔥 FILTRO: RECIENTES
     document.getElementById('filterRecent')?.addEventListener('click', () => {
         const token = getToken();
         if (!token) {
@@ -1913,6 +1873,12 @@ function setupEvents() {
         closeEditProfileModal();
         closeProfileModal();
         
+        // 🔥 Ocultar perfil nativo si está visible
+        const section = document.getElementById('sectionProfile');
+        if (section && !section.classList.contains('hidden')) {
+            hideProfileNative();
+        }
+        
         document.querySelectorAll('.bottom-nav button').forEach(b => b.classList.remove('active'));
         document.getElementById('navFeed').classList.add('active');
         
@@ -1934,6 +1900,12 @@ function setupEvents() {
         closeCreator();
         closeEditProfileModal();
         closeProfileModal();
+        
+        // 🔥 Ocultar perfil nativo si está visible
+        const section = document.getElementById('sectionProfile');
+        if (section && !section.classList.contains('hidden')) {
+            hideProfileNative();
+        }
         
         document.querySelectorAll('.bottom-nav button').forEach(b => b.classList.remove('active'));
         document.getElementById('navExplore').classList.add('active');
@@ -1958,6 +1930,12 @@ function setupEvents() {
         closeCreator();
         closeEditProfileModal();
         closeProfileModal();
+        
+        // 🔥 Ocultar perfil nativo si está visible
+        const section = document.getElementById('sectionProfile');
+        if (section && !section.classList.contains('hidden')) {
+            hideProfileNative();
+        }
         
         document.querySelectorAll('.bottom-nav button').forEach(b => b.classList.remove('active'));
         document.getElementById('navNotifications').classList.add('active');
