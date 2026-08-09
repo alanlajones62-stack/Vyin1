@@ -21,10 +21,10 @@ let searchQuery = '';
 let isLoading = false;
 
 // ============================================================
-// ABRIR MODAL DE SEGUIDORES
+// ABRIR MODAL DE SEGUIDORES - SIN EXPORTAR AQUÍ
 // ============================================================
 
-export function openFollowersModal(userId, filter = 'followers') {
+async function openFollowersModal(userId, filter = 'followers') {
     if (!userId) {
         showToast('Usuario no encontrado', true);
         return;
@@ -60,14 +60,14 @@ export function openFollowersModal(userId, filter = 'followers') {
 
     document.body.style.overflow = 'hidden';
 
-    loadFollowersData(userId);
+    await loadFollowersData(userId);
 }
 
 // ============================================================
-// CERRAR MODAL DE SEGUIDORES
+// CERRAR MODAL DE SEGUIDORES - SIN EXPORTAR AQUÍ
 // ============================================================
 
-export function closeFollowersModal() {
+function closeFollowersModal() {
     console.log('🔒 Cerrando modal de seguidores');
     isFollowersModalOpen = false;
     currentUserId = null;
@@ -749,7 +749,10 @@ function injectFollowersStyles() {
 }
 
 // ============================================================
-// ✅ EXPORTACIONES - UNA SOLA VEZ
+// ✅ EXPORTACIONES - UNA SOLA VEZ (AQUÍ ÚNICAMENTE)
 // ============================================================
 
-export { openFollowersModal, closeFollowersModal };
+export { 
+    openFollowersModal, 
+    closeFollowersModal 
+};
