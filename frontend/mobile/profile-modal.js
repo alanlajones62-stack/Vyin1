@@ -1,5 +1,6 @@
 // profile-modal.js - Modal para ver perfil de usuario (VERSIÓN COMPLETA CORREGIDA)
 // CON SISTEMA DE BLOQUEO Y PRIVACIDAD COMPLETO
+// 🔥 NAVEGACIÓN: Soporte para followers-modal y explore-modal
 
 import {
     getToken, getCurrentUser, showToast,
@@ -163,7 +164,6 @@ async function loadProfileData(userId, silent = false) {
 
         clearTimeout(timeoutId);
 
-        // 🔥 MANEJAR DIFERENTES CÓDIGOS DE RESPUESTA
         if (!res.ok) {
             if (res.status === 404) {
                 showToast('Usuario no encontrado', true);
@@ -172,8 +172,6 @@ async function loadProfileData(userId, silent = false) {
             } else if (res.status === 403) {
                 const errorData = await res.json().catch(() => ({}));
                 const privacy = errorData.privacy || 'private';
-                
-                // 🔥 PERFIL TOTALMENTE PRIVADO - NADIE PUEDE VERLO
                 showPrivateProfileUI(userId, true);
                 return;
             } else {
@@ -189,7 +187,6 @@ async function loadProfileData(userId, silent = false) {
 
         currentProfileData = user;
 
-        // Guardar en caché
         profileCache.set(userId, {
             data: user,
             timestamp: Date.now()
@@ -230,13 +227,11 @@ function showPrivateProfileUI(userId, isStrictPrivate = false) {
     const currentUser = getCurrentUser();
     const isOwnProfile = currentUser?.id === userId;
 
-    // 🔥 SI ES EL DUEÑO DEL PERFIL, PUEDE VERLO COMPLETO
     if (isOwnProfile) {
         loadProfileData(userId);
         return;
     }
 
-    // 🔥 PERFIL TOTALMENTE PRIVADO - NADIE PUEDE VERLO
     if (isStrictPrivate) {
         container.innerHTML = `
             <div class="profile-private-container">
@@ -250,8 +245,6 @@ function showPrivateProfileUI(userId, isStrictPrivate = false) {
         return;
     }
 
-    // 🔥 PERFIL "SOLO SEGUIDORES" - Mostrar opción de seguir
-    // Verificar si ya hay solicitud pendiente en el localStorage
     const hasPendingRequest = localStorage.getItem(`follow_pending_${userId}`) === 'true';
     
     container.innerHTML = `
@@ -293,7 +286,6 @@ window.handleFollowPrivate = async function(userId) {
         return;
     }
 
-    // Verificar si ya hay solicitud pendiente en localStorage
     if (localStorage.getItem(`follow_pending_${userId}`) === 'true') {
         showToast('Ya enviaste una solicitud a este usuario', true);
         return;
@@ -306,7 +298,6 @@ window.handleFollowPrivate = async function(userId) {
     }
 
     try {
-        // 🔥 USAR LA RUTA CORRECTA: /api/follows/follow
         const res = await fetch(`${API_URL}/api/follows/follow`, {
             method: 'POST',
             headers: {
@@ -320,31 +311,22 @@ window.handleFollowPrivate = async function(userId) {
         
         if (res.ok) {
             if (data.status === 'pending_sent') {
-                // 🔥 GUARDAR ESTADO EN LOCALSTORAGE
                 localStorage.setItem(`follow_pending_${userId}`, 'true');
-                
                 showToast('✅ Solicitud de seguimiento enviada');
-                
-                // Actualizar el botón inmediatamente
                 if (btn) {
                     btn.innerHTML = '<i class="fas fa-clock"></i> Solicitud enviada';
                     btn.disabled = true;
                     btn.style.opacity = '0.6';
                     btn.style.cursor = 'not-allowed';
                 }
-                
-                // Actualizar el estado en currentProfileData
                 if (currentProfileData) {
                     currentProfileData.hasPendingRequest = true;
                     currentProfileData.isFollowing = false;
                 }
-                
-                // Recargar el perfil en segundo plano para actualizar el estado
                 setTimeout(() => {
                     clearProfileCache(userId);
                     loadProfileData(userId);
                 }, 1000);
-                
             } else if (data.status === 'following') {
                 showToast('✅ Ahora sigues a este usuario');
                 localStorage.removeItem(`follow_pending_${userId}`);
@@ -358,7 +340,6 @@ window.handleFollowPrivate = async function(userId) {
                 }
             }
         } else {
-            // Si hay error, restaurar el botón
             if (btn) {
                 btn.disabled = false;
                 btn.innerHTML = '<i class="fas fa-user-plus"></i> Enviar solicitud';
@@ -368,7 +349,6 @@ window.handleFollowPrivate = async function(userId) {
     } catch (error) {
         console.error('Error sending follow request:', error);
         showToast('Error al enviar solicitud', true);
-        // Restaurar el botón en caso de error
         if (btn) {
             btn.disabled = false;
             btn.innerHTML = '<i class="fas fa-user-plus"></i> Enviar solicitud';
@@ -472,7 +452,6 @@ window.handleBlockUser = async function(userId) {
     }
 
     try {
-        // 🔥 VERIFICAR EL ESTADO ACTUAL DEL BLOQUEO
         const checkRes = await fetch(`${API_URL}/api/blocked/check/${userId}`, {
             headers: { 'Authorization': `Bearer ${token}` }
         });
@@ -486,14 +465,12 @@ window.handleBlockUser = async function(userId) {
             isBlockedBy = data.isBlockedBy || false;
         }
 
-        // Si el usuario objetivo nos bloqueó a nosotros, no podemos hacer nada
         if (isBlockedBy) {
             showToast('No puedes interactuar con este usuario', true);
             return;
         }
 
         if (isBlocked) {
-            // 🔥 DESBLOQUEAR
             const res = await fetch(`${API_URL}/api/blocked/unblock/${userId}`, {
                 method: 'DELETE',
                 headers: { 'Authorization': `Bearer ${token}` }
@@ -508,7 +485,6 @@ window.handleBlockUser = async function(userId) {
                 showToast(data.error || 'Error al desbloquear', true);
             }
         } else {
-            // 🔥 BLOQUEAR
             const res = await fetch(`${API_URL}/api/blocked/block`, {
                 method: 'POST',
                 headers: {
@@ -548,11 +524,9 @@ function updateProfileModalUI(user, stories) {
     const isOwnProfile = currentUser?.id === user.id;
     const privacy = user.privacy || 'public';
 
-    // 🔥 VERIFICAR BLOQUEOS
     const isBlockedByOwner = user.isBlockedBy || false;
     const isBlocked = user.isBlocked || false;
 
-    // 🔥 CASO 1: El dueño del perfil bloqueó al usuario actual
     if (isBlockedByOwner) {
         container.innerHTML = `
             <div class="profile-not-found">
@@ -564,20 +538,14 @@ function updateProfileModalUI(user, stories) {
         return;
     }
 
-    // 🔥 CASO 2: PERFIL TOTALMENTE PRIVADO (privacy === 'private')
-    // → NADIE puede verlo excepto el dueño
     if (!isOwnProfile && privacy === 'private') {
         showPrivateProfileUI(user.id, true);
         return;
     }
 
-    // 🔥 CASO 3: PERFIL "SOLO SEGUIDORES" (privacy === 'followers')
-    // → Solo seguidores y el dueño pueden verlo
     if (!isOwnProfile && privacy === 'followers' && !isFollowing) {
-        // Verificar si hay solicitud pendiente en localStorage
         const pendingInStorage = localStorage.getItem(`follow_pending_${user.id}`) === 'true';
         if (pendingInStorage || hasPendingRequest) {
-            // Mostrar que ya se envió solicitud
             showPrivateProfileUIWithPending(user.id);
             return;
         }
@@ -585,15 +553,12 @@ function updateProfileModalUI(user, stories) {
         return;
     }
 
-    // Si llegamos aquí, el perfil es visible
-    // Limpiar estado de solicitud pendiente si el usuario ya es seguidor
     if (isFollowing) {
         localStorage.removeItem(`follow_pending_${user.id}`);
     }
 
     const followersCount = user.followersCount || 0;
     const followingCount = user.followingCount || 0;
-
     const badgeHtml = getVerificationBadge(user);
 
     let storiesHtml = '';
@@ -646,7 +611,6 @@ function updateProfileModalUI(user, stories) {
         `;
     }
 
-    // 🔥 BOTÓN DE SEGUIR
     let followText = 'Seguir';
     let followClass = 'btn-follow';
     let followDisabled = false;
@@ -670,9 +634,7 @@ function updateProfileModalUI(user, stories) {
         followDisabled = true;
     }
 
-    // 🔥 BOTÓN DE BLOQUEO
     let blockButton = '';
-    
     if (!isOwnProfile && !isBlockedByOwner) {
         if (isBlocked) {
             blockButton = `
@@ -788,13 +750,23 @@ function openProfileModal(userId, fromFollowers = false, fromFollowersStack = nu
 
     const currentUser = getCurrentUser();
 
-    // Si ya está abierto el mismo perfil, traerlo al frente
     if (isProfileModalOpen && currentProfileUserId === userId) {
         bringProfileToFront();
         return;
     }
 
-    // GUARDAR EL CONTEXTO ACTUAL EN LA PILA
+    // 🔥 GUARDAR CONTEXTO DE FOLLOWERS SI VIENE DE AHÍ
+    if (fromFollowers && fromFollowersStack) {
+        window._followersContextData = fromFollowersStack;
+        window._fromFollowers = true;
+        // Guardar también en window._profileContext para closeProfileModal
+        window._profileContext = {
+            followersContext: fromFollowersStack,
+            returnToFollowers: true
+        };
+        console.log(`📌 Contexto de followers guardado:`, fromFollowersStack);
+    }
+
     if (isProfileModalOpen) {
         navigationStack.push({
             type: 'profile',
@@ -805,11 +777,6 @@ function openProfileModal(userId, fromFollowers = false, fromFollowersStack = nu
             followersContext: window._followersContextData || null
         });
         console.log(`📌 Perfil ${currentProfileUserId} guardado en pila. Pila: ${navigationStack.length}`);
-    }
-
-    if (fromFollowers && fromFollowersStack) {
-        window._followersContextData = fromFollowersStack;
-        window._fromFollowers = true;
     }
 
     currentProfileUserId = userId;
@@ -831,9 +798,7 @@ function openProfileModal(userId, fromFollowers = false, fromFollowersStack = nu
 
     document.body.style.overflow = 'hidden';
 
-    // Intentar cargar desde caché
     const cached = loadProfileWithCache(userId);
-    
     if (!cached) {
         showSkeletonLoader();
         loadProfileData(userId);
@@ -880,7 +845,7 @@ function bringProfileToFront() {
 }
 
 // ============================================================
-// CERRAR MODAL DE PERFIL
+// 🔥 CERRAR MODAL DE PERFIL - CORREGIDO
 // ============================================================
 
 function closeProfileModalInternal(restoreFromStack = true) {
@@ -915,6 +880,56 @@ function closeProfileModal() {
         isEditMode = false;
     }
 
+    // 🔥 VERIFICAR SI VENIMOS DE FOLLOWERS MODAL
+    const followersContext = window._followersContextData || window._profileContext?.followersContext;
+    
+    if (followersContext && followersContext.returnToFollowers) {
+        console.log(`🔄 Volviendo a followers-modal desde profile-modal`);
+        
+        closeProfileModalInternal(false);
+        
+        setTimeout(() => {
+            import('./followers-modal.js').then(({ restoreFollowersModal, openFollowersModal }) => {
+                if (typeof restoreFollowersModal === 'function') {
+                    const contextToRestore = { ...followersContext };
+                    window._followersContextData = null;
+                    window._profileContext = null;
+                    restoreFollowersModal();
+                } else {
+                    openFollowersModal(followersContext.userId, followersContext.filter || 'followers', true);
+                }
+            }).catch(err => {
+                console.error('❌ Error restaurando followers-modal:', err);
+                showToast('Error al volver a seguidores', true);
+                closeProfileModalInternal(false);
+                if (typeof window.showProfileNative === 'function') {
+                    window.showProfileNative(getCurrentUser()?.id);
+                }
+            });
+        }, 150);
+        return;
+    }
+
+    // 🔥 VERIFICAR SI VIENE DE EXPLORE
+    if (window._fromExploreModal) {
+        console.log(`🔄 Volviendo a explore-modal desde profile-modal`);
+        closeProfileModalInternal(false);
+        window._fromExploreModal = false;
+        setTimeout(() => {
+            import('./explore-modal.js').then(({ openExploreModal }) => {
+                if (typeof openExploreModal === 'function') {
+                    openExploreModal();
+                }
+            }).catch(() => {
+                if (typeof window.showProfileNative === 'function') {
+                    window.showProfileNative(getCurrentUser()?.id);
+                }
+            });
+        }, 150);
+        return;
+    }
+
+    // 🔥 NAVEGACIÓN NORMAL CON PILA
     if (navigationStack.length > 0) {
         const previous = navigationStack.pop();
         console.log(`🔄 Restaurando: ${previous.type} - ${previous.userId || 'N/A'}`);
@@ -931,7 +946,18 @@ function closeProfileModal() {
         return;
     }
 
+    // 🔥 Si no hay pila, cerrar normalmente
+    const currentUser = getCurrentUser();
+    const wasOwnProfile = currentProfileUserId === currentUser?.id;
+    
     closeProfileModalInternal(false);
+    
+    if (wasOwnProfile && typeof window.showProfileNative === 'function') {
+        console.log(`🔄 Volviendo a profile-native (perfil propio)`);
+        setTimeout(() => {
+            window.showProfileNative(currentUser.id);
+        }, 100);
+    }
 }
 
 // ============================================================
