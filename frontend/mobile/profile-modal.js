@@ -690,6 +690,52 @@ function openStoryFromProfileOverlay(storyId, storiesJson, profileUserId) {
 }
 
 // ============================================================
+// 🔥 PRE-CARGAR PERFIL DEL USUARIO ACTUAL
+// ============================================================
+
+export function preloadCurrentUserProfile() {
+    const currentUser = getCurrentUser();
+    if (!currentUser || !currentUser.id) return;
+    
+    const userId = currentUser.id;
+    
+    // Si ya está en caché, no hacer nada
+    if (profileCache.has(userId)) return;
+    
+    console.log(`🔄 Pre-cargando perfil de ${currentUser.fullName}...`);
+    
+    const token = getToken();
+    if (!token) return;
+    
+    fetch(`${API_URL}/api/users/profile/${userId}`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+    })
+    .then(res => {
+        if (res.ok) return res.json();
+        throw new Error('Error cargando perfil');
+    })
+    .then(user => {
+        profileCache.set(userId, user);
+        console.log(`✅ Perfil de ${user.fullName} pre-cargado`);
+        return fetch(`${API_URL}/api/stories/user/${userId}`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+    })
+    .then(res => {
+        if (res && res.ok) return res.json();
+        return [];
+    })
+    .then(stories => {
+        storiesCache.set(userId, stories);
+        window._profileStories = stories;
+        console.log(`✅ ${stories.length} historias pre-cargadas`);
+    })
+    .catch(err => {
+        console.warn('⚠️ Error pre-cargando perfil:', err.message);
+    });
+}
+
+// ============================================================
 // FUNCIONES GLOBALES (window)
 // ============================================================
 
