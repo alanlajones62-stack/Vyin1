@@ -1,6 +1,5 @@
 // ============================================================
-// story-creator-modal.js - VERSIÓN CORREGIDA
-// (SIN ZOOM, SIN INTERFERENCIAS, BOTÓN DE GIRAR INDEPENDIENTE)
+// story-creator-modal.js - VERSIÓN CORREGIDA (SIN MONITOREO)
 // ============================================================
 
 import { getToken, getCurrentUser, showToast } from './auth.js';
@@ -15,9 +14,9 @@ let isCreatorOpen = false;
 let mediaFile = null;
 let mediaType = null;
 let previewUrl = null;
-let cameraStream = null;
+let cameraStream = null; // SOLO VIDEO
 let cameraVideo = null;
-let facingMode = 'user'; // 'user' = frontal, 'environment' = trasera
+let facingMode = 'user';
 let isRecording = false;
 let mediaRecorder = null;
 let recordedChunks = [];
@@ -28,11 +27,10 @@ let selectedTextBg = '#1a1a2e';
 let captureMode = 'video';
 let isPublishing = false;
 let currentStep = 'camera';
-let audioContext = null;
-let audioStream = null;
+let audioStreamForRecording = null; // AUDIO SOLO PARA GRABAR
 
 // ============================================================
-// PALETA DE COLORES PARA TEXTO
+// PALETA DE COLORES
 // ============================================================
 
 const COLOR_PALETTE = [
@@ -44,7 +42,7 @@ const COLOR_PALETTE = [
 ];
 
 // ============================================================
-// FUNCIÓN SEGURA PARA OBTENER ELEMENTOS
+// FUNCIÓN SEGURA
 // ============================================================
 
 function safeGetElement(id) {
@@ -95,14 +93,10 @@ export function closeCreator() {
     if (mediaRecorder?.state === 'recording') mediaRecorder.stop();
     if (timerInterval) clearInterval(timerInterval);
 
-    // Limpiar audio
-    if (audioContext) {
-        audioContext.close();
-        audioContext = null;
-    }
-    if (audioStream) {
-        audioStream.getTracks().forEach(track => track.stop());
-        audioStream = null;
+    // 🔥 Limpiar audio de grabación
+    if (audioStreamForRecording) {
+        audioStreamForRecording.getTracks().forEach(track => track.stop());
+        audioStreamForRecording = null;
     }
 
     const overlay = safeGetElement('creatorOverlay');
@@ -130,13 +124,11 @@ function resetCreatorState() {
         preview.style.background = '#000';
     }
 
-    // Ocultar todos los paneles
     ['inputArea', 'captureActions', 'textTools', 'subtitlesStatus', 'previewActions', 'textEditorContainer'].forEach(id => {
         const el = safeGetElement(id);
         if (el) el.style.display = 'none';
     });
 
-    // Mostrar controles de cámara
     const modeSelector = safeGetElement('modeSelector');
     if (modeSelector) modeSelector.style.display = 'flex';
     
@@ -157,7 +149,7 @@ function resetCreatorState() {
 }
 
 // ============================================================
-// CREAR HTML - DISEÑO MODERNO CORREGIDO
+// CREAR HTML
 // ============================================================
 
 function createCreatorHTML() {
@@ -166,7 +158,6 @@ function createCreatorHTML() {
     const html = `
         <div id="creatorOverlay" class="creator-overlay">
             
-            <!-- ========== PREVIEW ========== -->
             <div class="creator-preview" id="creatorPreview">
                 <div class="camera-placeholder">
                     <i class="fas fa-camera"></i>
@@ -174,7 +165,6 @@ function createCreatorHTML() {
                 </div>
             </div>
 
-            <!-- ========== TOP CONTROLS ========== -->
             <div class="top-controls" id="topControls">
                 <button class="btn-close" onclick="window.closeCreator()">
                     <i class="fas fa-chevron-down"></i>
@@ -185,7 +175,6 @@ function createCreatorHTML() {
                 </button>
             </div>
 
-            <!-- ========== MODE SELECTOR (SOLO VIDEO Y FOTO) ========== -->
             <div class="mode-selector" id="modeSelector">
                 <button class="mode-btn active" data-mode="video">
                     <i class="fas fa-video"></i>
@@ -197,18 +186,15 @@ function createCreatorHTML() {
                 </button>
             </div>
 
-            <!-- ========== BOTÓN GIRAR CÁMARA (INDEPENDIENTE) ========== -->
             <button class="btn-flip-camera" id="flipCameraBtn" title="Girar cámara">
                 <i class="fas fa-sync-alt"></i>
             </button>
 
-            <!-- ========== RECORDING INDICATOR ========== -->
             <div class="recording-indicator" id="recordingIndicator">
                 <div class="recording-dot"></div>
                 <span id="recordTimer">00:00</span>
             </div>
 
-            <!-- ========== CAPTURE ACTIONS (PREVIEW) ========== -->
             <div class="capture-actions" id="captureActions">
                 <button class="btn-retake" onclick="window.retakeMedia()">
                     <i class="fas fa-undo"></i>
@@ -220,7 +206,6 @@ function createCreatorHTML() {
                 </button>
             </div>
 
-            <!-- ========== PREVIEW ACTIONS ========== -->
             <div class="preview-actions" id="previewActions">
                 <button class="btn-edit" onclick="window.editMedia()">
                     <i class="fas fa-pen"></i>
@@ -232,13 +217,11 @@ function createCreatorHTML() {
                 </button>
             </div>
 
-            <!-- ========== SUBTITLES STATUS ========== -->
             <div class="subtitles-status" id="subtitlesStatus">
                 <i class="fas fa-closed-captioning"></i>
                 <span id="subtitlesText">Generando subtítulos...</span>
             </div>
 
-            <!-- ========== TEXT TOOLS ========== -->
             <div class="text-tools" id="textTools">
                 <div class="text-tools-scroll">
                     ${COLOR_PALETTE.map(color => `
@@ -248,7 +231,6 @@ function createCreatorHTML() {
                 </div>
             </div>
 
-            <!-- ========== TEXT EDITOR ========== -->
             <div class="text-editor-container" id="textEditorContainer">
                 <textarea id="textContent" placeholder="Escribe algo..." maxlength="1000"></textarea>
                 <div class="text-editor-tools">
@@ -261,7 +243,6 @@ function createCreatorHTML() {
                 </div>
             </div>
 
-            <!-- ========== INPUT AREA ========== -->
             <div class="input-area" id="inputArea">
                 <div class="input-wrapper">
                     <i class="fas fa-pencil-alt"></i>
@@ -270,7 +251,6 @@ function createCreatorHTML() {
                 </div>
             </div>
 
-            <!-- ========== BOTTOM CONTROLS ========== -->
             <div class="bottom-controls" id="bottomControls">
                 <button class="btn-gallery" onclick="window.openGallery()">
                     <i class="fas fa-image"></i>
@@ -328,7 +308,6 @@ function setupCreatorEvents() {
         });
     });
 
-    // 🔥 BOTÓN GIRAR CÁMARA (INDEPENDIENTE)
     const flipBtn = safeGetElement('flipCameraBtn');
     flipBtn?.addEventListener('click', () => {
         if (cameraStream && !mediaType) {
@@ -372,7 +351,7 @@ function setupCreatorEvents() {
 }
 
 // ============================================================
-// 🔥 CÁMARA - SIN ZOOM, SIN INTERFERENCIAS
+// 🔥 CÁMARA - SOLO VIDEO (SIN AUDIO)
 // ============================================================
 
 async function startCamera() {
@@ -389,42 +368,23 @@ async function startCamera() {
         video.setAttribute('playsinline', '');
         video.style.width = '100%';
         video.style.height = '100%';
-        // 🔥 IMPORTANTE: object-fit: contain para NO recortar (sin zoom)
         video.style.objectFit = 'contain';
-        // 🔥 Efecto espejo solo en cámara frontal
         video.style.transform = facingMode === 'user' ? 'scaleX(-1)' : 'scaleX(1)';
         preview.appendChild(video);
         cameraVideo = video;
 
-        // 🔥 Configuración de cámara SIN ZOOM
+        // 🔥 SOLO VIDEO - SIN AUDIO
         const constraints = {
             video: { 
                 facingMode: facingMode,
                 width: { ideal: 1280 },
                 height: { ideal: 720 },
-                // 🔥 NO usar zoom
                 zoom: { ideal: 1 }
-            },
-            audio: {
-                echoCancellation: true,
-                noiseSuppression: true,
-                autoGainControl: true,
-                sampleRate: 44100
             }
         };
 
         const stream = await navigator.mediaDevices.getUserMedia(constraints);
         cameraStream = stream;
-
-        // 🔥 Separar audio y video para evitar interferencias
-        const videoTrack = stream.getVideoTracks()[0];
-        const audioTracks = stream.getAudioTracks();
-        
-        // Si hay audio, crear un stream separado para el audio
-        if (audioTracks.length > 0) {
-            audioStream = new MediaStream(audioTracks);
-        }
-
         video.srcObject = stream;
 
         await new Promise(resolve => {
@@ -434,7 +394,6 @@ async function startCamera() {
             };
         });
 
-        // Mostrar controles
         document.querySelectorAll('.mode-selector, .bottom-controls, .top-controls').forEach(el => {
             if (el) el.style.display = 'flex';
         });
@@ -442,7 +401,6 @@ async function startCamera() {
         const flipBtn = safeGetElement('flipCameraBtn');
         if (flipBtn) flipBtn.style.display = 'flex';
 
-        // Ocultar otros paneles
         ['inputArea', 'captureActions', 'previewActions', 'textTools', 'subtitlesStatus', 'textEditorContainer'].forEach(id => {
             const el = safeGetElement(id);
             if (el) el.style.display = 'none';
@@ -459,15 +417,15 @@ function stopCamera() {
         cameraStream.getTracks().forEach(track => track.stop());
         cameraStream = null;
     }
-    if (audioStream) {
-        audioStream.getTracks().forEach(track => track.stop());
-        audioStream = null;
+    if (audioStreamForRecording) {
+        audioStreamForRecording.getTracks().forEach(track => track.stop());
+        audioStreamForRecording = null;
     }
     cameraVideo = null;
 }
 
 // ============================================================
-// 🔥 GIRAR CÁMARA (SIN ZOOM)
+// GIRAR CÁMARA
 // ============================================================
 
 async function flipCamera() {
@@ -479,18 +437,13 @@ async function flipCamera() {
     facingMode = facingMode === 'user' ? 'environment' : 'user';
     showToast(facingMode === 'user' ? '📸 Cámara frontal' : '📸 Cámara trasera');
 
-    // Detener cámara actual
     stopCamera();
-    
-    // Esperar un momento para liberar recursos
     await new Promise(resolve => setTimeout(resolve, 300));
-    
-    // Iniciar con nuevo modo
     await startCamera();
 }
 
 // ============================================================
-// CAPTURAR FOTO (SIN ZOOM)
+// CAPTURAR FOTO
 // ============================================================
 
 function capturePhoto() {
@@ -498,12 +451,10 @@ function capturePhoto() {
 
     const video = cameraVideo;
     const canvas = document.createElement('canvas');
-    // 🔥 Usar el tamaño real del video, no recortar
     canvas.width = video.videoWidth || 1280;
     canvas.height = video.videoHeight || 720;
     const ctx = canvas.getContext('2d');
     
-    // 🔥 Dibujar la imagen completa sin recortar
     if (facingMode === 'user') {
         ctx.translate(canvas.width, 0);
         ctx.scale(-1, 1);
@@ -537,7 +488,7 @@ function capturePhoto() {
 }
 
 // ============================================================
-// GRABAR VIDEO (SIN INTERFERENCIAS)
+// 🔥 GRABAR VIDEO - CON AUDIO SOLO EN EL RECORDER
 // ============================================================
 
 function startRecording() {
@@ -570,71 +521,136 @@ function startRecording() {
     const modeSelector = safeGetElement('modeSelector');
     if (modeSelector) modeSelector.style.display = 'none';
 
-    // 🔥 Configurar MediaRecorder con buena calidad y sin eco
-    const options = {
-        mimeType: 'video/webm;codecs=vp9,opus',
-        videoBitsPerSecond: 2500000,
-        audioBitsPerSecond: 128000
-    };
-
-    try {
-        // 🔥 Usar solo el stream de video + audio separado para evitar eco
-        const videoTrack = cameraStream.getVideoTracks()[0];
-        let recordStream = new MediaStream();
-        
-        if (videoTrack) {
-            recordStream.addTrack(videoTrack);
-        }
-        
-        // Si hay audio stream, agregarlo
-        if (audioStream) {
-            const audioTrack = audioStream.getAudioTracks()[0];
-            if (audioTrack) {
-                recordStream.addTrack(audioTrack);
+    // ============================================================
+    // 🔥 CREAR STREAM COMBINADO: VIDEO (existente) + AUDIO (nuevo)
+    // ============================================================
+    
+    async function startRecordingWithAudio() {
+        try {
+            // Video track existente
+            const videoTrack = cameraStream.getVideoTracks()[0];
+            if (!videoTrack) {
+                throw new Error('No hay video track');
             }
-        } else {
-            // Fallback: usar el audio de cameraStream
-            const audioTrack = cameraStream.getAudioTracks()[0];
-            if (audioTrack) {
-                recordStream.addTrack(audioTrack);
+
+            // 🔥 Crear stream de video
+            const combinedStream = new MediaStream([videoTrack]);
+
+            // 🔥 SOLO AQUÍ pedir audio (cuando se graba)
+            try {
+                const audioStream = await navigator.mediaDevices.getUserMedia({
+                    audio: {
+                        echoCancellation: true,
+                        noiseSuppression: true,
+                        autoGainControl: true
+                    }
+                });
+                
+                const audioTrack = audioStream.getAudioTracks()[0];
+                if (audioTrack) {
+                    combinedStream.addTrack(audioTrack);
+                    audioStreamForRecording = audioStream; // Guardar para limpiar
+                    console.log('🎤 Audio activado para grabación');
+                }
+            } catch (audioError) {
+                console.warn('⚠️ Sin audio:', audioError);
+                // Continuar sin audio
+            }
+
+            // 🔥 Configurar MediaRecorder
+            const options = {
+                mimeType: 'video/webm;codecs=vp9,opus',
+                videoBitsPerSecond: 2500000,
+                audioBitsPerSecond: 128000
+            };
+
+            try {
+                mediaRecorder = new MediaRecorder(combinedStream, options);
+            } catch (e) {
+                mediaRecorder = new MediaRecorder(combinedStream, { mimeType: 'video/webm' });
+            }
+
+            mediaRecorder.ondataavailable = (event) => {
+                if (event.data.size > 0) recordedChunks.push(event.data);
+            };
+
+            mediaRecorder.onstop = () => {
+                // 🔥 Limpiar audio después de grabar
+                if (audioStreamForRecording) {
+                    audioStreamForRecording.getTracks().forEach(track => track.stop());
+                    audioStreamForRecording = null;
+                    console.log('🎤 Audio liberado');
+                }
+
+                if (recordedChunks.length === 0) {
+                    showToast('Error: no se grabó nada', true);
+                    isRecording = false;
+                    if (captureBtn) captureBtn.classList.remove('recording');
+                    if (indicator) {
+                        indicator.style.display = 'none';
+                        indicator.classList.remove('active');
+                    }
+                    clearInterval(timerInterval);
+                    return;
+                }
+
+                const blob = new Blob(recordedChunks, { type: 'video/webm' });
+                if (blob.size === 0) {
+                    showToast('Error: archivo vacío', true);
+                    isRecording = false;
+                    if (captureBtn) captureBtn.classList.remove('recording');
+                    if (indicator) {
+                        indicator.style.display = 'none';
+                        indicator.classList.remove('active');
+                    }
+                    clearInterval(timerInterval);
+                    return;
+                }
+
+                const file = new File([blob], `video_${Date.now()}.webm`, { type: 'video/webm' });
+                handleVideoFile(file);
+                isRecording = false;
+                if (captureBtn) captureBtn.classList.remove('recording');
+                if (indicator) {
+                    indicator.style.display = 'none';
+                    indicator.classList.remove('active');
+                }
+                clearInterval(timerInterval);
+            };
+
+            mediaRecorder.start(1000);
+            
+            timerInterval = setInterval(() => {
+                recordingSeconds++;
+                const mins = String(Math.floor(recordingSeconds / 60)).padStart(2, '0');
+                const secs = String(recordingSeconds % 60).padStart(2, '0');
+                const timerEl = safeGetElement('recordTimer');
+                if (timerEl) timerEl.textContent = `${mins}:${secs}`;
+            }, 1000);
+
+        } catch (error) {
+            console.error('❌ Error iniciando grabación:', error);
+            showToast('Error al iniciar la grabación', true);
+            isRecording = false;
+            if (captureBtn) captureBtn.classList.remove('recording');
+            if (indicator) {
+                indicator.style.display = 'none';
+                indicator.classList.remove('active');
             }
         }
-
-        mediaRecorder = new MediaRecorder(recordStream, options);
-    } catch (e) {
-        // Fallback a configuración más simple
-        mediaRecorder = new MediaRecorder(cameraStream, { mimeType: 'video/webm' });
     }
 
-    mediaRecorder.ondataavailable = (event) => {
-        if (event.data.size > 0) recordedChunks.push(event.data);
-    };
-    mediaRecorder.onstop = () => {
-        const blob = new Blob(recordedChunks, { type: 'video/webm' });
-        const file = new File([blob], `video_${Date.now()}.webm`, { type: 'video/webm' });
-        handleVideoFile(file);
-        isRecording = false;
-        if (captureBtn) captureBtn.classList.remove('recording');
-        if (indicator) {
-            indicator.style.display = 'none';
-            indicator.classList.remove('active');
-        }
-        clearInterval(timerInterval);
-    };
-
-    mediaRecorder.start(1000); // Grabar en segmentos de 1 segundo
-    
-    timerInterval = setInterval(() => {
-        recordingSeconds++;
-        const mins = String(Math.floor(recordingSeconds / 60)).padStart(2, '0');
-        const secs = String(recordingSeconds % 60).padStart(2, '0');
-        const timerEl = safeGetElement('recordTimer');
-        if (timerEl) timerEl.textContent = `${mins}:${secs}`;
-    }, 1000);
+    startRecordingWithAudio();
 }
 
+// ============================================================
+// STOP RECORDING
+// ============================================================
+
 function stopRecording() {
-    if (mediaRecorder?.state === 'recording') mediaRecorder.stop();
+    if (mediaRecorder?.state === 'recording') {
+        mediaRecorder.stop();
+    }
 }
 
 // ============================================================
@@ -1190,7 +1206,7 @@ window.confirmMedia = function() {
 };
 
 // ============================================================
-// INYECTAR ESTILOS MODERNOS CORREGIDOS
+// ESTILOS
 // ============================================================
 
 function injectStyles() {
@@ -1199,9 +1215,6 @@ function injectStyles() {
     const styles = document.createElement('style');
     styles.id = 'creatorStyles';
     styles.textContent = `
-        /* ============================================================
-           OVERLAY
-        ============================================================ */
         .creator-overlay {
             position: fixed;
             top: 0;
@@ -1229,9 +1242,6 @@ function injectStyles() {
         .camera-placeholder i { font-size: 40px; }
         .camera-placeholder span { font-size: 14px; }
 
-        /* ============================================================
-           PREVIEW
-        ============================================================ */
         .creator-preview {
             flex: 1;
             display: flex;
@@ -1262,9 +1272,6 @@ function injectStyles() {
             overflow-y: auto;
         }
 
-        /* ============================================================
-           FLASH
-        ============================================================ */
         .flash-effect {
             position: absolute;
             top: 0; left: 0; right: 0; bottom: 0;
@@ -1277,9 +1284,6 @@ function injectStyles() {
             100% { opacity: 0; }
         }
 
-        /* ============================================================
-           TOP CONTROLS
-        ============================================================ */
         .top-controls {
             position: absolute;
             top: 0;
@@ -1326,9 +1330,6 @@ function injectStyles() {
         .top-controls .btn-next:active:not(:disabled) { transform: scale(0.95); }
         .top-controls .btn-next i { font-size: 12px; }
 
-        /* ============================================================
-           MODE SELECTOR - SOLO VIDEO Y FOTO
-        ============================================================ */
         .mode-selector {
             position: absolute;
             top: 60px;
@@ -1364,9 +1365,6 @@ function injectStyles() {
         }
         .mode-selector .mode-btn:active { transform: scale(0.95); }
 
-        /* ============================================================
-           BOTÓN GIRAR CÁMARA - INDEPENDIENTE
-        ============================================================ */
         .btn-flip-camera {
             position: absolute;
             top: 68px;
@@ -1392,9 +1390,6 @@ function injectStyles() {
             background: rgba(255,255,255,0.15);
         }
 
-        /* ============================================================
-           RECORDING INDICATOR
-        ============================================================ */
         .recording-indicator {
             position: absolute;
             top: 64px;
@@ -1428,9 +1423,6 @@ function injectStyles() {
             50% { opacity: 0.3; transform: scale(0.8); }
         }
 
-        /* ============================================================
-           BOTTOM CONTROLS
-        ============================================================ */
         .bottom-controls {
             position: absolute;
             bottom: 0;
@@ -1498,9 +1490,6 @@ function injectStyles() {
             background: #ff0000;
         }
 
-        /* ============================================================
-           CAPTURE ACTIONS
-        ============================================================ */
         .capture-actions {
             position: absolute;
             bottom: 140px;
@@ -1550,9 +1539,6 @@ function injectStyles() {
             opacity: 1;
         }
 
-        /* ============================================================
-           PREVIEW ACTIONS
-        ============================================================ */
         .preview-actions {
             position: absolute;
             bottom: 140px;
@@ -1591,9 +1577,6 @@ function injectStyles() {
             transform: scale(0.95);
         }
 
-        /* ============================================================
-           INPUT AREA
-        ============================================================ */
         .input-area {
             position: absolute;
             bottom: 100px;
@@ -1641,9 +1624,6 @@ function injectStyles() {
             color: rgba(255,255,255,0.2);
         }
 
-        /* ============================================================
-           SUBTITLES STATUS
-        ============================================================ */
         .subtitles-status {
             position: absolute;
             bottom: 180px;
@@ -1669,9 +1649,6 @@ function injectStyles() {
             white-space: nowrap;
         }
 
-        /* ============================================================
-           TEXT TOOLS
-        ============================================================ */
         .text-tools {
             position: absolute;
             bottom: 140px;
@@ -1708,9 +1685,6 @@ function injectStyles() {
             box-shadow: 0 0 20px rgba(255,255,255,0.2);
         }
 
-        /* ============================================================
-           TEXT EDITOR
-        ============================================================ */
         .text-editor-container {
             position: absolute;
             top: 0;
@@ -1783,9 +1757,6 @@ function injectStyles() {
             transform: scale(0.95);
         }
 
-        /* ============================================================
-           RESPONSIVE
-        ============================================================ */
         @media (max-width: 480px) {
             .bottom-controls { padding: 12px 16px 28px; }
             .bottom-controls .btn-capture .capture-outer { width: 64px; height: 64px; }
@@ -1852,5 +1823,5 @@ function injectStyles() {
     document.head.appendChild(styles);
 }
 
-// Inyectar estilos al cargar
+// Inyectar estilos
 injectStyles();
