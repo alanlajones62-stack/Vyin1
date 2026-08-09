@@ -1,5 +1,5 @@
 // followers-modal.js - Modal de seguidores/seguidos
-// CON FILTROS CORREGIDOS Y NAVEGACIÓN ESTILO TIKTOK
+// CON Z-INDEX CORRECTO Y NAVEGACIÓN ANIDADA
 // ============================================================
 
 import { getToken, getCurrentUser, showToast, getAvatar, escapeHtml } from './auth.js';
@@ -12,7 +12,7 @@ const API_URL = window.location.origin;
 
 let isFollowersModalOpen = false;
 let currentUserId = null;
-let currentFilter = 'followers'; // 'followers' o 'following'
+let currentFilter = 'followers';
 let followersList = [];
 let followingList = [];
 let filteredList = [];
@@ -22,6 +22,7 @@ let isFromProfile = false;
 
 // 🔥 CONTEXTO PARA NAVEGACIÓN ESTILO TIKTOK
 let followersContext = null;
+let followersNavigationStack = [];
 
 // ============================================================
 // ABRIR MODAL DE SEGUIDORES
@@ -65,12 +66,13 @@ async function openFollowersModal(userId, filter = 'followers', fromProfile = fa
     if (overlay) {
         overlay.style.display = 'flex';
         overlay.classList.add('active');
-        overlay.style.zIndex = fromProfile ? '10005' : '10004';
+        // 🔥 Z-INDEX: 10005 (por debajo de profile que es 10006)
+        overlay.style.zIndex = '10005';
     }
 
     document.body.style.overflow = 'hidden';
 
-    // 🔥 ACTUALIZAR TABS DESPUÉS DE CREAR EL HTML
+    // 🔥 ACTUALIZAR TABS
     updateTabs(currentFilter);
 
     await loadFollowersData(userId);
@@ -92,7 +94,6 @@ function updateTabs(filter) {
         }
     });
 
-    // Actualizar título
     updateModalTitle();
 }
 
@@ -153,7 +154,7 @@ function restoreFollowersModal() {
     if (overlay) {
         overlay.style.display = 'flex';
         overlay.classList.add('active');
-        overlay.style.zIndex = '10004';
+        overlay.style.zIndex = '10005';
     }
 
     searchQuery = '';
@@ -166,7 +167,6 @@ function restoreFollowersModal() {
         clearBtn.style.display = 'none';
     }
 
-    // 🔥 ACTUALIZAR TABS
     updateTabs(context.filter);
 
     document.body.style.overflow = 'hidden';
@@ -272,7 +272,7 @@ function createFollowersModalHTML() {
 }
 
 // ============================================================
-// 🔥 CAMBIAR FILTRO (Seguidores/Siguiendo) - CORREGIDO
+// 🔥 CAMBIAR FILTRO
 // ============================================================
 
 function switchFollowersTab(filter) {
@@ -290,7 +290,6 @@ function switchFollowersTab(filter) {
         clearBtn.style.display = 'none';
     }
 
-    // 🔥 ACTUALIZAR TABS
     updateTabs(filter);
 
     filterAndRenderList();
@@ -383,7 +382,7 @@ async function loadFollowersData(userId) {
 }
 
 // ============================================================
-// 🔥 FILTRAR Y RENDERIZAR LISTA - CORREGIDO
+// 🔥 FILTRAR Y RENDERIZAR LISTA
 // ============================================================
 
 function filterAndRenderList() {
@@ -526,6 +525,7 @@ window.openProfileFromFollowers = function(userId) {
     
     console.log(`👤 Abriendo perfil de ${userId} desde seguidores`);
     
+    // 🔥 Guardar contexto para volver a seguidores
     followersContext = {
         userId: currentUserId,
         filter: currentFilter,
@@ -534,15 +534,18 @@ window.openProfileFromFollowers = function(userId) {
     
     console.log(`📌 Contexto guardado:`, followersContext);
     
+    // 🔥 Guardar en window para que profile-modal lo vea
     window._followersContextData = followersContext;
     window._fromFollowers = true;
     
+    // 🔥 Ocultar modal de seguidores (NO cerrar)
     const overlay = document.getElementById('followersModalOverlay');
     if (overlay) {
         overlay.style.display = 'none';
         overlay.classList.remove('active');
     }
     
+    // 🔥 Abrir perfil con z-index alto
     if (typeof window.openProfileModal === 'function') {
         window.openProfileModal(userId, true);
     } else {
@@ -574,7 +577,7 @@ function injectFollowersStyles() {
             background: rgba(10, 10, 26, 0.92);
             backdrop-filter: blur(24px);
             -webkit-backdrop-filter: blur(24px);
-            z-index: 10004;
+            z-index: 10005;
             display: none;
             flex-direction: column;
             animation: followersModalFadeIn 0.35s ease;

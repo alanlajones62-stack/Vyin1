@@ -1,5 +1,5 @@
 // profile-modal.js - Modal para ver perfil de usuario (VERSIÓN CORREGIDA)
-// SIN AFECTAR LA NAVEGACIÓN PRINCIPAL
+// CON Z-INDEX CORRECTO Y NAVEGACIÓN ANIDADA
 
 import {
     getToken, getCurrentUser, showToast,
@@ -15,6 +15,9 @@ let currentProfileData = null;
 let isProfileModalOpen = false;
 let isEditMode = false;
 let refreshInterval = null;
+
+// 🔥 CONTEXTO DE NAVEGACIÓN ANIDADA
+let profileNavigationStack = [];
 
 // ============================================================
 // 🔥 CACHÉ DE PERFILES Y HISTORIAS (CON LÍMITE)
@@ -133,12 +136,22 @@ function openProfileModal(userId, fromFollowers = false) {
         return;
     }
 
+    // 🔥 Si ya está abierto el mismo perfil, traerlo al frente
     if (isProfileModalOpen && currentProfileUserId === userId) {
+        bringProfileToFront();
         return;
     }
 
+    // 🔥 Si hay un perfil abierto, guardar en pila y cerrar
     if (isProfileModalOpen) {
-        closeProfileModal();
+        // Guardar el estado actual en la pila
+        profileNavigationStack.push({
+            userId: currentProfileUserId,
+            data: currentProfileData,
+            fromFollowers: window._fromFollowers || false
+        });
+        // Cerrar sin restaurar seguidores (se restaurarán al volver)
+        closeProfileModalInternal(false);
     }
 
     currentProfileUserId = userId;
@@ -158,7 +171,8 @@ function openProfileModal(userId, fromFollowers = false) {
     if (overlayEl) {
         overlayEl.style.display = 'flex';
         overlayEl.classList.add('active');
-        overlayEl.style.zIndex = '10002';
+        // 🔥 Z-INDEX: 10006 (por encima de followers que es 10005)
+        overlayEl.style.zIndex = '10006';
     }
 
     document.body.style.overflow = 'hidden';
@@ -182,19 +196,25 @@ function openProfileModal(userId, fromFollowers = false) {
 }
 
 // ============================================================
-// CERRAR MODAL DE PERFIL - 🔥 SIN AFECTAR NAVEGACIÓN
+// 🔥 TRAER PERFIL AL FRENTE
 // ============================================================
 
-function closeProfileModal() {
-    console.log('🔒 Cerrando modal de perfil');
-    
-    if (isEditMode) {
-        if (typeof window.closeEditProfileModal === 'function') {
-            window.closeEditProfileModal();
-        }
-        isEditMode = false;
+function bringProfileToFront() {
+    const overlay = document.getElementById('profileModalOverlay');
+    if (overlay) {
+        overlay.style.display = 'flex';
+        overlay.classList.add('active');
+        overlay.style.zIndex = '10006';
     }
+}
 
+// ============================================================
+// CERRAR MODAL DE PERFIL - INTERNO (SIN RESTAURAR)
+// ============================================================
+
+function closeProfileModalInternal(restoreFollowers = true) {
+    console.log('🔒 Cerrando modal de perfil (interno)');
+    
     if (refreshInterval) {
         clearInterval(refreshInterval);
         refreshInterval = null;
@@ -217,10 +237,8 @@ function closeProfileModal() {
     currentProfileData = null;
 
     document.body.style.overflow = '';
-    
-    // 🔥 NO LLAMAR A restoreNavToHome() - NO AFECTAR NAVEGACIÓN PRINCIPAL
 
-    if (wasFromFollowers && contextData) {
+    if (restoreFollowers && wasFromFollowers && contextData) {
         console.log('🔄 [CLOSE] Restaurando seguidores desde perfil');
         console.log(`📌 [CLOSE] Contexto: userId=${contextData.userId}, filter=${contextData.filter}`);
         
@@ -240,6 +258,39 @@ function closeProfileModal() {
             }
         }, 200);
     }
+}
+
+// ============================================================
+// CERRAR MODAL DE PERFIL - PÚBLICO (CON RESTAURACIÓN DE PILA)
+// ============================================================
+
+function closeProfileModal() {
+    console.log('🔒 Cerrando modal de perfil (público)');
+    
+    if (isEditMode) {
+        if (typeof window.closeEditProfileModal === 'function') {
+            window.closeEditProfileModal();
+        }
+        isEditMode = false;
+    }
+
+    // 🔥 Verificar si hay elementos en la pila para volver
+    if (profileNavigationStack.length > 0) {
+        const previous = profileNavigationStack.pop();
+        console.log(`🔄 Volviendo al perfil anterior: ${previous.userId}`);
+        
+        // Cerrar el actual sin restaurar seguidores
+        closeProfileModalInternal(false);
+        
+        // Abrir el anterior
+        setTimeout(() => {
+            openProfileModal(previous.userId, previous.fromFollowers);
+        }, 150);
+        return;
+    }
+
+    // Si no hay pila, cerrar normalmente
+    closeProfileModalInternal(true);
 }
 
 // ============================================================
@@ -326,7 +377,17 @@ function openFollowersFromProfile(filter) {
         filter: filter
     };
     
+    // 🔥 Guardar el perfil actual en la pila antes de abrir followers
+    profileNavigationStack.push({
+        userId: currentProfileUserId,
+        data: currentProfileData,
+        fromFollowers: window._fromFollowers || false
+    });
+    
     import('./followers-modal.js').then(({ openFollowersModal }) => {
+        // 🔥 Cerrar perfil SIN restaurar seguidores
+        closeProfileModalInternal(false);
+        // Abrir followers
         openFollowersModal(userId, filter, true);
     }).catch((err) => {
         console.error('❌ Error cargando followers-modal:', err);
@@ -767,7 +828,7 @@ function openStoryFromProfileOverlay(storyId, storiesJson, profileUserId) {
         setTimeout(() => {
             const storyOverlay = document.getElementById('storyModalOverlay');
             if (storyOverlay) {
-                storyOverlay.style.zIndex = '10001';
+                storyOverlay.style.zIndex = '10007';
             }
         }, 50);
         
