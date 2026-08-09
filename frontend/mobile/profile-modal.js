@@ -251,6 +251,9 @@ function showPrivateProfileUI(userId, isStrictPrivate = false) {
     }
 
     // 🔥 PERFIL "SOLO SEGUIDORES" - Mostrar opción de seguir
+    // Verificar si ya hay solicitud pendiente en el localStorage
+    const hasPendingRequest = localStorage.getItem(`follow_pending_${userId}`) === 'true';
+    
     container.innerHTML = `
         <div class="profile-private-container">
             <div class="private-lock-icon">
@@ -260,8 +263,10 @@ function showPrivateProfileUI(userId, isStrictPrivate = false) {
             <p>Sigue a esta cuenta para ver sus fotos, historias y videos.</p>
             <div class="private-actions">
                 ${currentUser && currentUser.id !== userId ? `
-                    <button class="btn-private-follow" onclick="window.handleFollowPrivate('${userId}')">
-                        <i class="fas fa-user-plus"></i> Enviar solicitud
+                    <button class="btn-private-follow" id="btnPrivateFollow" 
+                            onclick="window.handleFollowPrivate('${userId}')"
+                            ${hasPendingRequest ? 'disabled' : ''}>
+                        ${hasPendingRequest ? '<i class="fas fa-clock"></i> Solicitud enviada' : '<i class="fas fa-user-plus"></i> Enviar solicitud'}
                     </button>
                 ` : `
                     <p style="color:rgba(255,255,255,0.2);font-size:13px;">Inicia sesión para seguir</p>
@@ -288,8 +293,21 @@ window.handleFollowPrivate = async function(userId) {
         return;
     }
 
+    // Verificar si ya hay solicitud pendiente en localStorage
+    if (localStorage.getItem(`follow_pending_${userId}`) === 'true') {
+        showToast('Ya enviaste una solicitud a este usuario', true);
+        return;
+    }
+
+    const btn = document.getElementById('btnPrivateFollow');
+    if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Enviando...';
+    }
+
     try {
-        const res = await fetch(`${API_URL}/api/follows/request`, {
+        // 🔥 USAR LA RUTA CORRECTA: /api/follows/follow
+        const res = await fetch(`${API_URL}/api/follows/follow`, {
             method: 'POST',
             headers: {
                 'Authorization': `Bearer ${token}`,
@@ -301,15 +319,60 @@ window.handleFollowPrivate = async function(userId) {
         const data = await res.json();
         
         if (res.ok) {
-            showToast('✅ Solicitud de seguimiento enviada');
-            clearProfileCache(userId);
-            loadProfileData(userId);
+            if (data.status === 'pending_sent') {
+                // 🔥 GUARDAR ESTADO EN LOCALSTORAGE
+                localStorage.setItem(`follow_pending_${userId}`, 'true');
+                
+                showToast('✅ Solicitud de seguimiento enviada');
+                
+                // Actualizar el botón inmediatamente
+                if (btn) {
+                    btn.innerHTML = '<i class="fas fa-clock"></i> Solicitud enviada';
+                    btn.disabled = true;
+                    btn.style.opacity = '0.6';
+                    btn.style.cursor = 'not-allowed';
+                }
+                
+                // Actualizar el estado en currentProfileData
+                if (currentProfileData) {
+                    currentProfileData.hasPendingRequest = true;
+                    currentProfileData.isFollowing = false;
+                }
+                
+                // Recargar el perfil en segundo plano para actualizar el estado
+                setTimeout(() => {
+                    clearProfileCache(userId);
+                    loadProfileData(userId);
+                }, 1000);
+                
+            } else if (data.status === 'following') {
+                showToast('✅ Ahora sigues a este usuario');
+                localStorage.removeItem(`follow_pending_${userId}`);
+                clearProfileCache(userId);
+                loadProfileData(userId);
+            } else {
+                showToast(data.message || 'Solicitud enviada');
+                if (btn) {
+                    btn.disabled = false;
+                    btn.innerHTML = '<i class="fas fa-user-plus"></i> Enviar solicitud';
+                }
+            }
         } else {
+            // Si hay error, restaurar el botón
+            if (btn) {
+                btn.disabled = false;
+                btn.innerHTML = '<i class="fas fa-user-plus"></i> Enviar solicitud';
+            }
             showToast(data.error || 'Error al enviar solicitud', true);
         }
     } catch (error) {
         console.error('Error sending follow request:', error);
         showToast('Error al enviar solicitud', true);
+        // Restaurar el botón en caso de error
+        if (btn) {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fas fa-user-plus"></i> Enviar solicitud';
+        }
     }
 };
 
@@ -511,8 +574,21 @@ function updateProfileModalUI(user, stories) {
     // 🔥 CASO 3: PERFIL "SOLO SEGUIDORES" (privacy === 'followers')
     // → Solo seguidores y el dueño pueden verlo
     if (!isOwnProfile && privacy === 'followers' && !isFollowing) {
+        // Verificar si hay solicitud pendiente en localStorage
+        const pendingInStorage = localStorage.getItem(`follow_pending_${user.id}`) === 'true';
+        if (pendingInStorage || hasPendingRequest) {
+            // Mostrar que ya se envió solicitud
+            showPrivateProfileUIWithPending(user.id);
+            return;
+        }
         showPrivateProfileUI(user.id, false);
         return;
+    }
+
+    // Si llegamos aquí, el perfil es visible
+    // Limpiar estado de solicitud pendiente si el usuario ya es seguidor
+    if (isFollowing) {
+        localStorage.removeItem(`follow_pending_${user.id}`);
     }
 
     const followersCount = user.followersCount || 0;
@@ -670,6 +746,30 @@ function updateProfileModalUI(user, stories) {
                 <span style="font-size:9px;color:rgba(255,255,255,0.15);margin-left:auto;">${stories?.length || 0}</span>
             </div>
             ${storiesHtml}
+        </div>
+    `;
+}
+
+// ============================================================
+// 🔥 MOSTRAR UI CON SOLICITUD PENDIENTE
+// ============================================================
+
+function showPrivateProfileUIWithPending(userId) {
+    const container = document.getElementById('profileModalBody');
+    if (!container) return;
+
+    container.innerHTML = `
+        <div class="profile-private-container">
+            <div class="private-lock-icon">
+                <i class="fas fa-user-friends"></i>
+            </div>
+            <h3>Cuenta privada</h3>
+            <p>Sigue a esta cuenta para ver sus fotos, historias y videos.</p>
+            <div class="private-actions">
+                <button class="btn-private-follow" disabled style="opacity:0.6;cursor:not-allowed;">
+                    <i class="fas fa-clock"></i> Solicitud enviada
+                </button>
+            </div>
         </div>
     `;
 }
@@ -1056,17 +1156,20 @@ async function handleFollowUser(userId) {
                 btn.classList.add('following');
                 btn.innerHTML = '<i class="fas fa-check"></i> Siguiendo';
                 showToast(`✅ Siguiendo a ${currentProfileData?.fullName}`);
+                localStorage.removeItem(`follow_pending_${userId}`);
                 clearProfileCache(userId);
                 loadProfileData(userId);
             } else if (data.status === 'pending_sent') {
                 btn.classList.remove('following');
                 btn.innerHTML = '<i class="fas fa-clock"></i> Solicitud enviada';
                 btn.disabled = true;
+                localStorage.setItem(`follow_pending_${userId}`, 'true');
                 showToast(`📨 Solicitud enviada a ${currentProfileData?.fullName}`);
             } else {
                 btn.classList.remove('following');
                 btn.innerHTML = '<i class="fas fa-user-plus"></i> Seguir';
                 btn.disabled = false;
+                localStorage.removeItem(`follow_pending_${userId}`);
                 showToast('❌ Dejaste de seguir');
                 clearProfileCache(userId);
                 loadProfileData(userId);

@@ -793,7 +793,7 @@
 }
 
 /* ============================================================
-   PERFIL PRIVADO / NO DISPONIBLE
+   🔥 NUEVAS CLASES - PERFIL PRIVADO / NO DISPONIBLE
    ============================================================ */
 
 .profile-private-container {
@@ -879,40 +879,132 @@
 }
 
 /* ============================================================
-   PERFIL COMPLETAMENTE PRIVADO - NO DISPONIBLE
+   RESPONSIVE - SOLO PARA NUEVAS CLASES
    ============================================================ */
 
-.profile-unavailable {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    min-height: 300px;
-    color: rgba(255, 255, 255, 0.3);
-    text-align: center;
-    padding: 40px 20px;
+@media (max-width: 480px) {
+    .profile-private-container .private-lock-icon {
+        width: 64px;
+        height: 64px;
+    }
+
+    .profile-private-container .private-lock-icon i {
+        font-size: 26px;
+    }
+
+    .profile-private-container h3 {
+        font-size: 17px;
+    }
+
+    .profile-private-container p {
+        font-size: 13px;
+    }
+
+    .btn-private-follow {
+        font-size: 13px;
+        padding: 10px 20px;
+    }
 }
 
-.profile-unavailable i {
-    font-size: 48px;
-    color: rgba(255, 255, 255, 0.05);
-    margin-bottom: 16px;
+@media (max-width: 380px) {
+    .profile-private-container .private-lock-icon {
+        width: 52px;
+        height: 52px;
+    }
+
+    .profile-private-container .private-lock-icon i {
+        font-size: 20px;
+    }
+
+    .profile-private-container h3 {
+        font-size: 15px;
+    }
+
+    .profile-private-container p {
+        font-size: 12px;
+    }
+
+    .btn-private-follow {
+        font-size: 12px;
+        padding: 8px 16px;
+    }
 }
 
-.profile-unavailable h3 {
-    font-size: 20px;
-    color: rgba(255, 255, 255, 0.15);
-    font-weight: 400;
-    margin-bottom: 4px;
-}
+@media (max-height: 600px) {
+    .profile-private-container {
+        min-height: 200px;
+        padding: 20px 16px;
+    }
 
-.profile-unavailable p {
-    font-size: 13px;
-    color: rgba(255, 255, 255, 0.06);
+    .profile-private-container .private-lock-icon {
+        width: 52px;
+        height: 52px;
+        margin-bottom: 12px;
+    }
+
+    .profile-private-container .private-lock-icon i {
+        font-size: 20px;
+    }
+
+    .profile-private-container h3 {
+        font-size: 16px;
+        margin-bottom: 4px;
+    }
+
+    .profile-private-container p {
+        font-size: 12px;
+    }
+
+    .btn-private-follow {
+        font-size: 12px;
+        padding: 8px 16px;
+    }
 }
 
 /* ============================================================
-   RESPONSIVE - IGUAL QUE EXPLORER
+   SOPORTE PARA MODO OSCURO Y REDUCIDO DE MOVIMIENTO
+   ============================================================ */
+
+@media (prefers-reduced-motion: reduce) {
+    .profile-modal-overlay {
+        animation: none;
+    }
+    
+    .profile-skeleton .skeleton-avatar,
+    .profile-skeleton .skeleton-line {
+        animation: none;
+        background: rgba(255,255,255,0.05);
+    }
+    
+    .verification-badge {
+        animation: none;
+    }
+    
+    .profile-loading {
+        animation: none;
+    }
+}
+
+@media (prefers-color-scheme: light) {
+    .profile-modal-content {
+        background: #1a1a2e;
+    }
+    
+    .profile-modal-header .title {
+        color: #fff;
+    }
+    
+    .profile-cover .profile-name {
+        color: #fff;
+    }
+    
+    .profile-stats .stat .number {
+        color: #fff;
+    }
+}
+
+/* ============================================================
+   RESPONSIVE - IGUAL QUE EXPLORER (SIN MODIFICAR)
    ============================================================ */
 
 @media (max-width: 480px) {
@@ -955,7 +1047,6 @@
         font-size: 13px;
     }
 
-    /* Badges responsive */
     .verification-badge {
         width: 20px;
         height: 20px;
@@ -1059,29 +1150,6 @@
     .profile-not-found h3 {
         font-size: 17px;
     }
-
-    /* Private profile responsive */
-    .profile-private-container .private-lock-icon {
-        width: 64px;
-        height: 64px;
-    }
-
-    .profile-private-container .private-lock-icon i {
-        font-size: 26px;
-    }
-
-    .profile-private-container h3 {
-        font-size: 17px;
-    }
-
-    .profile-private-container p {
-        font-size: 13px;
-    }
-
-    .btn-private-follow {
-        font-size: 13px;
-        padding: 10px 20px;
-    }
 }
 
 @media (max-width: 380px) {
@@ -1124,7 +1192,6 @@
         font-size: 12px;
     }
 
-    /* Badges responsive small */
     .verification-badge {
         width: 18px;
         height: 18px;
@@ -1218,29 +1285,6 @@
     .profile-skeleton .skeleton-line {
         height: 9px;
     }
-
-    /* Private profile responsive small */
-    .profile-private-container .private-lock-icon {
-        width: 52px;
-        height: 52px;
-    }
-
-    .profile-private-container .private-lock-icon i {
-        font-size: 20px;
-    }
-
-    .profile-private-container h3 {
-        font-size: 15px;
-    }
-
-    .profile-private-container p {
-        font-size: 12px;
-    }
-
-    .btn-private-follow {
-        font-size: 12px;
-        padding: 8px 16px;
-    }
 }
 
 @media (max-height: 600px) {
@@ -1276,7 +1320,6 @@
         margin-bottom: 2px;
     }
 
-    /* Badges responsive height */
     .verification-badge {
         width: 20px;
         height: 20px;
@@ -1368,36 +1411,6 @@
         height: 9px;
         margin: 6px 0;
     }
-
-    /* Private profile responsive height */
-    .profile-private-container {
-        min-height: 200px;
-        padding: 20px 16px;
-    }
-
-    .profile-private-container .private-lock-icon {
-        width: 52px;
-        height: 52px;
-        margin-bottom: 12px;
-    }
-
-    .profile-private-container .private-lock-icon i {
-        font-size: 20px;
-    }
-
-    .profile-private-container h3 {
-        font-size: 16px;
-        margin-bottom: 4px;
-    }
-
-    .profile-private-container p {
-        font-size: 12px;
-    }
-
-    .btn-private-follow {
-        font-size: 12px;
-        padding: 8px 16px;
-    }
 }
 
 /* ============================================================
@@ -1421,303 +1434,4 @@
 
 .profile-performance-stats.visible {
     display: block;
-}
-
-/* ============================================================
-   SOPORTE PARA MODO OSCURO Y REDUCIDO DE MOVIMIENTO
-   ============================================================ */
-
-@media (prefers-reduced-motion: reduce) {
-    .profile-modal-overlay {
-        animation: none;
-    }
-    
-    .profile-skeleton .skeleton-avatar,
-    .profile-skeleton .skeleton-line {
-        animation: none;
-        background: rgba(255,255,255,0.05);
-    }
-    
-    .verification-badge {
-        animation: none;
-    }
-    
-    .profile-loading {
-        animation: none;
-    }
-}
-
-@media (prefers-color-scheme: light) {
-    .profile-modal-content {
-        background: #1a1a2e;
-    }
-    
-    .profile-modal-header .title {
-        color: #fff;
-    }
-    
-    .profile-cover .profile-name {
-        color: #fff;
-    }
-    
-    .profile-stats .stat .number {
-        color: #fff;
-    }
-}
-
-/* ============================================================
-   RESPONSIVE EXTRA - TABLETS Y PANTALLAS MEDIANAS
-   ============================================================ */
-
-@media (min-width: 481px) and (max-width: 768px) {
-    .profile-modal-header {
-        padding: 16px 24px 14px;
-    }
-
-    .profile-modal-header .title {
-        font-size: 20px;
-    }
-
-    .profile-modal-body {
-        padding: 20px 24px 100px;
-    }
-
-    .profile-cover .profile-avatar {
-        width: 96px;
-        height: 96px;
-    }
-
-    .profile-cover .profile-name {
-        font-size: 26px;
-    }
-
-    .profile-stats .stat .number {
-        font-size: 24px;
-    }
-
-    .profile-follow-btn button {
-        font-size: 16px;
-        padding: 10px 44px;
-    }
-
-    .btn-block {
-        font-size: 14px;
-        padding: 10px 28px;
-    }
-
-    .profile-stories-grid {
-        gap: 8px;
-    }
-
-    .profile-story-thumb {
-        min-height: 80px;
-        border-radius: 10px;
-    }
-
-    .verification-badge {
-        width: 28px;
-        height: 28px;
-        font-size: 14px;
-    }
-
-    .verification-badge.verified::after {
-        font-size: 16px;
-    }
-
-    /* Private profile tablet */
-    .profile-private-container .private-lock-icon {
-        width: 90px;
-        height: 90px;
-    }
-
-    .profile-private-container .private-lock-icon i {
-        font-size: 36px;
-    }
-
-    .profile-private-container h3 {
-        font-size: 24px;
-    }
-
-    .btn-private-follow {
-        font-size: 16px;
-        padding: 14px 32px;
-    }
-}
-
-/* ============================================================
-   RESPONSIVE EXTRA - PANTALLAS GRANDES
-   ============================================================ */
-
-@media (min-width: 769px) {
-    .profile-modal-content {
-        max-width: 420px;
-        max-height: 90vh;
-        height: auto;
-        border-radius: 16px;
-        margin: auto;
-        box-shadow: 0 24px 80px rgba(0,0,0,0.6);
-    }
-
-    .profile-modal-overlay {
-        align-items: center;
-        justify-content: center;
-    }
-
-    .profile-modal-body {
-        padding: 20px 24px 100px;
-    }
-
-    .profile-cover .profile-avatar {
-        width: 100px;
-        height: 100px;
-    }
-
-    .profile-cover .profile-name {
-        font-size: 28px;
-    }
-
-    .profile-stats .stat .number {
-        font-size: 26px;
-    }
-
-    .profile-follow-btn button {
-        font-size: 16px;
-        padding: 10px 48px;
-    }
-
-    .btn-block {
-        font-size: 14px;
-        padding: 10px 30px;
-    }
-
-    .profile-stories-grid {
-        gap: 8px;
-    }
-
-    .profile-story-thumb {
-        min-height: 90px;
-        border-radius: 10px;
-    }
-
-    .verification-badge {
-        width: 30px;
-        height: 30px;
-        font-size: 14px;
-    }
-
-    .verification-badge.verified::after {
-        font-size: 16px;
-    }
-
-    /* Private profile desktop */
-    .profile-private-container .private-lock-icon {
-        width: 100px;
-        height: 100px;
-    }
-
-    .profile-private-container .private-lock-icon i {
-        font-size: 40px;
-    }
-
-    .profile-private-container h3 {
-        font-size: 26px;
-    }
-
-    .btn-private-follow {
-        font-size: 16px;
-        padding: 14px 36px;
-    }
-}
-
-/* ============================================================
-   RESPONSIVE EXTRA - PANTALLAS MUY PEQUEÑAS
-   ============================================================ */
-
-@media (max-width: 320px) {
-    .profile-modal-header .title {
-        font-size: 12px;
-    }
-
-    .profile-modal-header .close-btn {
-        width: 24px;
-        height: 24px;
-        font-size: 12px;
-    }
-
-    .profile-cover .profile-avatar {
-        width: 48px;
-        height: 48px;
-    }
-
-    .profile-cover .profile-name {
-        font-size: 14px;
-    }
-
-    .profile-cover .profile-username {
-        font-size: 10px;
-    }
-
-    .profile-cover .profile-bio {
-        font-size: 10px;
-    }
-
-    .profile-stats .stat .number {
-        font-size: 13px;
-    }
-
-    .profile-stats .stat .label {
-        font-size: 8px;
-    }
-
-    .profile-follow-btn button {
-        font-size: 10px;
-        padding: 4px 16px;
-    }
-
-    .btn-block {
-        font-size: 9px;
-        padding: 4px 12px;
-    }
-
-    .profile-story-thumb {
-        min-height: 35px;
-        border-radius: 4px;
-    }
-
-    .profile-stories-section .section-title {
-        font-size: 9px;
-    }
-
-    .verification-badge {
-        width: 14px;
-        height: 14px;
-        font-size: 7px;
-    }
-
-    .verification-badge.verified::after {
-        font-size: 8px;
-    }
-
-    /* Private profile extra small */
-    .profile-private-container .private-lock-icon {
-        width: 44px;
-        height: 44px;
-    }
-
-    .profile-private-container .private-lock-icon i {
-        font-size: 16px;
-    }
-
-    .profile-private-container h3 {
-        font-size: 13px;
-    }
-
-    .profile-private-container p {
-        font-size: 10px;
-    }
-
-    .btn-private-follow {
-        font-size: 10px;
-        padding: 6px 12px;
-    }
 }
