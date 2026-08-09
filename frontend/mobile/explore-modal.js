@@ -1,5 +1,6 @@
 // explore-modal.js - BÚSQUEDA HÍBRIDA CON RESULTADOS PRIORIZADOS
 // Y SUPERPOSICIÓN DE MODALES
+// 🔥 FILTRO DE PRIVACIDAD: Solo usuarios públicos aparecen
 
 import { getToken, getCurrentUser, showToast, getAvatar } from './auth.js';
 import { formatNumber } from './utils.js';
@@ -114,6 +115,51 @@ function createExploreModal() {
 }
 
 // ============================================================
+// 🔥 FILTRAR USUARIOS PÚBLICOS
+// ============================================================
+
+function filterPublicUsers(users) {
+    if (!users || !Array.isArray(users)) return [];
+    
+    const currentUser = getCurrentUser();
+    const currentUserId = currentUser?.id;
+    
+    // 🔥 Solo mostrar usuarios con perfil público
+    return users.filter(user => {
+        // Siempre mostrar al usuario actual si está en la lista
+        if (user.id === currentUserId) return true;
+        
+        // 🔥 SOLO usuarios con privacy === 'public'
+        return user.privacy === 'public' || user.privacy === undefined;
+    });
+}
+
+// ============================================================
+// 🔥 FILTRAR HISTORIAS POR PRIVACIDAD
+// ============================================================
+
+function filterPublicStories(stories) {
+    if (!stories || !Array.isArray(stories)) return [];
+    
+    const currentUser = getCurrentUser();
+    const currentUserId = currentUser?.id;
+    
+    // 🔥 Solo mostrar historias de usuarios públicos o propias
+    return stories.filter(story => {
+        // Siempre mostrar historias propias
+        if (story.userId === currentUserId) return true;
+        
+        // 🔥 Si el usuario es privado o solo seguidores, no mostrar sus historias
+        // (el backend ya filtra, pero por seguridad)
+        if (story.user?.privacy === 'private' || story.user?.privacy === 'followers') {
+            return false;
+        }
+        
+        return true;
+    });
+}
+
+// ============================================================
 // ABRIR / CERRAR
 // ============================================================
 
@@ -173,7 +219,7 @@ function switchExploreTab(tab) {
 }
 
 // ============================================================
-// 🔥 BÚSQUEDA HÍBRIDA CON PRIORIDAD DE USUARIOS
+// 🔥 BÚSQUEDA HÍBRIDA CON PRIORIDAD DE USUARIOS Y FILTRO DE PRIVACIDAD
 // ============================================================
 
 async function performSmartSearch(query) {
@@ -207,8 +253,10 @@ async function performSmartSearch(query) {
 
         let users = [];
         if (usersRes.ok) {
-            users = await usersRes.json();
-            console.log(`👥 Usuarios encontrados: ${users.length}`);
+            const allUsers = await usersRes.json();
+            // 🔥 FILTRAR: SOLO usuarios PÚBLICOS
+            users = filterPublicUsers(allUsers);
+            console.log(`👥 Usuarios encontrados (públicos): ${users.length} de ${allUsers.length} totales`);
         }
 
         // 🔥 Buscar HISTORIAS después
@@ -221,12 +269,14 @@ async function performSmartSearch(query) {
 
         if (hybridRes.ok) {
             const result = await hybridRes.json();
-            stories = (result.data || []).filter(s => {
+            const allStories = (result.data || []).filter(s => {
                 const relevance = s.relevanceScore || 0;
                 return relevance > 30;
             });
+            // 🔥 FILTRAR: SOLO historias de usuarios PÚBLICOS
+            stories = filterPublicStories(allStories);
             meta = result.meta || {};
-            console.log(`📸 Historias relevantes: ${stories.length} (de ${result.data?.length || 0} totales)`);
+            console.log(`📸 Historias relevantes (públicas): ${stories.length} de ${allStories.length} totales`);
         }
 
         // Si no hay resultados
@@ -275,6 +325,7 @@ function renderSearchResults(query, stories, users, meta) {
     const currentUser = getCurrentUser();
     const currentUserId = currentUser?.id;
 
+    // 🔥 Filtrar historias propias y de usuarios privados
     const filteredStories = stories.filter(s => s.userId !== currentUserId);
 
     let html = `
@@ -282,20 +333,20 @@ function renderSearchResults(query, stories, users, meta) {
             <div class="section-title">
                 🔍 Resultados para "${query}"
                 <span style="font-size:10px;color:rgba(255,255,255,0.1);margin-left:8px;">
-                    ${filteredStories.length} historias · ${users.length} usuarios
+                    ${filteredStories.length} historias · ${users.length} usuarios públicos
                 </span>
             </div>
     `;
 
     // ============================================================
-    // 🔥 SECCIÓN 1: USUARIOS (ARRIBA)
+    // 🔥 SECCIÓN 1: USUARIOS PÚBLICOS (ARRIBA)
     // ============================================================
     
     if (users.length > 0) {
         html += `
             <div style="margin-bottom:16px;">
                 <div style="font-size:12px;color:rgba(255,255,255,0.3);margin-bottom:8px;font-weight:600;letter-spacing:0.5px;border-bottom:1px solid rgba(255,255,255,0.04);padding-bottom:6px;">
-                    👥 Usuarios (${users.length})
+                    👥 Usuarios públicos (${users.length})
                 </div>
                 <div class="explore-users">
                     ${users.map(user => {
@@ -325,7 +376,7 @@ function renderSearchResults(query, stories, users, meta) {
     }
 
     // ============================================================
-    // 🔥 SECCIÓN 2: HISTORIAS (ABAJO)
+    // 🔥 SECCIÓN 2: HISTORIAS PÚBLICAS (ABAJO)
     // ============================================================
     
     if (filteredStories.length > 0) {
@@ -493,7 +544,10 @@ async function loadExploreData(tab) {
             const res = await fetch(url, { headers });
             if (res.ok) {
                 const result = await res.json();
-                data.stories = (result.data || []).filter(story => story.userId !== currentUser?.id);
+                const allStories = (result.data || []).filter(story => story.userId !== currentUser?.id);
+                // 🔥 FILTRAR: SOLO historias de usuarios PÚBLICOS
+                data.stories = filterPublicStories(allStories);
+                console.log(`📸 Historias públicas: ${data.stories.length} de ${allStories.length} totales`);
             }
         }
         
@@ -501,8 +555,10 @@ async function loadExploreData(tab) {
             const url = `${API_URL}/api/users/popular${currentUserId ? '?userId=' + currentUserId : ''}`;
             const res = await fetch(url, { headers });
             if (res.ok) {
-                let users = await res.json();
-                data.users = users.slice(0, 10);
+                const allUsers = await res.json();
+                // 🔥 FILTRAR: SOLO usuarios PÚBLICOS
+                data.users = filterPublicUsers(allUsers).slice(0, 10);
+                console.log(`👥 Usuarios populares (públicos): ${data.users.length} de ${allUsers.length} totales`);
             }
         }
         
@@ -584,14 +640,15 @@ function renderHashtags(content, data) {
 
 function renderStoriesGrid(content, stories) {
     const currentUser = getCurrentUser();
-    const filteredStories = (stories || []).filter(story => story.userId !== currentUser?.id);
+    // 🔥 Ya filtrados, pero por seguridad
+    const filteredStories = filterPublicStories(stories || []).filter(story => story.userId !== currentUser?.id);
     
     if (!filteredStories || filteredStories.length === 0) {
         content.innerHTML = `
             <div class="explore-empty">
                 <i class="fas fa-camera"></i>
-                <h3>No hay historias</h3>
-                <p>Las historias recientes aparecerán aquí</p>
+                <h3>No hay historias públicas</h3>
+                <p>Las historias de usuarios públicos aparecerán aquí</p>
             </div>
         `;
         return;
@@ -605,7 +662,7 @@ function renderStoriesGrid(content, stories) {
     
     content.innerHTML = `
         <div class="explore-section">
-            <div class="section-title">📸 Historias recientes</div>
+            <div class="section-title">📸 Historias públicas recientes</div>
             <div class="explore-grid">
                 ${shuffled.map(story => `
                     <div class="story-thumb" onclick="window.openStoryFromExplore('${story.id}')">
@@ -633,12 +690,15 @@ function renderStoriesGrid(content, stories) {
 }
 
 function renderUsersList(content, users) {
-    if (!users || users.length === 0) {
+    // 🔥 Ya filtrados, pero por seguridad
+    const publicUsers = filterPublicUsers(users || []);
+    
+    if (!publicUsers || publicUsers.length === 0) {
         content.innerHTML = `
             <div class="explore-empty">
                 <i class="fas fa-users"></i>
-                <h3>No hay usuarios populares</h3>
-                <p>Los usuarios más seguidos aparecerán aquí</p>
+                <h3>No hay usuarios públicos populares</h3>
+                <p>Los usuarios con perfil público aparecerán aquí</p>
             </div>
         `;
         return;
@@ -648,9 +708,9 @@ function renderUsersList(content, users) {
     
     content.innerHTML = `
         <div class="explore-section">
-            <div class="section-title">👑 Usuarios populares</div>
+            <div class="section-title">👑 Usuarios populares (públicos)</div>
             <div class="explore-users">
-                ${users.map(user => {
+                ${publicUsers.map(user => {
                     const isOwn = currentUser?.id === user.id;
                     const isFollowing = user.isFollowing || false;
                     return `
@@ -699,7 +759,7 @@ async function openHashtagStories(tag) {
                 }
             }, 50);
         } else {
-            showToast(`No hay historias con #${tag}`, true);
+            showToast(`No hay historias públicas con #${tag}`, true);
         }
         return;
     }
@@ -715,7 +775,7 @@ async function openHashtagStories(tag) {
         }
 
         const data = await res.json();
-        const stories = [];
+        let stories = [];
         
         if (Array.isArray(data)) {
             data.forEach(group => {
@@ -727,8 +787,11 @@ async function openHashtagStories(tag) {
             stories.push(...data.data);
         }
 
+        // 🔥 FILTRAR: SOLO historias de usuarios PÚBLICOS
+        stories = filterPublicStories(stories);
+
         if (stories.length === 0) {
-            showToast(`No hay historias con #${tag}`, true);
+            showToast(`No hay historias públicas con #${tag}`, true);
             return;
         }
 
