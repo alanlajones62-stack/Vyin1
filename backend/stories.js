@@ -1,4 +1,4 @@
-// backend/stories.js - VERSIÓN COMPLETA CON CLOUDINARY CORREGIDA
+// backend/stories.js - VERSIÓN COMPLETA CON CLOUDINARY Y SISTEMA DE BLOQUEOS
 
 const auth = require('./middleware/auth');
 const multer = require('multer');
@@ -69,6 +69,21 @@ module.exports = function(read, write, io, processHashtags, isProfileVisible, ar
     const router = require('express').Router();
     
     console.log('✅ [STORIES] Módulo cargado correctamente');
+
+    // ============================================================
+    // 🔥 FUNCIÓN AUXILIAR PARA VERIFICAR BLOQUEOS
+    // ============================================================
+    function isBlocked(users, blockerId, blockedId) {
+        const blocker = users.find(u => u.id === blockerId);
+        const blocked = users.find(u => u.id === blockedId);
+        
+        if (!blocker || !blocked) return false;
+        
+        if (blocker.blocked && blocker.blocked.includes(blockedId)) return true;
+        if (blocked.blockedBy && blocked.blockedBy.includes(blockerId)) return true;
+        
+        return false;
+    }
 
     // ============================================================
     // 🔥 RUTA: VERIFICAR CONEXIÓN A CLOUDINARY
@@ -361,7 +376,7 @@ module.exports = function(read, write, io, processHashtags, isProfileVisible, ar
     });
 
     // ============================================================
-    // 🔥 RUTA: FEED CON SORT (LEGACY)
+    // 🔥 RUTA: FEED CON SORT (LEGACY) - CON FILTRO DE BLOQUEOS
     // ============================================================
     
     router.get('/feed', auth, (req, res) => {
@@ -374,8 +389,18 @@ module.exports = function(read, write, io, processHashtags, isProfileVisible, ar
 
             if (logger) logger.info(`📡 Feed para usuario ${userId}, página ${page}, sort: ${sort}`);
 
-            const stories = read('stories.json');
             const users = read('users.json');
+            const currentUser = users.find(u => u.id === userId);
+            
+            if (!currentUser) {
+                return res.status(404).json({ error: 'Usuario no encontrado' });
+            }
+            
+            // 🔥 OBTENER BLOQUEADOS
+            const blockedIds = currentUser.blocked || [];
+            const blockedByIds = currentUser.blockedBy || [];
+
+            const stories = read('stories.json');
             const now = Date.now();
 
             const userMap = {};
@@ -392,6 +417,10 @@ module.exports = function(read, write, io, processHashtags, isProfileVisible, ar
             for (const story of activeStories) {
                 const storyOwner = userMap[story.userId];
                 if (!storyOwner) continue;
+                
+                // 🔥 VERIFICAR BLOQUEOS
+                if (blockedIds.includes(storyOwner.id)) continue;
+                if (blockedByIds.includes(storyOwner.id)) continue;
                 
                 if (storyOwner.id === userId) {
                     visibleStories.push({
@@ -465,7 +494,7 @@ module.exports = function(read, write, io, processHashtags, isProfileVisible, ar
     });
 
     // ============================================================
-    // 🔥🔥🔥 RUTA: FEED POR CURSOR
+    // 🔥🔥🔥 RUTA: FEED POR CURSOR - CON FILTRO DE BLOQUEOS
     // ============================================================
 
     router.get('/feed/cursor', auth, async (req, res) => {
@@ -486,6 +515,10 @@ module.exports = function(read, write, io, processHashtags, isProfileVisible, ar
                 return res.status(404).json({ error: 'Usuario no encontrado' });
             }
 
+            // 🔥 OBTENER BLOQUEADOS
+            const blockedIds = user.blocked || [];
+            const blockedByIds = user.blockedBy || [];
+
             const userCountry = user.country || null;
             const userRegion = user.region || 'other';
             const userFollowing = user.following || [];
@@ -495,6 +528,11 @@ module.exports = function(read, write, io, processHashtags, isProfileVisible, ar
                 if (new Date(s.expiresAt).getTime() <= now) return false;
                 if (s.hidden) return false;
                 if (s.userId === userId) return false;
+                
+                // 🔥 FILTRAR BLOQUEADOS
+                if (blockedIds.includes(s.userId)) return false;
+                if (blockedByIds.includes(s.userId)) return false;
+                
                 return true;
             });
 
@@ -630,17 +668,28 @@ module.exports = function(read, write, io, processHashtags, isProfileVisible, ar
     }
 
     // ============================================================
-    // RUTA: FEED PÚBLICO
+    // RUTA: FEED PÚBLICO - CON FILTRO DE BLOQUEOS
     // ============================================================
     
-    router.get('/public', (req, res) => {
+    router.get('/public', auth, (req, res) => {
         try {
+            const userId = req.userId;
             const limit = parseInt(req.query.limit) || 20;
             const page = parseInt(req.query.page) || 1;
             const skip = (page - 1) * limit;
 
-            const stories = read('stories.json');
             const users = read('users.json');
+            const currentUser = users.find(u => u.id === userId);
+            
+            if (!currentUser) {
+                return res.status(404).json({ error: 'Usuario no encontrado' });
+            }
+            
+            // 🔥 OBTENER BLOQUEADOS
+            const blockedIds = currentUser.blocked || [];
+            const blockedByIds = currentUser.blockedBy || [];
+
+            const stories = read('stories.json');
             const now = Date.now();
 
             const userMap = {};
@@ -654,6 +703,11 @@ module.exports = function(read, write, io, processHashtags, isProfileVisible, ar
                     
                     const storyOwner = userMap[s.userId];
                     if (!storyOwner) return false;
+                    
+                    // 🔥 FILTRAR BLOQUEADOS
+                    if (blockedIds.includes(storyOwner.id)) return false;
+                    if (blockedByIds.includes(storyOwner.id)) return false;
+                    
                     return storyOwner.privacy === 'public';
                 })
                 .map(s => {
@@ -693,7 +747,7 @@ module.exports = function(read, write, io, processHashtags, isProfileVisible, ar
     });
 
     // ============================================================
-    // RUTA: HISTORIAS POR USUARIO
+    // RUTA: HISTORIAS POR USUARIO - CON VERIFICACIÓN DE BLOQUEOS
     // ============================================================
     
     router.get('/user/:userId', auth, (req, res) => {
@@ -702,6 +756,16 @@ module.exports = function(read, write, io, processHashtags, isProfileVisible, ar
             const currentUserId = req.userId;
 
             const users = read('users.json');
+            const currentUser = users.find(u => u.id === currentUserId);
+            
+            // 🔥 VERIFICAR BLOQUEOS
+            if (currentUser && isBlocked(users, currentUserId, targetUserId)) {
+                return res.status(404).json({ 
+                    error: 'Usuario no encontrado',
+                    message: 'El usuario que buscas no existe'
+                });
+            }
+
             const stories = read('stories.json');
             const now = Date.now();
 
@@ -748,7 +812,7 @@ module.exports = function(read, write, io, processHashtags, isProfileVisible, ar
     });
 
     // ============================================================
-    // RUTA: DETALLES DE HISTORIA
+    // RUTA: DETALLES DE HISTORIA - CON VERIFICACIÓN DE BLOQUEOS
     // ============================================================
     
     router.get('/:storyId/details', auth, async (req, res) => {
@@ -758,6 +822,9 @@ module.exports = function(read, write, io, processHashtags, isProfileVisible, ar
 
             if (logger) logger.info(`📖 Obteniendo detalles de historia: ${storyId}`);
 
+            const users = read('users.json');
+            const currentUser = users.find(u => u.id === userId);
+            
             const stories = read('stories.json');
             const story = stories.find(s => s.id === storyId);
 
@@ -765,11 +832,18 @@ module.exports = function(read, write, io, processHashtags, isProfileVisible, ar
                 return res.status(404).json({ error: 'Historia no encontrada' });
             }
 
-            const users = read('users.json');
             const storyOwner = users.find(u => u.id === story.userId);
 
             if (!storyOwner) {
                 return res.status(404).json({ error: 'Dueño no encontrado' });
+            }
+
+            // 🔥 VERIFICAR BLOQUEOS
+            if (currentUser && isBlocked(users, userId, storyOwner.id)) {
+                return res.status(404).json({ 
+                    error: 'Usuario no encontrado',
+                    message: 'El usuario que buscas no existe'
+                });
             }
 
             if (storyOwner.id !== userId && !areStoriesVisible(storyOwner, userId)) {
@@ -821,7 +895,7 @@ module.exports = function(read, write, io, processHashtags, isProfileVisible, ar
     });
 
     // ============================================================
-    // RUTA: OBTENER UNA HISTORIA
+    // RUTA: OBTENER UNA HISTORIA - CON VERIFICACIÓN DE BLOQUEOS
     // ============================================================
     
     router.get('/:storyId', auth, (req, res) => {
@@ -829,6 +903,9 @@ module.exports = function(read, write, io, processHashtags, isProfileVisible, ar
             const storyId = req.params.storyId;
             const userId = req.userId;
 
+            const users = read('users.json');
+            const currentUser = users.find(u => u.id === userId);
+            
             const stories = read('stories.json');
             const story = stories.find(s => s.id === storyId);
 
@@ -836,11 +913,18 @@ module.exports = function(read, write, io, processHashtags, isProfileVisible, ar
                 return res.status(404).json({ error: 'Historia no encontrada' });
             }
 
-            const users = read('users.json');
             const storyOwner = users.find(u => u.id === story.userId);
 
             if (!storyOwner) {
                 return res.status(404).json({ error: 'Dueño no encontrado' });
+            }
+
+            // 🔥 VERIFICAR BLOQUEOS
+            if (currentUser && isBlocked(users, userId, storyOwner.id)) {
+                return res.status(404).json({ 
+                    error: 'Usuario no encontrado',
+                    message: 'El usuario que buscas no existe'
+                });
             }
 
             if (storyOwner.id !== userId && typeof areStoriesVisible === 'function') {
@@ -873,7 +957,7 @@ module.exports = function(read, write, io, processHashtags, isProfileVisible, ar
     });
 
     // ============================================================
-    // RUTA: HISTORIAS POR HASHTAG
+    // RUTA: HISTORIAS POR HASHTAG - CON FILTRO DE BLOQUEOS
     // ============================================================
     
     router.get('/hashtag/:tag', auth, (req, res) => {
@@ -883,8 +967,18 @@ module.exports = function(read, write, io, processHashtags, isProfileVisible, ar
             
             console.log(`🏷️ Buscando historias con hashtag: #${tag}`);
 
-            const stories = read('stories.json');
             const users = read('users.json');
+            const currentUser = users.find(u => u.id === userId);
+            
+            if (!currentUser) {
+                return res.status(404).json({ error: 'Usuario no encontrado' });
+            }
+            
+            // 🔥 OBTENER BLOQUEADOS
+            const blockedIds = currentUser.blocked || [];
+            const blockedByIds = currentUser.blockedBy || [];
+
+            const stories = read('stories.json');
             const now = Date.now();
             
             const MAX_AGE_HOURS = 24;
@@ -907,6 +1001,10 @@ module.exports = function(read, write, io, processHashtags, isProfileVisible, ar
                 
                 const storyOwner = userMap[story.userId];
                 if (!storyOwner) return false;
+                
+                // 🔥 FILTRAR BLOQUEADOS
+                if (blockedIds.includes(storyOwner.id)) return false;
+                if (blockedByIds.includes(storyOwner.id)) return false;
                 
                 if (storyOwner.id !== userId) {
                     return areStoriesVisible(storyOwner, userId);
@@ -1213,7 +1311,7 @@ module.exports = function(read, write, io, processHashtags, isProfileVisible, ar
     });
 
     // ============================================================
-    // RUTA: ELIMINAR HISTORIA - ✅ CORREGIDA CON ASYNC
+    // RUTA: ELIMINAR HISTORIA
     // ============================================================
     
     router.delete('/:storyId', auth, async (req, res) => {
@@ -1269,7 +1367,6 @@ module.exports = function(read, write, io, processHashtags, isProfileVisible, ar
                 }
             }
 
-            // 🔥 ELIMINAR DE CLOUDINARY - CON ASYNC
             if (story.publicId) {
                 try {
                     const result = await deleteFile(story.publicId);
@@ -1303,7 +1400,7 @@ module.exports = function(read, write, io, processHashtags, isProfileVisible, ar
     });
 
     // ============================================================
-    // RUTA: DAR/QUITAR LIKE
+    // RUTA: DAR/QUITAR LIKE - CON VERIFICACIÓN DE BLOQUEOS
     // ============================================================
     
     router.post('/:storyId/like', auth, likeLimiter, (req, res) => {
@@ -1311,6 +1408,9 @@ module.exports = function(read, write, io, processHashtags, isProfileVisible, ar
             const storyId = req.params.storyId;
             const userId = req.userId;
 
+            const users = read('users.json');
+            const currentUser = users.find(u => u.id === userId);
+            
             const stories = read('stories.json');
             const storyIndex = stories.findIndex(s => s.id === storyId);
 
@@ -1319,10 +1419,21 @@ module.exports = function(read, write, io, processHashtags, isProfileVisible, ar
             }
 
             const story = stories[storyIndex];
-            
-            const users = read('users.json');
             const storyOwner = users.find(u => u.id === story.userId);
-            if (!storyOwner || (storyOwner.id !== userId && !areStoriesVisible(storyOwner, userId))) {
+            
+            if (!storyOwner) {
+                return res.status(404).json({ error: 'Dueño no encontrado' });
+            }
+            
+            // 🔥 VERIFICAR BLOQUEOS
+            if (currentUser && isBlocked(users, userId, storyOwner.id)) {
+                return res.status(404).json({ 
+                    error: 'Usuario no encontrado',
+                    message: 'El usuario que buscas no existe'
+                });
+            }
+            
+            if (storyOwner.id !== userId && !areStoriesVisible(storyOwner, userId)) {
                 return res.status(403).json({ error: 'No tienes permiso' });
             }
 
@@ -1441,7 +1552,7 @@ module.exports = function(read, write, io, processHashtags, isProfileVisible, ar
     });
 
     // ============================================================
-    // RUTA: REGISTRAR VISTA
+    // RUTA: REGISTRAR VISTA - CON VERIFICACIÓN DE BLOQUEOS
     // ============================================================
     
     router.post('/:storyId/view', auth, (req, res) => {
@@ -1449,6 +1560,9 @@ module.exports = function(read, write, io, processHashtags, isProfileVisible, ar
             const storyId = req.params.storyId;
             const userId = req.userId;
 
+            const users = read('users.json');
+            const currentUser = users.find(u => u.id === userId);
+            
             const stories = read('stories.json');
             const storyIndex = stories.findIndex(s => s.id === storyId);
 
@@ -1457,6 +1571,19 @@ module.exports = function(read, write, io, processHashtags, isProfileVisible, ar
             }
 
             const story = stories[storyIndex];
+            const storyOwner = users.find(u => u.id === story.userId);
+            
+            if (!storyOwner) {
+                return res.status(404).json({ error: 'Dueño no encontrado' });
+            }
+            
+            // 🔥 VERIFICAR BLOQUEOS
+            if (currentUser && isBlocked(users, userId, storyOwner.id)) {
+                return res.status(404).json({ 
+                    error: 'Usuario no encontrado',
+                    message: 'El usuario que buscas no existe'
+                });
+            }
             
             if (!story.views) story.views = [];
 
@@ -1483,7 +1610,7 @@ module.exports = function(read, write, io, processHashtags, isProfileVisible, ar
     });
 
     // ============================================================
-    // RUTA: ESTADÍSTICAS DE HISTORIA
+    // RUTA: ESTADÍSTICAS DE HISTORIA - CON VERIFICACIÓN DE BLOQUEOS
     // ============================================================
     
     router.get('/:storyId/stats', auth, (req, res) => {
@@ -1491,6 +1618,9 @@ module.exports = function(read, write, io, processHashtags, isProfileVisible, ar
             const storyId = req.params.storyId;
             const userId = req.userId;
 
+            const users = read('users.json');
+            const currentUser = users.find(u => u.id === userId);
+            
             const stories = read('stories.json');
             const story = stories.find(s => s.id === storyId);
 
@@ -1498,10 +1628,21 @@ module.exports = function(read, write, io, processHashtags, isProfileVisible, ar
                 return res.status(404).json({ error: 'Historia no encontrada' });
             }
 
-            const users = read('users.json');
             const storyOwner = users.find(u => u.id === story.userId);
             
-            if (!storyOwner || (storyOwner.id !== userId && !areStoriesVisible(storyOwner, userId))) {
+            if (!storyOwner) {
+                return res.status(404).json({ error: 'Dueño no encontrado' });
+            }
+            
+            // 🔥 VERIFICAR BLOQUEOS
+            if (currentUser && isBlocked(users, userId, storyOwner.id)) {
+                return res.status(404).json({ 
+                    error: 'Usuario no encontrado',
+                    message: 'El usuario que buscas no existe'
+                });
+            }
+            
+            if (storyOwner.id !== userId && !areStoriesVisible(storyOwner, userId)) {
                 return res.status(403).json({ error: 'No tienes permiso' });
             }
 
@@ -1532,7 +1673,7 @@ module.exports = function(read, write, io, processHashtags, isProfileVisible, ar
     });
 
     // ============================================================
-    // RUTA: TOP STORIES
+    // RUTA: TOP STORIES - CON FILTRO DE BLOQUEOS
     // ============================================================
     
     router.get('/top', auth, (req, res) => {
@@ -1541,8 +1682,18 @@ module.exports = function(read, write, io, processHashtags, isProfileVisible, ar
             const limit = parseInt(req.query.limit) || 10;
             const days = parseInt(req.query.days) || 1;
 
-            const stories = read('stories.json');
             const users = read('users.json');
+            const currentUser = users.find(u => u.id === userId);
+            
+            if (!currentUser) {
+                return res.status(404).json({ error: 'Usuario no encontrado' });
+            }
+            
+            // 🔥 OBTENER BLOQUEADOS
+            const blockedIds = currentUser.blocked || [];
+            const blockedByIds = currentUser.blockedBy || [];
+
+            const stories = read('stories.json');
             const now = Date.now();
 
             const cutoff = now - (days * 24 * 60 * 60 * 1000);
@@ -1559,6 +1710,11 @@ module.exports = function(read, write, io, processHashtags, isProfileVisible, ar
                 const storyOwner = userMap[s.userId];
                 if (!storyOwner) return false;
                 if (storyOwner.id === userId) return false;
+                
+                // 🔥 FILTRAR BLOQUEADOS
+                if (blockedIds.includes(storyOwner.id)) return false;
+                if (blockedByIds.includes(storyOwner.id)) return false;
+                
                 return areStoriesVisible(storyOwner, userId);
             });
 
@@ -1661,7 +1817,7 @@ module.exports = function(read, write, io, processHashtags, isProfileVisible, ar
     });
 
     // ============================================================
-    // 🔥🔥🔥 RUTA: BÚSQUEDA SEMÁNTICA MULTILINGÜE
+    // 🔥🔥🔥 RUTA: BÚSQUEDA SEMÁNTICA MULTILINGÜE - CON FILTRO DE BLOQUEOS
     // ============================================================
 
     router.get('/search/semantic', auth, async (req, res) => {
@@ -1679,6 +1835,17 @@ module.exports = function(read, write, io, processHashtags, isProfileVisible, ar
             }
 
             console.log(`🧠 Búsqueda semántica: "${query}" para usuario ${userId}`);
+
+            const users = read('users.json');
+            const currentUser = users.find(u => u.id === userId);
+            
+            if (!currentUser) {
+                return res.status(404).json({ error: 'Usuario no encontrado' });
+            }
+            
+            // 🔥 OBTENER BLOQUEADOS
+            const blockedIds = currentUser.blocked || [];
+            const blockedByIds = currentUser.blockedBy || [];
 
             const { getEmbeddingService } = require('./services/embedding.service');
             const embeddingService = await getEmbeddingService();
@@ -1705,7 +1872,6 @@ module.exports = function(read, write, io, processHashtags, isProfileVisible, ar
             }
 
             const stories = read('stories.json');
-            const users = read('users.json');
             const userMap = {};
             users.forEach(u => { userMap[u.id] = u; });
 
@@ -1713,6 +1879,14 @@ module.exports = function(read, write, io, processHashtags, isProfileVisible, ar
             
             const matchedStories = stories
                 .filter(s => resultIds.has(s.id) && !s.hidden)
+                .filter(s => {
+                    const owner = userMap[s.userId];
+                    if (!owner) return false;
+                    // 🔥 FILTRAR BLOQUEADOS
+                    if (blockedIds.includes(owner.id)) return false;
+                    if (blockedByIds.includes(owner.id)) return false;
+                    return true;
+                })
                 .map(s => {
                     const result = results.find(r => r.storyId === s.id);
                     const owner = userMap[s.userId];
@@ -1774,7 +1948,7 @@ module.exports = function(read, write, io, processHashtags, isProfileVisible, ar
     });
 
     // ============================================================
-    // 🔥🔥🔥 RUTA: BÚSQUEDA HÍBRIDA COMPLETA (CORREGIDA)
+    // 🔥🔥🔥 RUTA: BÚSQUEDA HÍBRIDA COMPLETA - CON FILTRO DE BLOQUEOS
     // ============================================================
 
     router.get('/search/hybrid', auth, async (req, res) => {
@@ -1793,8 +1967,18 @@ module.exports = function(read, write, io, processHashtags, isProfileVisible, ar
 
             console.log(`🔍 Búsqueda híbrida: "${query}" para usuario ${userId}`);
 
-            const stories = read('stories.json');
             const users = read('users.json');
+            const currentUser = users.find(u => u.id === userId);
+            
+            if (!currentUser) {
+                return res.status(404).json({ error: 'Usuario no encontrado' });
+            }
+            
+            // 🔥 OBTENER BLOQUEADOS
+            const blockedIds = currentUser.blocked || [];
+            const blockedByIds = currentUser.blockedBy || [];
+
+            const stories = read('stories.json');
             const now = Date.now();
 
             const userMap = {};
@@ -1804,7 +1988,7 @@ module.exports = function(read, write, io, processHashtags, isProfileVisible, ar
             const keywords = keywordLower.split(' ').filter(w => w.length > 1);
 
             // ============================================================
-            // 🔥 1. BÚSQUEDA LITERAL CON PESOS MEJORADOS
+            // 🔥 1. BÚSQUEDA LITERAL CON FILTRO DE BLOQUEOS
             // ============================================================
             
             let literalResults = [];
@@ -1819,6 +2003,11 @@ module.exports = function(read, write, io, processHashtags, isProfileVisible, ar
 
                 const storyOwner = userMap[s.userId];
                 if (!storyOwner) return;
+                
+                // 🔥 FILTRAR BLOQUEADOS
+                if (blockedIds.includes(storyOwner.id)) return;
+                if (blockedByIds.includes(storyOwner.id)) return;
+                
                 if (typeof areStoriesVisible === 'function') {
                     if (!areStoriesVisible(storyOwner, userId)) return;
                 }
@@ -1891,7 +2080,7 @@ module.exports = function(read, write, io, processHashtags, isProfileVisible, ar
             console.log(`📝 Resultados literales: ${literalResults.length} (max score: ${maxScore})`);
 
             // ============================================================
-            // 🔥 2. BÚSQUEDA SEMÁNTICA
+            // 🔥 2. BÚSQUEDA SEMÁNTICA CON FILTRO DE BLOQUEOS
             // ============================================================
             
             let semanticResults = [];
@@ -1913,6 +2102,14 @@ module.exports = function(read, write, io, processHashtags, isProfileVisible, ar
 
                             const semanticStories = stories
                                 .filter(s => resultIds.has(s.id) && !s.hidden && s.userId !== userId)
+                                .filter(s => {
+                                    const owner = userMap[s.userId];
+                                    if (!owner) return false;
+                                    // 🔥 FILTRAR BLOQUEADOS
+                                    if (blockedIds.includes(owner.id)) return false;
+                                    if (blockedByIds.includes(owner.id)) return false;
+                                    return true;
+                                })
                                 .map(s => {
                                     const result = filteredSemantic.find(r => r.storyId === s.id);
                                     const owner = userMap[s.userId];
@@ -2078,7 +2275,7 @@ module.exports = function(read, write, io, processHashtags, isProfileVisible, ar
     });
 
     // ============================================================
-    // 🔥 RUTA: RECOMENDACIONES BASADAS EN EMBEDDINGS
+    // 🔥 RUTA: RECOMENDACIONES BASADAS EN EMBEDDINGS - CON FILTRO DE BLOQUEOS
     // ============================================================
 
     router.get('/recommendations/semantic', auth, async (req, res) => {
@@ -2088,11 +2285,23 @@ module.exports = function(read, write, io, processHashtags, isProfileVisible, ar
 
             console.log(`🎯 Generando recomendaciones semánticas para usuario ${userId}`);
 
+            const users = read('users.json');
+            const currentUser = users.find(u => u.id === userId);
+            
+            if (!currentUser) {
+                return res.status(404).json({ error: 'Usuario no encontrado' });
+            }
+            
+            // 🔥 OBTENER BLOQUEADOS
+            const blockedIds = currentUser.blocked || [];
+            const blockedByIds = currentUser.blockedBy || [];
+
             const { getEmbeddingService } = require('./services/embedding.service');
             const embeddingService = await getEmbeddingService();
 
             const stories = read('stories.json');
-            const users = read('users.json');
+            const userMap = {};
+            users.forEach(u => { userMap[u.id] = u; });
             
             const userStories = stories.filter(s => s.userId === userId && !s.hidden);
             
@@ -2111,11 +2320,17 @@ module.exports = function(read, write, io, processHashtags, isProfileVisible, ar
 
                     if (results.length > 0) {
                         const resultIds = new Set(results.map(r => r.storyId));
-                        const userMap = {};
-                        users.forEach(u => { userMap[u.id] = u; });
 
                         const recommendations = stories
                             .filter(s => resultIds.has(s.id) && !s.hidden)
+                            .filter(s => {
+                                const owner = userMap[s.userId];
+                                if (!owner) return false;
+                                // 🔥 FILTRAR BLOQUEADOS
+                                if (blockedIds.includes(owner.id)) return false;
+                                if (blockedByIds.includes(owner.id)) return false;
+                                return true;
+                            })
                             .map(s => {
                                 const result = results.find(r => r.storyId === s.id);
                                 const owner = userMap[s.userId];
@@ -2157,9 +2372,17 @@ module.exports = function(read, write, io, processHashtags, isProfileVisible, ar
                 }
             }
 
-            // Fallback: historias populares
+            // Fallback: historias populares con filtro de bloqueos
             const popularStories = stories
                 .filter(s => !s.hidden && s.userId !== userId)
+                .filter(s => {
+                    const owner = userMap[s.userId];
+                    if (!owner) return false;
+                    // 🔥 FILTRAR BLOQUEADOS
+                    if (blockedIds.includes(owner.id)) return false;
+                    if (blockedByIds.includes(owner.id)) return false;
+                    return true;
+                })
                 .sort((a, b) => (b.likes?.length || 0) - (a.likes?.length || 0))
                 .slice(0, limit)
                 .map(s => {

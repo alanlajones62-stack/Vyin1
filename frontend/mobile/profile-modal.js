@@ -1,4 +1,4 @@
-// profile-modal.js - Modal para ver perfil de usuario (VERSIÓN CORREGIDA)
+// profile-modal.js - Modal para ver perfil de usuario (VERSIÓN COMPLETA CON BLOQUEO Y PRIVACIDAD)
 // CON NAVEGACIÓN POR PILA Y CONTEXTO DE VISTA
 // 🔥 EL PERFIL PROPIO SE MUESTRA EN EL MODAL, NO EN PROFILE-NATIVE
 
@@ -362,6 +362,82 @@ function getVerificationBadge(user) {
 }
 
 // ============================================================
+// 🔥 MANEJAR BLOQUEO DE USUARIO
+// ============================================================
+
+window.handleBlockUser = async function(userId) {
+    if (!userId) return;
+    
+    const token = getToken();
+    if (!token) {
+        showToast('Inicia sesión para bloquear', true);
+        return;
+    }
+
+    const currentUser = getCurrentUser();
+    if (currentUser?.id === userId) {
+        showToast('No puedes bloquearte a ti mismo', true);
+        return;
+    }
+
+    try {
+        // Verificar si ya está bloqueado
+        const checkRes = await fetch(`${API_URL}/api/blocked/check/${userId}`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+        
+        let isBlocked = false;
+        if (checkRes.ok) {
+            const data = await checkRes.json();
+            isBlocked = data.isBlocked || false;
+        }
+
+        if (isBlocked) {
+            // Desbloquear
+            const res = await fetch(`${API_URL}/api/blocked/unblock/${userId}`, {
+                method: 'DELETE',
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+
+            if (res.ok) {
+                showToast('✅ Usuario desbloqueado');
+                // Recargar perfil para actualizar UI
+                loadProfileData(userId);
+                // Actualizar caché
+                clearProfileCache(userId);
+            } else {
+                const data = await res.json();
+                showToast(data.error || 'Error al desbloquear', true);
+            }
+        } else {
+            // Bloquear
+            const res = await fetch(`${API_URL}/api/blocked/block`, {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ userId })
+            });
+
+            if (res.ok) {
+                showToast('🔒 Usuario bloqueado');
+                // Cerrar modal - el usuario bloqueado no debe ver el perfil
+                closeProfileModal();
+                // Actualizar caché
+                clearProfileCache(userId);
+            } else {
+                const data = await res.json();
+                showToast(data.error || 'Error al bloquear', true);
+            }
+        }
+    } catch (error) {
+        console.error('Error al bloquear/desbloquear:', error);
+        showToast('Error al procesar la solicitud', true);
+    }
+};
+
+// ============================================================
 // ACTUALIZAR UI DEL MODAL DE PERFIL
 // ============================================================
 
@@ -373,6 +449,23 @@ function updateProfileModalUI(user, stories) {
     const isFollowing = user.isFollowing || false;
     const hasPendingRequest = user.hasPendingRequest || false;
     const isOwnProfile = currentUser?.id === user.id;
+
+    // 🔥 VERIFICAR SI EL USUARIO ESTÁ BLOQUEADO
+    // Si el usuario actual está bloqueado por el dueño del perfil, mostrar "Usuario no encontrado"
+    const isBlockedByOwner = user.isBlockedBy || false;
+    const isBlocked = user.isBlocked || false;
+
+    // Si el dueño del perfil bloqueó al usuario actual, mostrar error
+    if (isBlockedByOwner) {
+        container.innerHTML = `
+            <div class="profile-not-found">
+                <i class="fas fa-user-slash" style="font-size:48px;color:rgba(255,255,255,0.05);margin-bottom:16px;"></i>
+                <h3 style="color:rgba(255,255,255,0.2);font-weight:400;">Usuario no encontrado</h3>
+                <p style="color:rgba(255,255,255,0.08);font-size:13px;">El usuario que buscas no existe</p>
+            </div>
+        `;
+        return;
+    }
 
     const followersCount = user.followersCount || 0;
     const followingCount = user.followingCount || 0;
@@ -435,6 +528,25 @@ function updateProfileModalUI(user, stories) {
     let followIcon = '<i class="fas fa-user-plus"></i>';
     let followOnClick = `window.handleProfileFollow()`;
 
+    // 🔥 BOTÓN DE BLOQUEO - Solo visible para otros usuarios (y si no está bloqueado por el dueño)
+    let blockButton = '';
+    let blockText = 'Bloquear';
+    let blockIcon = '<i class="fas fa-ban"></i>';
+    let blockClass = 'btn-block';
+    
+    if (!isOwnProfile && !isBlockedByOwner) {
+        blockText = isBlocked ? 'Desbloquear' : 'Bloquear';
+        blockIcon = isBlocked ? '<i class="fas fa-unlock"></i>' : '<i class="fas fa-ban"></i>';
+        blockClass = isBlocked ? 'btn-block blocked' : 'btn-block';
+        
+        blockButton = `
+            <button class="${blockClass}" onclick="window.handleBlockUser('${user.id}')">
+                ${blockIcon}
+                ${blockText}
+            </button>
+        `;
+    }
+
     if (isOwnProfile) {
         followText = 'Editar perfil';
         followClass = 'btn-edit-profile';
@@ -474,11 +586,14 @@ function updateProfileModalUI(user, stories) {
             ${countryName ? `<div class="profile-bio" style="font-size:10px;color:rgba(255,255,255,0.2);"><i class="fas fa-map-marker-alt"></i> ${countryName}</div>` : ''}
         </div>
 
-        <div class="profile-follow-btn">
-            <button class="${followClass}" id="profileFollowBtn" ${followDisabled ? 'disabled' : ''} onclick="${followOnClick}">
-                ${followIcon}
-                ${followText}
-            </button>
+        <div class="profile-actions">
+            <div class="profile-follow-btn">
+                <button class="${followClass}" id="profileFollowBtn" ${followDisabled ? 'disabled' : ''} onclick="${followOnClick}">
+                    ${followIcon}
+                    ${followText}
+                </button>
+            </div>
+            ${blockButton}
         </div>
 
         <div class="profile-stats">
@@ -805,6 +920,7 @@ function createProfileModalHTML() {
     window.handleProfileFollow = handleFollowUser;
     window.openStoryFromProfileOverlay = openStoryFromProfileOverlay;
     window.openEditProfileFromModal = openEditProfileFromModal;
+    window.handleBlockUser = window.handleBlockUser;
 }
 
 // ============================================================

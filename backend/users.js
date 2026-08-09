@@ -1,4 +1,4 @@
-// backend/users.js - VERSIÓN COMPLETA CON isFollowing Y VERIFICACIÓN
+// backend/users.js - VERSIÓN COMPLETA CON isFollowing, VERIFICACIÓN Y BLOQUEOS
 
 const jwt = require('jsonwebtoken');
 const auth = require('./middleware/auth');
@@ -8,6 +8,28 @@ const JWT_SECRET = process.env.JWT_SECRET || 'mi_super_secreto_123';
 
 module.exports = (read, write, isProfileVisible, areStoriesVisible, userIndex, logger) => {
     const router = require('express').Router();
+
+    // ============================================================
+    // 🔥 FUNCIÓN PARA FILTRAR BLOQUEADOS
+    // ============================================================
+
+    function filterBlockedUsers(users, currentUserId) {
+        if (!currentUserId) return users;
+        
+        const currentUser = users.find(u => u.id === currentUserId);
+        if (!currentUser) return users;
+        
+        const blockedIds = currentUser.blocked || [];
+        const blockedByIds = currentUser.blockedBy || [];
+        
+        // El usuario no ve a los que bloqueó ni a los que lo bloquearon
+        return users.filter(u => {
+            if (u.id === currentUserId) return true;
+            if (blockedIds.includes(u.id)) return false;
+            if (blockedByIds.includes(u.id)) return false;
+            return true;
+        });
+    }
 
     // ============================================================
     // MAPA DE REGIONES CERCANAS PARA FALLBACK
@@ -32,11 +54,16 @@ module.exports = (read, write, isProfileVisible, areStoriesVisible, userIndex, l
     // 🔥 RUTAS
     // ============================================================
 
-    // 🔥 POPULAR - AHORA CON isFollowing Y BADGE DE VERIFICACIÓN
+    // 🔥 POPULAR - CON FILTRO DE BLOQUEOS
     router.get('/popular', async (req, res) => {
         try {
-            const users = read('users.json');
+            let users = read('users.json');
             const currentUserId = req.query.userId || null;
+            
+            // 🔥 FILTRAR BLOQUEADOS
+            if (currentUserId) {
+                users = filterBlockedUsers(users, currentUserId);
+            }
             
             let currentUser = null;
             if (currentUserId) {
@@ -103,7 +130,7 @@ module.exports = (read, write, isProfileVisible, areStoriesVisible, userIndex, l
         }
     });
 
-    // 🔥 SEARCH - AHORA CON isFollowing Y BADGE
+    // 🔥 SEARCH - CON FILTRO DE BLOQUEOS
     router.get('/search', auth.optional, (req, res) => {
         try {
             const { q } = req.query;
@@ -111,9 +138,14 @@ module.exports = (read, write, isProfileVisible, areStoriesVisible, userIndex, l
                 return res.json([]);
             }
             
-            const users = read('users.json');
+            let users = read('users.json');
             const query = q.toLowerCase();
             const currentUserId = req.userId || null;
+            
+            // 🔥 FILTRAR BLOQUEADOS
+            if (currentUserId) {
+                users = filterBlockedUsers(users, currentUserId);
+            }
             
             let currentUser = null;
             if (currentUserId) {
@@ -174,7 +206,7 @@ module.exports = (read, write, isProfileVisible, areStoriesVisible, userIndex, l
     });
     
     // ============================================================
-    // ✅ PERFIL - CON BADGE DE VERIFICACIÓN
+    // ✅ PERFIL - CON BADGE DE VERIFICACIÓN Y VERIFICACIÓN DE BLOQUEOS
     // ============================================================
     router.get('/profile/:userId?', auth, (req, res) => {
         try {
@@ -205,6 +237,25 @@ module.exports = (read, write, isProfileVisible, areStoriesVisible, userIndex, l
             
             const isOwnProfile = req.userId === userIdStr;
             
+            // 🔥 VERIFICAR BLOQUEOS
+            const currentUser = users.find(u => u.id === req.userId);
+            if (!isOwnProfile && currentUser) {
+                // Si el usuario actual bloqueó al target
+                if (currentUser.blocked && currentUser.blocked.includes(userIdStr)) {
+                    return res.status(404).json({
+                        error: 'Usuario no encontrado',
+                        message: 'El usuario que buscas no existe'
+                    });
+                }
+                // Si el target bloqueó al usuario actual
+                if (user.blockedBy && user.blockedBy.includes(req.userId)) {
+                    return res.status(404).json({
+                        error: 'Usuario no encontrado',
+                        message: 'El usuario que buscas no existe'
+                    });
+                }
+            }
+            
             if (!isOwnProfile && !isProfileVisible(user, req.userId)) {
                 logger.info(`🔒 Perfil privado: ${user.username}`);
                 return res.status(403).json({ 
@@ -220,7 +271,6 @@ module.exports = (read, write, isProfileVisible, areStoriesVisible, userIndex, l
             userWithoutPassword.role = user.role || 'user';
             
             if (!isOwnProfile && req.userId) {
-                const currentUser = users.find(u => u.id === req.userId);
                 if (currentUser) {
                     userWithoutPassword.isFollowing = currentUser.following?.includes(userIdStr) || false;
                     userWithoutPassword.hasPendingRequest = currentUser.pendingSent?.includes(userIdStr) || false;
@@ -305,16 +355,19 @@ module.exports = (read, write, isProfileVisible, areStoriesVisible, userIndex, l
     });
 
     // ============================================================
-    // ✅ SUGERENCIAS DE USUARIOS
+    // ✅ SUGERENCIAS DE USUARIOS - CON FILTRO DE BLOQUEOS
     // ============================================================
     router.get('/suggestions', auth, (req, res) => {
         try {
-            const users = read('users.json');
+            let users = read('users.json');
             const currentUser = users.find(u => u.id === req.userId);
             
             if (!currentUser) {
                 return res.json([]);
             }
+            
+            // 🔥 FILTRAR BLOQUEADOS
+            users = filterBlockedUsers(users, req.userId);
             
             const followingList = currentUser.following || [];
             const userCountry = currentUser.country;
@@ -462,7 +515,7 @@ module.exports = (read, write, isProfileVisible, areStoriesVisible, userIndex, l
     });
 
     // ============================================================
-    // OBTENER USUARIOS POR IDS (para chat y menciones)
+    // OBTENER USUARIOS POR IDS (para chat y menciones) - CON FILTRO DE BLOQUEOS
     // ============================================================
     router.post('/batch', auth, (req, res) => {
         try {
@@ -472,7 +525,22 @@ module.exports = (read, write, isProfileVisible, areStoriesVisible, userIndex, l
                 return res.status(400).json({ error: 'Se requiere un array de userIds' });
             }
             
-            const users = read('users.json');
+            let users = read('users.json');
+            const currentUser = users.find(u => u.id === req.userId);
+            
+            // 🔥 FILTRAR BLOQUEADOS
+            if (currentUser) {
+                const blockedIds = currentUser.blocked || [];
+                const blockedByIds = currentUser.blockedBy || [];
+                
+                users = users.filter(u => {
+                    if (u.id === req.userId) return true;
+                    if (blockedIds.includes(u.id)) return false;
+                    if (blockedByIds.includes(u.id)) return false;
+                    return true;
+                });
+            }
+            
             const userMap = {};
             users.forEach(u => {
                 userMap[u.id] = u;
@@ -584,6 +652,8 @@ module.exports = (read, write, isProfileVisible, areStoriesVisible, userIndex, l
                 following: [],
                 pendingRequests: [],
                 pendingSent: [],
+                blocked: [],
+                blockedBy: [],
                 avatar: `https://ui-avatars.com/api/?name=${encodeURIComponent(fullName)}&background=7c3aed&color=fff`,
                 createdAt: new Date().toISOString(),
                 lastSeen: new Date().toISOString(),
@@ -595,7 +665,7 @@ module.exports = (read, write, isProfileVisible, areStoriesVisible, userIndex, l
                 countryName: countryName || null,
                 timezone: timezone || null,
                 role: 'admin',
-                isVerified: true, // 🔥 ADMIN VERIFICADO POR DEFECTO
+                isVerified: true,
                 verifiedAt: new Date().toISOString(),
                 verifiedBadge: 'verified',
                 accountType: 'verified',

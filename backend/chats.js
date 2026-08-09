@@ -1,15 +1,53 @@
-// backend/chats.js
-const auth = require('./middleware/auth');  // ← CORREGIDO
+// backend/chats.js - CON SISTEMA DE BLOQUEO
+const auth = require('./middleware/auth');
 
-module.exports = (read, write, io, encryptMessage, decryptMessage) => {
+module.exports = (read, write, io, encryptMessage, decryptMessage, createNotification) => {
     const router = require('express').Router();
 
+    // ============================================================
+    // FUNCIÓN AUXILIAR PARA VERIFICAR BLOQUEOS
+    // ============================================================
+    function isBlocked(users, blockerId, blockedId) {
+        const blocker = users.find(u => u.id === blockerId);
+        const blocked = users.find(u => u.id === blockedId);
+        
+        if (!blocker || !blocked) return false;
+        
+        // Si el bloqueador tiene al bloqueado en su lista de bloqueados
+        if (blocker.blocked && blocker.blocked.includes(blockedId)) return true;
+        
+        // Si el bloqueado tiene al bloqueador en su lista de bloqueados
+        if (blocked.blockedBy && blocked.blockedBy.includes(blockerId)) return true;
+        
+        return false;
+    }
+
+    // ============================================================
+    // OBTENER CONVERSACIONES - CON FILTRO DE BLOQUEOS
+    // ============================================================
     router.get('/conversations', auth, (req, res) => {
         try {
             const messages = read('messages.json');
             const users = read('users.json');
             
-            const userMessages = messages.filter(m => m.from === req.userId || m.to === req.userId);
+            // 🔥 OBTENER USUARIO ACTUAL PARA BLOQUEOS
+            const currentUser = users.find(u => u.id === req.userId);
+            if (!currentUser) {
+                return res.status(404).json({ error: 'Usuario no encontrado' });
+            }
+            
+            const blockedIds = currentUser.blocked || [];
+            const blockedByIds = currentUser.blockedBy || [];
+            
+            // 🔥 FILTRAR MENSAJES - EXCLUIR BLOQUEADOS
+            const userMessages = messages.filter(m => {
+                const otherId = m.from === req.userId ? m.to : m.from;
+                // No mostrar conversaciones con usuarios bloqueados
+                if (blockedIds.includes(otherId)) return false;
+                if (blockedByIds.includes(otherId)) return false;
+                return m.from === req.userId || m.to === req.userId;
+            });
+            
             const conversationsMap = new Map();
             
             userMessages.forEach(msg => {
@@ -18,20 +56,38 @@ module.exports = (read, write, io, encryptMessage, decryptMessage) => {
                 if (!conversationsMap.has(otherUserId)) {
                     const otherUser = users.find(u => u.id === otherUserId);
                     if (otherUser) {
-                        conversationsMap.set(otherUserId, {
-                            user: {
+                        // 🔥 VERIFICAR SI EL OTRO USUARIO ESTÁ BLOQUEADO POR ALGUIEN
+                        const isUserBlocked = blockedIds.includes(otherUserId);
+                        const isUserBlockedBy = blockedByIds.includes(otherUserId);
+                        
+                        // Si está bloqueado, mostrar como "Usuario no encontrado"
+                        let userData = {
+                            id: otherUser.id,
+                            username: otherUser.username,
+                            fullName: otherUser.fullName,
+                            avatar: otherUser.avatar
+                        };
+                        
+                        if (isUserBlocked || isUserBlockedBy) {
+                            userData = {
                                 id: otherUser.id,
-                                username: otherUser.username,
-                                fullName: otherUser.fullName,
-                                avatar: otherUser.avatar
-                            },
+                                username: 'usuario_no_encontrado',
+                                fullName: 'Usuario no encontrado',
+                                avatar: null,
+                                blocked: true
+                            };
+                        }
+                        
+                        conversationsMap.set(otherUserId, {
+                            user: userData,
                             lastMessage: {
                                 content: msg.content ? (msg.encrypted ? decryptMessage(msg.content) : msg.content) : '',
                                 timestamp: msg.timestamp,
                                 read: msg.read,
                                 fromMe: msg.from === req.userId
                             },
-                            unreadCount: 0
+                            unreadCount: 0,
+                            isBlocked: isUserBlocked || isUserBlockedBy
                         });
                     }
                 }
@@ -64,15 +120,29 @@ module.exports = (read, write, io, encryptMessage, decryptMessage) => {
         }
     });
 
+    // ============================================================
+    // OBTENER MENSAJES CON UN USUARIO - CON VERIFICACIÓN DE BLOQUEOS
+    // ============================================================
     router.get('/messages/:userId', auth, (req, res) => {
         try {
+            const targetUserId = req.params.userId;
+            const users = read('users.json');
+            
+            // 🔥 VERIFICAR BLOQUEOS
+            if (isBlocked(users, req.userId, targetUserId)) {
+                return res.status(404).json({ 
+                    error: 'Usuario no encontrado',
+                    message: 'No se puede acceder a esta conversación'
+                });
+            }
+            
             let messages = read('messages.json');
             const limit = parseInt(req.query.limit) || 30;
             const offset = parseInt(req.query.offset) || 0;
             
             let filtered = messages.filter(m => 
-                (m.from === req.userId && m.to === req.params.userId) ||
-                (m.from === req.params.userId && m.to === req.userId)
+                (m.from === req.userId && m.to === targetUserId) ||
+                (m.from === targetUserId && m.to === req.userId)
             ).sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
             
             const paginated = filtered.slice(offset, offset + limit);
@@ -91,7 +161,7 @@ module.exports = (read, write, io, encryptMessage, decryptMessage) => {
             let updatedMessageIds = [];
             
             const updatedMessages = messages.map(msg => {
-                if (msg.to === req.userId && msg.from === req.params.userId && !msg.read) {
+                if (msg.to === req.userId && msg.from === targetUserId && !msg.read) {
                     updated = true;
                     updatedMessageIds.push(msg.id);
                     return { ...msg, read: true };
@@ -101,11 +171,11 @@ module.exports = (read, write, io, encryptMessage, decryptMessage) => {
             
             if (updated) {
                 write('messages.json', updatedMessages);
-                console.log(`📖 Usuario ${req.userId} marcó ${updatedMessageIds.length} mensajes como leídos de ${req.params.userId}`);
+                console.log(`📖 Usuario ${req.userId} marcó ${updatedMessageIds.length} mensajes como leídos de ${targetUserId}`);
                 
-                io.to(`user_${req.params.userId}`).emit('messages_read', {
+                io.to(`user_${targetUserId}`).emit('messages_read', {
                     byUserId: req.userId,
-                    withUserId: req.params.userId,
+                    withUserId: targetUserId,
                     messageIds: updatedMessageIds
                 });
                 
@@ -119,6 +189,9 @@ module.exports = (read, write, io, encryptMessage, decryptMessage) => {
         }
     });
 
+    // ============================================================
+    // ENVIAR MENSAJE - CON VERIFICACIÓN DE BLOQUEOS
+    // ============================================================
     router.post('/messages/:userId', auth, (req, res) => {
         try {
             const { content } = req.body;
@@ -126,6 +199,16 @@ module.exports = (read, write, io, encryptMessage, decryptMessage) => {
             
             if (!content || content.trim().length === 0) {
                 return res.status(400).json({ error: 'El mensaje no puede estar vacío' });
+            }
+            
+            const users = read('users.json');
+            
+            // 🔥 VERIFICAR BLOQUEOS
+            if (isBlocked(users, req.userId, toUserId)) {
+                return res.status(404).json({ 
+                    error: 'Usuario no encontrado',
+                    message: 'No puedes enviar mensajes a este usuario'
+                });
             }
             
             const encryptedContent = encryptMessage(content);
@@ -154,27 +237,28 @@ module.exports = (read, write, io, encryptMessage, decryptMessage) => {
                 isOwn: true
             };
             
-            io.to(`user_${toUserId}`).emit('receive_message', {
-                id: newMessage.id,
-                from: req.userId,
-                to: toUserId,
-                content: content,
-                timestamp: newMessage.timestamp,
-                read: false,
-                isOwn: false
-            });
+            // 🔥 SOLO ENVIAR SI NO HAY BLOQUEO
+            if (!isBlocked(users, toUserId, req.userId)) {
+                io.to(`user_${toUserId}`).emit('receive_message', {
+                    id: newMessage.id,
+                    from: req.userId,
+                    to: toUserId,
+                    content: content,
+                    timestamp: newMessage.timestamp,
+                    read: false,
+                    isOwn: false
+                });
+            }
             
             io.to(`user_${req.userId}`).emit('message_sent', responseMessage);
             
             io.to(`user_${req.userId}`).emit('conversations_update', { userId: req.userId });
             io.to(`user_${toUserId}`).emit('conversations_update', { userId: toUserId });
             
-            const users = read('users.json');
             const fromUser = users.find(u => u.id === req.userId);
-            if (fromUser) {
-                const notificationsModule = require('./notifications')(read, write, io);
-                const { createNotification } = notificationsModule;
-                if (createNotification) {
+            if (fromUser && createNotification) {
+                // 🔥 SOLO NOTIFICAR SI NO HAY BLOQUEO
+                if (!isBlocked(users, toUserId, req.userId)) {
                     createNotification(toUserId, 'message', req.userId, {
                         message: `${fromUser.fullName} te envió un mensaje`,
                         preview: content.substring(0, 50)
@@ -189,6 +273,9 @@ module.exports = (read, write, io, encryptMessage, decryptMessage) => {
         }
     });
 
+    // ============================================================
+    // ELIMINAR MENSAJE
+    // ============================================================
     router.delete('/messages/:messageId', auth, (req, res) => {
         try {
             let messages = read('messages.json');
@@ -218,14 +305,28 @@ module.exports = (read, write, io, encryptMessage, decryptMessage) => {
         }
     });
 
+    // ============================================================
+    // MARCAR CONVERSACIÓN COMO LEÍDA - CON VERIFICACIÓN DE BLOQUEOS
+    // ============================================================
     router.put('/conversations/:userId/read', auth, (req, res) => {
         try {
+            const targetUserId = req.params.userId;
+            const users = read('users.json');
+            
+            // 🔥 VERIFICAR BLOQUEOS
+            if (isBlocked(users, req.userId, targetUserId)) {
+                return res.status(404).json({ 
+                    error: 'Usuario no encontrado',
+                    message: 'No se puede acceder a esta conversación'
+                });
+            }
+            
             let messages = read('messages.json');
             let updated = false;
             let updatedMessageIds = [];
             
             const updatedMessages = messages.map(msg => {
-                if (msg.to === req.userId && msg.from === req.params.userId && !msg.read) {
+                if (msg.to === req.userId && msg.from === targetUserId && !msg.read) {
                     updated = true;
                     updatedMessageIds.push(msg.id);
                     return { ...msg, read: true };
@@ -235,11 +336,11 @@ module.exports = (read, write, io, encryptMessage, decryptMessage) => {
             
             if (updated) {
                 write('messages.json', updatedMessages);
-                console.log(`📖 Usuario ${req.userId} marcó conversación con ${req.params.userId} como leída`);
+                console.log(`📖 Usuario ${req.userId} marcó conversación con ${targetUserId} como leída`);
                 
-                io.to(`user_${req.params.userId}`).emit('messages_read', {
+                io.to(`user_${targetUserId}`).emit('messages_read', {
                     byUserId: req.userId,
-                    withUserId: req.params.userId,
+                    withUserId: targetUserId,
                     messageIds: updatedMessageIds
                 });
                 io.to(`user_${req.userId}`).emit('conversations_update', { userId: req.userId });
@@ -252,6 +353,9 @@ module.exports = (read, write, io, encryptMessage, decryptMessage) => {
         }
     });
 
+    // ============================================================
+    // BUSCAR MENSAJES - CON FILTRO DE BLOQUEOS
+    // ============================================================
     router.get('/search', auth, (req, res) => {
         try {
             const { q } = req.query;
@@ -262,7 +366,23 @@ module.exports = (read, write, io, encryptMessage, decryptMessage) => {
             const messages = read('messages.json');
             const users = read('users.json');
             
-            const userMessages = messages.filter(m => m.from === req.userId || m.to === req.userId);
+            // 🔥 OBTENER USUARIO ACTUAL PARA BLOQUEOS
+            const currentUser = users.find(u => u.id === req.userId);
+            if (!currentUser) {
+                return res.json([]);
+            }
+            
+            const blockedIds = currentUser.blocked || [];
+            const blockedByIds = currentUser.blockedBy || [];
+            
+            // 🔥 FILTRAR MENSAJES - EXCLUIR BLOQUEADOS
+            const userMessages = messages.filter(m => {
+                const otherId = m.from === req.userId ? m.to : m.from;
+                if (blockedIds.includes(otherId)) return false;
+                if (blockedByIds.includes(otherId)) return false;
+                return m.from === req.userId || m.to === req.userId;
+            });
+            
             const query = q.toLowerCase();
             const results = [];
             
@@ -279,15 +399,32 @@ module.exports = (read, write, io, encryptMessage, decryptMessage) => {
                     const otherUser = users.find(u => u.id === otherUserId);
                     
                     if (otherUser && !results.some(r => r.user.id === otherUserId)) {
-                        results.push({
-                            user: {
+                        // 🔥 VERIFICAR SI EL OTRO USUARIO ESTÁ BLOQUEADO
+                        const isBlockedUser = blockedIds.includes(otherUserId);
+                        const isBlockedByUser = blockedByIds.includes(otherUserId);
+                        
+                        let userData = {
+                            id: otherUser.id,
+                            username: otherUser.username,
+                            fullName: otherUser.fullName,
+                            avatar: otherUser.avatar
+                        };
+                        
+                        if (isBlockedUser || isBlockedByUser) {
+                            userData = {
                                 id: otherUser.id,
-                                username: otherUser.username,
-                                fullName: otherUser.fullName,
-                                avatar: otherUser.avatar
-                            },
+                                username: 'usuario_no_encontrado',
+                                fullName: 'Usuario no encontrado',
+                                avatar: null,
+                                blocked: true
+                            };
+                        }
+                        
+                        results.push({
+                            user: userData,
                             matchContent: decryptedContent.substring(0, 50) + (decryptedContent.length > 50 ? '...' : ''),
-                            timestamp: msg.timestamp
+                            timestamp: msg.timestamp,
+                            isBlocked: isBlockedUser || isBlockedByUser
                         });
                     }
                 }

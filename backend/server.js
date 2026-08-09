@@ -1,4 +1,4 @@
-// backend/server.js - COMPLETO CON TODOS LOS MÓDULOS (VERIFICACIÓN, VYIN PAY, ASIGNACIÓN, MODERACIÓN, VYIN IA)
+// backend/server.js - COMPLETO CON TODOS LOS MÓDULOS (VERIFICACIÓN, VYIN PAY, ASIGNACIÓN, MODERACIÓN, VYIN IA, BLOQUEOS)
 
 const express = require('express');
 const cors = require('cors');
@@ -677,6 +677,15 @@ function migrateAllData() {
             user.suspendedAt = null;
             modified = true;
         }
+        // 🔥 NUEVO: BLOQUEOS
+        if (user.blocked === undefined) {
+            user.blocked = [];
+            modified = true;
+        }
+        if (user.blockedBy === undefined) {
+            user.blockedBy = [];
+            modified = true;
+        }
         
         if (modified) usersModified = true;
         return user;
@@ -1022,6 +1031,24 @@ try {
 }
 
 // ============================================================
+// 🔥 14. 🚫 SISTEMA DE BLOQUEOS
+// ============================================================
+try {
+    const blockedModule = require('./blocked')(read, write, io, logger);
+    app.use('/api/blocked', blockedModule);
+    logger.info('✅ Blocked routes cargadas en /api/blocked');
+    console.log('🚫 SISTEMA DE BLOQUEOS ACTIVADO:');
+    console.log('   ✅ Bloquear/Desbloquear usuarios');
+    console.log('   ✅ Verificación de bloqueos');
+    console.log('   ✅ Bloqueos silenciosos');
+    console.log('   ✅ Lista de usuarios bloqueados');
+    console.log('   ✅ Filtrado automático en feeds y chats');
+} catch (error) {
+    logger.error('❌ Error cargando bloqueos:', { error: error.message });
+    console.error('❌ Error cargando sistema de bloqueos:', error.message);
+}
+
+// ============================================================
 // 🔥 RUTA PARA ANALIZAR IMAGEN CON IA
 // ============================================================
 
@@ -1156,6 +1183,16 @@ app.get('/health', (req, res) => {
             translation: true,
             moderation: true,
             languages: 33
+        },
+        blocked: {
+            enabled: true,
+            features: {
+                block: true,
+                unblock: true,
+                silent: true,
+                filterFeeds: true,
+                filterChats: true
+            }
         }
     };
     
@@ -1287,7 +1324,11 @@ io.on('connection', (socket) => {
                     let sentCount = 0;
                     users.forEach(user => {
                         if (user.id !== socket.userId) {
-                            if (areStoriesVisible(storyOwner, user.id)) {
+                            // 🔥 VERIFICAR BLOQUEOS
+                            const isBlocked = user.blocked?.includes(storyOwner.id) || false;
+                            const isBlockedBy = storyOwner.blockedBy?.includes(user.id) || false;
+                            
+                            if (!isBlocked && !isBlockedBy && areStoriesVisible(storyOwner, user.id)) {
                                 io.to(`user_${user.id}`).emit('new_story', storyWithUser);
                                 sentCount++;
                             }
@@ -1342,6 +1383,25 @@ io.on('connection', (socket) => {
             const { to, content } = data;
             if (!content || content.trim().length === 0) return;
             
+            // 🔥 VERIFICAR BLOQUEOS
+            const users = read('users.json');
+            const fromUser = users.find(u => u.id === socket.userId);
+            const toUser = users.find(u => u.id === to);
+            
+            if (!fromUser || !toUser) {
+                return socket.emit('error', { message: 'Usuario no encontrado' });
+            }
+            
+            // Si el bloqueador intenta enviar mensaje al bloqueado
+            if (fromUser.blocked?.includes(to)) {
+                return socket.emit('error', { message: 'No puedes enviar mensajes a este usuario' });
+            }
+            
+            // Si el bloqueado intenta enviar mensaje al bloqueador (bloqueo silencioso)
+            if (toUser.blockedBy?.includes(socket.userId)) {
+                return socket.emit('error', { message: 'Usuario no encontrado' });
+            }
+            
             const messages = read('messages.json');
             const encryptedContent = encryptMessage(content);
             
@@ -1368,12 +1428,17 @@ io.on('connection', (socket) => {
                 isOwn: true
             };
             
-            io.to(`user_${to}`).emit('receive_message', { ...responseMessage, isOwn: false });
+            // Solo enviar si no hay bloqueo
+            const isBlockedBy = fromUser.blocked?.includes(to) || false;
+            const isBlocked = toUser.blockedBy?.includes(socket.userId) || false;
+            
+            if (!isBlocked && !isBlockedBy) {
+                io.to(`user_${to}`).emit('receive_message', { ...responseMessage, isOwn: false });
+            }
+            
             socket.emit('message_sent', responseMessage);
             
-            const users = read('users.json');
-            const fromUser = users.find(u => u.id === socket.userId);
-            if (fromUser && createNotification) {
+            if (fromUser && createNotification && !isBlocked && !isBlockedBy) {
                 createNotification(to, 'message', socket.userId, {
                     message: `${fromUser.fullName} te envió un mensaje`,
                     preview: content.substring(0, 50)
@@ -1385,10 +1450,22 @@ io.on('connection', (socket) => {
     });
     
     socket.on('typing', (data) => {
-        socket.to(`user_${data.to}`).emit('user_typing', {
-            from: socket.userId,
-            isTyping: data.isTyping
-        });
+        // 🔥 VERIFICAR BLOQUEOS
+        const users = read('users.json');
+        const fromUser = users.find(u => u.id === socket.userId);
+        const toUser = users.find(u => u.id === data.to);
+        
+        if (!fromUser || !toUser) return;
+        
+        const isBlocked = fromUser.blocked?.includes(data.to) || false;
+        const isBlockedBy = toUser.blockedBy?.includes(socket.userId) || false;
+        
+        if (!isBlocked && !isBlockedBy) {
+            socket.to(`user_${data.to}`).emit('user_typing', {
+                from: socket.userId,
+                isTyping: data.isTyping
+            });
+        }
     });
     
     socket.on('mark_messages_read', (data) => {
@@ -1591,6 +1668,13 @@ server.listen(PORT, HOST, () => {
     🤖 VYIN IA: ACTIVADO
        🛡️ Moderación: Activada
        📚 Idiomas: 100+ idiomas
+    
+    🚫 SISTEMA DE BLOQUEOS: ACTIVADO
+       ✅ Bloqueos silenciosos
+       ✅ Filtrado automático en feeds y chats
+       ✅ El bloqueado no se entera
+       ✅ El bloqueador ve al bloqueado normalmente
+    
     🔥 ========================================
     
     🔄 TAREAS EN SEGUNDO PLANO:
