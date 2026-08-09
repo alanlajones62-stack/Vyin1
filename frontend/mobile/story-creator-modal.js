@@ -1,5 +1,6 @@
 // ============================================================
-// story-creator-modal.js - VERSIÓN REDISEÑADA CON CÁMARA INVERTIDA
+// story-creator-modal.js - VERSIÓN REDISEÑADA COMPLETA
+// (INTERFAZ LIMPIA, MODERNA Y RESPONSIVE)
 // ============================================================
 
 import { getToken, getCurrentUser, showToast } from './auth.js';
@@ -16,7 +17,7 @@ let mediaType = null;
 let previewUrl = null;
 let cameraStream = null;
 let cameraVideo = null;
-let facingMode = 'user'; // 🔥 Por defecto cámara frontal (selfie)
+let facingMode = 'user';
 let isRecording = false;
 let mediaRecorder = null;
 let recordedChunks = [];
@@ -26,9 +27,10 @@ let processedVideoData = null;
 let selectedTextBg = '#1a1a2e';
 let captureMode = 'video';
 let isPublishing = false;
+let currentStep = 'camera'; // 'camera', 'preview', 'text'
 
 // ============================================================
-// PALETA DE COLORES
+// PALETA DE COLORES PARA TEXTO
 // ============================================================
 
 const COLOR_PALETTE = [
@@ -69,6 +71,7 @@ export async function openCreator() {
     processedVideoData = null;
     captureMode = 'video';
     isPublishing = false;
+    currentStep = 'camera';
 
     const overlay = safeGetElement('creatorOverlay');
     if (!overlay) createCreatorHTML();
@@ -84,6 +87,7 @@ export async function openCreator() {
 export function closeCreator() {
     isCreatorOpen = false;
     isPublishing = false;
+    currentStep = 'camera';
     resetCreatorState();
 
     if (mediaRecorder?.state === 'recording') mediaRecorder.stop();
@@ -114,25 +118,26 @@ function resetCreatorState() {
         preview.style.background = '#000';
     }
 
-    const elements = [
-        'inputArea', 'subtitlesStatus', 'captureActions',
-        'recordingOverlay', 'textTools'
-    ];
-    elements.forEach(id => {
+    // Ocultar todos los paneles
+    ['inputArea', 'captureActions', 'textTools', 'subtitlesStatus', 'previewActions'].forEach(id => {
         const el = safeGetElement(id);
         if (el) el.style.display = 'none';
     });
 
+    // Mostrar controles de cámara
     const modeSelector = safeGetElement('modeSelector');
     if (modeSelector) modeSelector.style.display = 'flex';
-
+    
     const bottomControls = safeGetElement('bottomControls');
     if (bottomControls) bottomControls.style.display = 'flex';
+    
+    const topControls = safeGetElement('topControls');
+    if (topControls) topControls.style.display = 'flex';
 
     const publishBtn = safeGetElement('publishBtn');
     if (publishBtn) {
         publishBtn.disabled = true;
-        publishBtn.textContent = 'Siguiente';
+        publishBtn.textContent = 'Publicar';
     }
 
     const caption = safeGetElement('creatorCaption');
@@ -140,7 +145,7 @@ function resetCreatorState() {
 }
 
 // ============================================================
-// CREAR HTML - DISEÑO REDISEÑADO
+// CREAR HTML - DISEÑO MODERNO
 // ============================================================
 
 function createCreatorHTML() {
@@ -149,7 +154,7 @@ function createCreatorHTML() {
     const html = `
         <div id="creatorOverlay" class="creator-overlay">
             
-            <!-- PREVIEW -->
+            <!-- ========== PREVIEW ========== -->
             <div class="creator-preview" id="creatorPreview">
                 <div class="camera-placeholder">
                     <i class="fas fa-camera"></i>
@@ -157,32 +162,37 @@ function createCreatorHTML() {
                 </div>
             </div>
 
-            <!-- RECORDING OVERLAY -->
-            <div class="recording-overlay" id="recordingOverlay">
-                <div class="recording-timer" id="recordTimer">00:00</div>
-                <div class="recording-dot"></div>
-            </div>
-
-            <!-- SUBTÍTULOS -->
-            <div class="subtitles-status" id="subtitlesStatus">
-                <i class="fas fa-closed-captioning"></i>
-                <span id="subtitlesText">Generando subtítulos...</span>
-            </div>
-
-            <!-- TEXT TOOLS -->
-            <div class="text-tools" id="textTools">
-                <div class="text-tools-scroll">
-                    ${COLOR_PALETTE.map(color => `
-                        <button class="btn-bg ${color === selectedTextBg ? 'active' : ''}" 
-                                data-color="${color}" style="background:${color};"></button>
-                    `).join('')}
-                </div>
-                <button class="btn-back-to-camera" onclick="window.backToCamera()">
-                    <i class="fas fa-arrow-left"></i>
+            <!-- ========== TOP CONTROLS ========== -->
+            <div class="top-controls" id="topControls">
+                <button class="btn-close" onclick="window.closeCreator()">
+                    <i class="fas fa-chevron-down"></i>
+                </button>
+                <button class="btn-next" id="publishBtn" disabled onclick="window.publishStory()">
+                    <span>Publicar</span>
+                    <i class="fas fa-arrow-right"></i>
                 </button>
             </div>
 
-            <!-- CAPTURE ACTIONS -->
+            <!-- ========== MODE SELECTOR ========== -->
+            <div class="mode-selector" id="modeSelector">
+                <button class="mode-btn active" data-mode="video">
+                    <i class="fas fa-video"></i>
+                </button>
+                <button class="mode-btn" data-mode="photo">
+                    <i class="fas fa-camera"></i>
+                </button>
+                <button class="mode-btn flip-btn" id="flipCameraBtn">
+                    <i class="fas fa-sync-alt"></i>
+                </button>
+            </div>
+
+            <!-- ========== RECORDING INDICATOR ========== -->
+            <div class="recording-indicator" id="recordingIndicator">
+                <div class="recording-dot"></div>
+                <span id="recordTimer">00:00</span>
+            </div>
+
+            <!-- ========== CAPTURE ACTIONS (PREVIEW) ========== -->
             <div class="capture-actions" id="captureActions">
                 <button class="btn-retake" onclick="window.retakeMedia()">
                     <i class="fas fa-undo"></i>
@@ -194,7 +204,48 @@ function createCreatorHTML() {
                 </button>
             </div>
 
-            <!-- INPUT DE TÍTULO -->
+            <!-- ========== PREVIEW ACTIONS ========== -->
+            <div class="preview-actions" id="previewActions">
+                <button class="btn-edit" onclick="window.editMedia()">
+                    <i class="fas fa-pen"></i>
+                    <span>Editar</span>
+                </button>
+                <button class="btn-next-preview" onclick="window.confirmMedia()">
+                    <i class="fas fa-check"></i>
+                    <span>Confirmar</span>
+                </button>
+            </div>
+
+            <!-- ========== SUBTITLES STATUS ========== -->
+            <div class="subtitles-status" id="subtitlesStatus">
+                <i class="fas fa-closed-captioning"></i>
+                <span id="subtitlesText">Generando subtítulos...</span>
+            </div>
+
+            <!-- ========== TEXT TOOLS ========== -->
+            <div class="text-tools" id="textTools">
+                <div class="text-tools-scroll">
+                    ${COLOR_PALETTE.map(color => `
+                        <button class="btn-bg ${color === selectedTextBg ? 'active' : ''}" 
+                                data-color="${color}" style="background:${color};"></button>
+                    `).join('')}
+                </div>
+            </div>
+
+            <!-- ========== TEXT EDITOR ========== -->
+            <div class="text-editor-container" id="textEditorContainer">
+                <textarea id="textContent" placeholder="Escribe algo..." maxlength="1000"></textarea>
+                <div class="text-editor-tools">
+                    <button class="btn-back-camera" onclick="window.backToCamera()">
+                        <i class="fas fa-arrow-left"></i>
+                    </button>
+                    <button class="btn-confirm-text" onclick="window.confirmText()">
+                        <i class="fas fa-check"></i>
+                    </button>
+                </div>
+            </div>
+
+            <!-- ========== INPUT AREA ========== -->
             <div class="input-area" id="inputArea">
                 <div class="input-wrapper">
                     <i class="fas fa-pencil-alt"></i>
@@ -203,33 +254,7 @@ function createCreatorHTML() {
                 </div>
             </div>
 
-            <!-- CONTROLES SUPERIORES -->
-            <div class="top-controls">
-                <button class="btn-close" onclick="window.closeCreator()">
-                    <i class="fas fa-chevron-down"></i>
-                </button>
-                <button class="btn-next" id="publishBtn" disabled onclick="window.publishStory()">
-                    <span>Publicar</span>
-                    <i class="fas fa-chevron-right"></i>
-                </button>
-            </div>
-
-            <!-- SELECTOR DE MODO -->
-            <div class="mode-selector" id="modeSelector">
-                <button class="mode-btn active" data-mode="video">
-                    <i class="fas fa-video"></i>
-                    <span>Video</span>
-                </button>
-                <button class="mode-btn" data-mode="photo">
-                    <i class="fas fa-camera"></i>
-                    <span>Foto</span>
-                </button>
-                <button class="mode-btn flip-btn" id="flipCameraBtn" title="Cambiar cámara">
-                    <i class="fas fa-sync-alt"></i>
-                </button>
-            </div>
-
-            <!-- CONTROLES INFERIORES -->
+            <!-- ========== BOTTOM CONTROLS ========== -->
             <div class="bottom-controls" id="bottomControls">
                 <button class="btn-gallery" onclick="window.openGallery()">
                     <i class="fas fa-image"></i>
@@ -277,7 +302,7 @@ function setupCreatorEvents() {
     document.querySelectorAll('.mode-btn').forEach(btn => {
         btn.addEventListener('click', () => {
             if (mediaType === 'image' || mediaType === 'video') {
-                showToast('Ya tienes un medio capturado. Usa "Rehacer" para cambiar', true);
+                showToast('Ya tienes un medio capturado', true);
                 return;
             }
             document.querySelectorAll('.mode-btn').forEach(b => b.classList.remove('active'));
@@ -302,8 +327,15 @@ function setupCreatorEvents() {
         if (counter) counter.textContent = `${e.target.value.length}/220`;
     });
 
-    const publishBtn = safeGetElement('publishBtn');
-    publishBtn?.addEventListener('click', publishStory);
+    const textInput = safeGetElement('textContent');
+    textInput?.addEventListener('input', () => {
+        const hasText = textInput.value.trim().length > 0;
+        const confirmBtn = document.querySelector('.btn-confirm-text');
+        if (confirmBtn) {
+            confirmBtn.style.opacity = hasText ? '1' : '0.3';
+            confirmBtn.style.pointerEvents = hasText ? 'auto' : 'none';
+        }
+    });
 
     document.querySelectorAll('.btn-bg').forEach(btn => {
         btn.addEventListener('click', () => {
@@ -312,6 +344,8 @@ function setupCreatorEvents() {
             selectedTextBg = btn.dataset.color;
             const preview = safeGetElement('creatorPreview');
             if (preview) preview.style.background = selectedTextBg;
+            const textarea = safeGetElement('textContent');
+            if (textarea) textarea.style.background = selectedTextBg;
         });
     });
 
@@ -321,7 +355,7 @@ function setupCreatorEvents() {
 }
 
 // ============================================================
-// 🔥 CÁMARA CON EFECTO ESPEJO (INVERTIDA)
+// CÁMARA
 // ============================================================
 
 async function startCamera() {
@@ -329,7 +363,6 @@ async function startCamera() {
         const preview = safeGetElement('creatorPreview');
         if (!preview) return;
 
-        // Limpiar placeholder
         preview.innerHTML = '';
 
         const video = document.createElement('video');
@@ -340,7 +373,6 @@ async function startCamera() {
         video.style.width = '100%';
         video.style.height = '100%';
         video.style.objectFit = 'cover';
-        // 🔥 EFECTO ESPEJO (invertir horizontalmente)
         video.style.transform = 'scaleX(-1)';
         preview.appendChild(video);
         cameraVideo = video;
@@ -358,7 +390,6 @@ async function startCamera() {
         cameraStream = stream;
         video.srcObject = stream;
 
-        // Esperar a que el video esté listo
         await new Promise(resolve => {
             video.onloadedmetadata = () => {
                 video.play();
@@ -366,17 +397,19 @@ async function startCamera() {
             };
         });
 
-        const textTools = safeGetElement('textTools');
-        if (textTools) textTools.style.display = 'none';
+        // Mostrar controles
+        document.querySelectorAll('.mode-selector, .bottom-controls, .top-controls').forEach(el => {
+            if (el) el.style.display = 'flex';
+        });
         
-        const modeSelector = safeGetElement('modeSelector');
-        if (modeSelector) modeSelector.style.display = 'flex';
-        
-        const bottomControls = safeGetElement('bottomControls');
-        if (bottomControls) bottomControls.style.display = 'flex';
-
         const flipBtn = safeGetElement('flipCameraBtn');
         if (flipBtn) flipBtn.style.display = 'flex';
+
+        // Ocultar otros paneles
+        ['inputArea', 'captureActions', 'previewActions', 'textTools', 'subtitlesStatus', 'textEditorContainer'].forEach(id => {
+            const el = safeGetElement(id);
+            if (el) el.style.display = 'none';
+        });
 
     } catch (error) {
         console.error('Error al acceder a la cámara:', error);
@@ -393,7 +426,7 @@ function stopCamera() {
 }
 
 // ============================================================
-// 🔥 GIRAR CÁMARA (CON EFECTO ESPEJO)
+// GIRAR CÁMARA
 // ============================================================
 
 async function flipCamera() {
@@ -410,7 +443,7 @@ async function flipCamera() {
 }
 
 // ============================================================
-// CAPTURAR FOTO (CON EFECTO ESPEJO)
+// CAPTURAR FOTO
 // ============================================================
 
 function capturePhoto() {
@@ -422,7 +455,6 @@ function capturePhoto() {
     canvas.height = video.videoHeight || 1920;
     const ctx = canvas.getContext('2d');
     
-    // 🔥 Si es cámara frontal, invertir la imagen para que no quede espejada
     if (facingMode === 'user') {
         ctx.translate(canvas.width, 0);
         ctx.scale(-1, 1);
@@ -445,32 +477,13 @@ function capturePhoto() {
 
             if (preview) {
                 preview.innerHTML = `<img src="${previewUrl}" style="width:100%;height:100%;object-fit:cover;" />`;
-                // Quitar efecto espejo en la vista previa
-                preview.querySelector('img').style.transform = 'scaleX(1)';
+                const img = preview.querySelector('img');
+                if (img) img.style.transform = 'scaleX(1)';
             }
 
-            const captureActions = safeGetElement('captureActions');
-            if (captureActions) captureActions.style.display = 'flex';
-            
-            const inputArea = safeGetElement('inputArea');
-            if (inputArea) inputArea.style.display = 'block';
-            
-            const publishBtn = safeGetElement('publishBtn');
-            if (publishBtn) publishBtn.disabled = false;
-            
-            const textTools = safeGetElement('textTools');
-            if (textTools) textTools.style.display = 'none';
-            
-            const modeSelector = safeGetElement('modeSelector');
-            if (modeSelector) modeSelector.style.display = 'none';
-            
-            const bottomControls = safeGetElement('bottomControls');
-            if (bottomControls) bottomControls.style.display = 'none';
-            
+            // Cambiar a modo preview
+            showPreviewActions();
             stopCamera();
-
-            const flipBtn = safeGetElement('flipCameraBtn');
-            if (flipBtn) flipBtn.style.display = 'none';
         }
     }, 'image/jpeg', 0.9);
 }
@@ -494,11 +507,14 @@ function startRecording() {
     recordedChunks = [];
     recordingSeconds = 0;
 
-    const recordingOverlay = safeGetElement('recordingOverlay');
-    if (recordingOverlay) recordingOverlay.style.display = 'block';
+    const indicator = safeGetElement('recordingIndicator');
+    if (indicator) {
+        indicator.style.display = 'flex';
+        indicator.classList.add('active');
+    }
     
-    const recordTimer = safeGetElement('recordTimer');
-    if (recordTimer) recordTimer.textContent = '00:00';
+    const timer = safeGetElement('recordTimer');
+    if (timer) timer.textContent = '00:00';
     
     const captureBtn = safeGetElement('captureBtn');
     if (captureBtn) captureBtn.classList.add('recording');
@@ -516,7 +532,10 @@ function startRecording() {
         handleVideoFile(file);
         isRecording = false;
         if (captureBtn) captureBtn.classList.remove('recording');
-        if (recordingOverlay) recordingOverlay.style.display = 'none';
+        if (indicator) {
+            indicator.style.display = 'none';
+            indicator.classList.remove('active');
+        }
         clearInterval(timerInterval);
     };
 
@@ -526,13 +545,40 @@ function startRecording() {
         recordingSeconds++;
         const mins = String(Math.floor(recordingSeconds / 60)).padStart(2, '0');
         const secs = String(recordingSeconds % 60).padStart(2, '0');
-        const recordTimerEl = safeGetElement('recordTimer');
-        if (recordTimerEl) recordTimerEl.textContent = `${mins}:${secs}`;
+        const timerEl = safeGetElement('recordTimer');
+        if (timerEl) timerEl.textContent = `${mins}:${secs}`;
     }, 1000);
 }
 
 function stopRecording() {
     if (mediaRecorder?.state === 'recording') mediaRecorder.stop();
+}
+
+// ============================================================
+// MOSTRAR ACCIONES DE PREVIEW
+// ============================================================
+
+function showPreviewActions() {
+    const captureActions = safeGetElement('captureActions');
+    if (captureActions) captureActions.style.display = 'flex';
+    
+    const modeSelector = safeGetElement('modeSelector');
+    if (modeSelector) modeSelector.style.display = 'none';
+    
+    const bottomControls = safeGetElement('bottomControls');
+    if (bottomControls) bottomControls.style.display = 'none';
+    
+    const topControls = safeGetElement('topControls');
+    if (topControls) topControls.style.display = 'flex';
+
+    const publishBtn = safeGetElement('publishBtn');
+    if (publishBtn) {
+        publishBtn.disabled = false;
+        publishBtn.textContent = 'Publicar';
+    }
+
+    const flipBtn = safeGetElement('flipCameraBtn');
+    if (flipBtn) flipBtn.style.display = 'none';
 }
 
 // ============================================================
@@ -544,22 +590,19 @@ window.retakeMedia = function() {
     mediaType = null;
     previewUrl = null;
     processedVideoData = null;
+    currentStep = 'camera';
     
-    const captureActions = safeGetElement('captureActions');
-    if (captureActions) captureActions.style.display = 'none';
-    
-    const inputArea = safeGetElement('inputArea');
-    if (inputArea) inputArea.style.display = 'none';
-    
+    ['captureActions', 'previewActions', 'inputArea', 'subtitlesStatus', 'textTools', 'textEditorContainer'].forEach(id => {
+        const el = safeGetElement(id);
+        if (el) el.style.display = 'none';
+    });
+
     const publishBtn = safeGetElement('publishBtn');
-    if (publishBtn) publishBtn.disabled = true;
-    
-    const subtitlesStatus = safeGetElement('subtitlesStatus');
-    if (subtitlesStatus) subtitlesStatus.style.display = 'none';
-    
-    const textTools = safeGetElement('textTools');
-    if (textTools) textTools.style.display = 'none';
-    
+    if (publishBtn) {
+        publishBtn.disabled = true;
+        publishBtn.textContent = 'Publicar';
+    }
+
     const modeSelector = safeGetElement('modeSelector');
     if (modeSelector) modeSelector.style.display = 'flex';
     
@@ -582,19 +625,123 @@ window.useMedia = function() {
     const captureActions = safeGetElement('captureActions');
     if (captureActions) captureActions.style.display = 'none';
     
+    const inputArea = safeGetElement('inputArea');
+    if (inputArea) inputArea.style.display = 'block';
+    
     const publishBtn = safeGetElement('publishBtn');
     if (publishBtn) publishBtn.disabled = false;
     
-    const inputArea = safeGetElement('inputArea');
-    if (inputArea) inputArea.style.display = 'block';
+    const subtitlesStatus = safeGetElement('subtitlesStatus');
+    if (subtitlesStatus) subtitlesStatus.style.display = 'none';
 };
 
 // ============================================================
-// VOLVER A LA CÁMARA DESDE TEXTO
+// TEXTO
 // ============================================================
+
+window.createTextStory = function() {
+    resetCreatorState();
+    currentStep = 'text';
+    
+    const preview = safeGetElement('creatorPreview');
+    if (preview) {
+        preview.innerHTML = '';
+        preview.style.background = selectedTextBg;
+    }
+
+    // Mostrar editor de texto
+    const editor = safeGetElement('textEditorContainer');
+    if (editor) {
+        editor.style.display = 'flex';
+        const textarea = safeGetElement('textContent');
+        if (textarea) {
+            textarea.value = '';
+            textarea.style.background = selectedTextBg;
+            setTimeout(() => textarea.focus(), 100);
+        }
+    }
+
+    // Ocultar controles de cámara
+    const modeSelector = safeGetElement('modeSelector');
+    if (modeSelector) modeSelector.style.display = 'none';
+    
+    const bottomControls = safeGetElement('bottomControls');
+    if (bottomControls) bottomControls.style.display = 'none';
+    
+    const topControls = safeGetElement('topControls');
+    if (topControls) topControls.style.display = 'flex';
+    
+    const publishBtn = safeGetElement('publishBtn');
+    if (publishBtn) {
+        publishBtn.disabled = true;
+        publishBtn.textContent = 'Publicar';
+    }
+
+    // Mostrar herramientas de texto
+    const textTools = safeGetElement('textTools');
+    if (textTools) textTools.style.display = 'flex';
+    
+    // Ocultar otros paneles
+    ['captureActions', 'inputArea', 'subtitlesStatus', 'previewActions'].forEach(id => {
+        const el = safeGetElement(id);
+        if (el) el.style.display = 'none';
+    });
+    
+    mediaType = 'text';
+    stopCamera();
+
+    const flipBtn = safeGetElement('flipCameraBtn');
+    if (flipBtn) flipBtn.style.display = 'none';
+};
+
+window.confirmText = function() {
+    const textarea = safeGetElement('textContent');
+    if (!textarea) return;
+    
+    const text = textarea.value.trim();
+    if (!text) {
+        showToast('Escribe algo', true);
+        return;
+    }
+    
+    mediaType = 'text';
+    mediaFile = null;
+    
+    // Mostrar preview del texto
+    const preview = safeGetElement('creatorPreview');
+    if (preview) {
+        preview.innerHTML = `
+            <div class="text-preview" style="background:${selectedTextBg};color:#fff;font-size:28px;font-weight:500;display:flex;align-items:center;justify-content:center;padding:40px;text-align:center;width:100%;height:100%;">
+                ${text}
+            </div>
+        `;
+    }
+    
+    // Ocultar editor y mostrar input
+    const editor = safeGetElement('textEditorContainer');
+    if (editor) editor.style.display = 'none';
+    
+    const inputArea = safeGetElement('inputArea');
+    if (inputArea) inputArea.style.display = 'block';
+    
+    const publishBtn = safeGetElement('publishBtn');
+    if (publishBtn) publishBtn.disabled = false;
+    
+    const textTools = safeGetElement('textTools');
+    if (textTools) textTools.style.display = 'none';
+    
+    const captureActions = safeGetElement('captureActions');
+    if (captureActions) captureActions.style.display = 'flex';
+    
+    showToast('✅ Texto listo');
+};
 
 window.backToCamera = function() {
     resetCreatorState();
+    currentStep = 'camera';
+    
+    const editor = safeGetElement('textEditorContainer');
+    if (editor) editor.style.display = 'none';
     
     const textTools = safeGetElement('textTools');
     if (textTools) textTools.style.display = 'none';
@@ -651,133 +798,13 @@ window.openGallery = function() {
             if (preview) {
                 preview.innerHTML = `<img src="${previewUrl}" style="width:100%;height:100%;object-fit:cover;" />`;
             }
-            const captureActions = safeGetElement('captureActions');
-            if (captureActions) captureActions.style.display = 'flex';
-            
-            const inputArea = safeGetElement('inputArea');
-            if (inputArea) inputArea.style.display = 'block';
-            
-            const publishBtn = safeGetElement('publishBtn');
-            if (publishBtn) publishBtn.disabled = false;
-            
-            const textTools = safeGetElement('textTools');
-            if (textTools) textTools.style.display = 'none';
-            
-            const modeSelector = safeGetElement('modeSelector');
-            if (modeSelector) modeSelector.style.display = 'none';
-            
-            const bottomControls = safeGetElement('bottomControls');
-            if (bottomControls) bottomControls.style.display = 'none';
-            
-            showToast('✅ Imagen seleccionada');
+            showPreviewActions();
             stopCamera();
-
-            const flipBtn = safeGetElement('flipCameraBtn');
-            if (flipBtn) flipBtn.style.display = 'none';
+            showToast('✅ Imagen seleccionada');
         }
         document.body.removeChild(input);
     };
     input.click();
-};
-
-// ============================================================
-// TEXTO
-// ============================================================
-
-window.createTextStory = function() {
-    resetCreatorState();
-    
-    const preview = safeGetElement('creatorPreview');
-    if (preview) {
-        preview.innerHTML = `
-            <div class="text-editor">
-                <textarea id="textContent" placeholder="Escribe algo..." maxlength="1000"></textarea>
-            </div>
-        `;
-        preview.style.background = selectedTextBg;
-
-        const textTools = safeGetElement('textTools');
-        if (textTools) textTools.style.display = 'flex';
-        
-        const captureActions = safeGetElement('captureActions');
-        if (captureActions) captureActions.style.display = 'none';
-        
-        const inputArea = safeGetElement('inputArea');
-        if (inputArea) inputArea.style.display = 'none';
-        
-        const modeSelector = safeGetElement('modeSelector');
-        if (modeSelector) modeSelector.style.display = 'none';
-        
-        const bottomControls = safeGetElement('bottomControls');
-        if (bottomControls) bottomControls.style.display = 'none';
-
-        const input = safeGetElement('textContent');
-        input?.focus();
-        input?.addEventListener('input', () => {
-            const hasText = input.value.trim().length > 0;
-            const publishBtn = safeGetElement('publishBtn');
-            if (publishBtn) publishBtn.disabled = !hasText;
-            if (hasText) {
-                const inputAreaEl = safeGetElement('inputArea');
-                if (inputAreaEl) inputAreaEl.style.display = 'block';
-            }
-        });
-
-        // Botón para salir del modo texto
-        const exitTextBtn = document.createElement('button');
-        exitTextBtn.className = 'btn-exit-text';
-        exitTextBtn.innerHTML = '<i class="fas fa-times"></i> Salir';
-        exitTextBtn.onclick = () => {
-            resetCreatorState();
-            const previewEl = safeGetElement('creatorPreview');
-            if (previewEl) {
-                previewEl.innerHTML = '';
-                previewEl.style.background = '#000';
-            }
-            const textToolsEl = safeGetElement('textTools');
-            if (textToolsEl) textToolsEl.style.display = 'none';
-            const inputAreaEl = safeGetElement('inputArea');
-            if (inputAreaEl) inputAreaEl.style.display = 'none';
-            const publishBtnEl = safeGetElement('publishBtn');
-            if (publishBtnEl) publishBtnEl.disabled = true;
-            const modeSelectorEl = safeGetElement('modeSelector');
-            if (modeSelectorEl) modeSelectorEl.style.display = 'flex';
-            const bottomControlsEl = safeGetElement('bottomControls');
-            if (bottomControlsEl) bottomControlsEl.style.display = 'flex';
-            mediaType = null;
-            startCamera();
-        };
-        exitTextBtn.style.cssText = `
-            position: absolute;
-            bottom: 100px;
-            left: 50%;
-            transform: translateX(-50%);
-            background: rgba(255,255,255,0.1);
-            border: none;
-            color: #fff;
-            padding: 8px 20px;
-            border-radius: 50px;
-            font-size: 13px;
-            cursor: pointer;
-            backdrop-filter: blur(10px);
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            z-index: 15;
-        `;
-        preview.appendChild(exitTextBtn);
-    }
-    mediaType = 'text';
-    mediaFile = null;
-    processedVideoData = null;
-    
-    const publishBtn = safeGetElement('publishBtn');
-    if (publishBtn) publishBtn.disabled = true;
-    
-    stopCamera();
-
-    const flipBtn = safeGetElement('flipCameraBtn');
-    if (flipBtn) flipBtn.style.display = 'none';
 };
 
 // ============================================================
@@ -797,40 +824,24 @@ async function handleVideoFile(file) {
         `;
     }
 
-    const captureActions = safeGetElement('captureActions');
-    if (captureActions) captureActions.style.display = 'flex';
-    
-    const inputArea = safeGetElement('inputArea');
-    if (inputArea) inputArea.style.display = 'none';
-    
-    const publishBtn = safeGetElement('publishBtn');
-    if (publishBtn) publishBtn.disabled = false;
-    
-    const modeSelector = safeGetElement('modeSelector');
-    if (modeSelector) modeSelector.style.display = 'none';
-    
-    const bottomControls = safeGetElement('bottomControls');
-    if (bottomControls) bottomControls.style.display = 'none';
-
-    const flipBtn = safeGetElement('flipCameraBtn');
-    if (flipBtn) flipBtn.style.display = 'none';
+    showPreviewActions();
+    stopCamera();
 
     const addSubtitles = confirm('🎬 ¿Agregar subtítulos al video?');
     if (addSubtitles) {
+        const publishBtn = safeGetElement('publishBtn');
         if (publishBtn) {
             publishBtn.disabled = true;
             publishBtn.textContent = '⏳ Procesando...';
         }
         const subtitlesStatus = safeGetElement('subtitlesStatus');
         if (subtitlesStatus) subtitlesStatus.style.display = 'flex';
-        const subtitlesText = safeGetElement('subtitlesText');
-        if (subtitlesText) subtitlesText.textContent = '⏳ Generando subtítulos...';
         await processVideoWithSubtitles(file);
     } else {
-        if (publishBtn) publishBtn.disabled = false;
+        const inputArea = safeGetElement('inputArea');
         if (inputArea) inputArea.style.display = 'block';
-        const subtitlesStatus = safeGetElement('subtitlesStatus');
-        if (subtitlesStatus) subtitlesStatus.style.display = 'none';
+        const publishBtn = safeGetElement('publishBtn');
+        if (publishBtn) publishBtn.disabled = false;
         processedVideoData = null;
     }
 }
@@ -881,15 +892,12 @@ async function processVideoWithSubtitles(file) {
             const inputArea = safeGetElement('inputArea');
             if (inputArea) inputArea.style.display = 'block';
             
-            const captureActions = safeGetElement('captureActions');
-            if (captureActions) captureActions.style.display = 'none';
-            
             const statusEl = safeGetElement('subtitlesStatus');
             const textEl = safeGetElement('subtitlesText');
             if (statusEl) statusEl.style.display = 'flex';
             
             if (result.hasSubtitles) {
-                if (textEl) textEl.innerHTML = `✅ Subtítulos generados`;
+                if (textEl) textEl.innerHTML = '✅ Subtítulos generados';
                 showToast('✅ Subtítulos generados');
             } else {
                 if (textEl) textEl.textContent = '⚠️ No se generaron subtítulos';
@@ -919,9 +927,6 @@ async function processVideoWithSubtitles(file) {
         
         const subtitlesStatus = safeGetElement('subtitlesStatus');
         if (subtitlesStatus) subtitlesStatus.style.display = 'none';
-        
-        const captureActions = safeGetElement('captureActions');
-        if (captureActions) captureActions.style.display = 'flex';
         
         processedVideoData = null;
     }
@@ -960,8 +965,13 @@ window.publishStory = async function() {
         let segments = null;
 
         if (mediaType === 'text') {
-            const textInput = safeGetElement('textContent');
-            textContent = textInput?.value.trim();
+            const textPreview = document.querySelector('.text-preview');
+            if (textPreview) {
+                textContent = textPreview.textContent.trim();
+            } else {
+                const textInput = safeGetElement('textContent');
+                textContent = textInput?.value.trim();
+            }
             if (!textContent) throw new Error('Escribe algo');
         } else if (mediaType === 'video') {
             if (processedVideoData?.mediaUrl) {
@@ -1087,9 +1097,23 @@ window.retakeMedia = retakeMedia;
 window.useMedia = useMedia;
 window.backToCamera = backToCamera;
 window.flipCamera = flipCamera;
+window.createTextStory = createTextStory;
+window.confirmText = confirmText;
+window.openGallery = openGallery;
+window.editMedia = function() {
+    showToast('✏️ Editar próximo en actualización');
+};
+window.confirmMedia = function() {
+    const inputArea = safeGetElement('inputArea');
+    if (inputArea) inputArea.style.display = 'block';
+    const previewActions = safeGetElement('previewActions');
+    if (previewActions) previewActions.style.display = 'none';
+    const publishBtn = safeGetElement('publishBtn');
+    if (publishBtn) publishBtn.disabled = false;
+};
 
 // ============================================================
-// ESTILOS REDISEÑADOS
+// INYECTAR ESTILOS MODERNOS
 // ============================================================
 
 function injectStyles() {
@@ -1099,7 +1123,7 @@ function injectStyles() {
     styles.id = 'creatorStyles';
     styles.textContent = `
         /* ============================================================
-           OVERLAY PRINCIPAL
+           OVERLAY
         ============================================================ */
         .creator-overlay {
             position: fixed;
@@ -1146,7 +1170,24 @@ function injectStyles() {
             height: 100%;
             object-fit: cover;
         }
+        .creator-preview .text-preview {
+            width: 100%;
+            height: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 40px;
+            text-align: center;
+            font-size: 28px;
+            font-weight: 500;
+            line-height: 1.6;
+            word-wrap: break-word;
+            overflow-y: auto;
+        }
 
+        /* ============================================================
+           FLASH
+        ============================================================ */
         .flash-effect {
             position: absolute;
             top: 0; left: 0; right: 0; bottom: 0;
@@ -1160,131 +1201,198 @@ function injectStyles() {
         }
 
         /* ============================================================
-           RECORDING
+           TOP CONTROLS
         ============================================================ */
-        .recording-overlay {
+        .top-controls {
             position: absolute;
-            top: 0; left: 0; right: 0; bottom: 0;
-            z-index: 15;
-            display: none;
-            pointer-events: none;
-            border: 3px solid rgba(255,0,0,0.3);
-            border-radius: 0;
+            top: 0;
+            left: 0;
+            right: 0;
+            z-index: 20;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px 20px;
+            background: linear-gradient(180deg, rgba(0,0,0,0.6) 0%, transparent 100%);
         }
-        .recording-timer {
+        .top-controls .btn-close {
+            background: rgba(255,255,255,0.08);
+            border: none;
+            border-radius: 50%;
+            width: 36px;
+            height: 36px;
+            color: #fff;
+            font-size: 16px;
+            cursor: pointer;
+            backdrop-filter: blur(10px);
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .top-controls .btn-close:active { transform: scale(0.9); }
+        .top-controls .btn-next {
+            background: #fff;
+            border: none;
+            border-radius: 50px;
+            padding: 8px 20px;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            transition: all 0.2s;
+            color: #000;
+        }
+        .top-controls .btn-next:disabled { opacity: 0.3; cursor: not-allowed; }
+        .top-controls .btn-next:active:not(:disabled) { transform: scale(0.95); }
+        .top-controls .btn-next i { font-size: 12px; }
+
+        /* ============================================================
+           MODE SELECTOR
+        ============================================================ */
+        .mode-selector {
             position: absolute;
             top: 60px;
             left: 50%;
             transform: translateX(-50%);
-            color: #fff;
-            font-size: 16px;
-            font-weight: 600;
-            background: rgba(0,0,0,0.5);
-            padding: 4px 16px;
-            border-radius: 20px;
-            backdrop-filter: blur(10px);
+            z-index: 20;
+            display: flex;
+            gap: 4px;
+            background: rgba(255,255,255,0.08);
+            border-radius: 50px;
+            padding: 4px;
+            backdrop-filter: blur(20px);
+            border: 1px solid rgba(255,255,255,0.05);
+        }
+        .mode-selector .mode-btn {
+            background: none;
+            border: none;
+            color: rgba(255,255,255,0.4);
+            font-size: 14px;
+            padding: 8px 16px;
+            border-radius: 50px;
+            cursor: pointer;
+            transition: all 0.3s;
             display: flex;
             align-items: center;
-            gap: 8px;
+            gap: 6px;
         }
-        .recording-dot {
-            width: 12px;
-            height: 12px;
+        .mode-selector .mode-btn i { font-size: 16px; }
+        .mode-selector .mode-btn.active {
+            background: #fff;
+            color: #000;
+        }
+        .mode-selector .mode-btn:active { transform: scale(0.95); }
+        .mode-selector .flip-btn {
+            border-left: 1px solid rgba(255,255,255,0.08);
+        }
+
+        /* ============================================================
+           RECORDING INDICATOR
+        ============================================================ */
+        .recording-indicator {
+            position: absolute;
+            top: 64px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 18;
+            display: none;
+            align-items: center;
+            gap: 10px;
+            background: rgba(0,0,0,0.5);
+            padding: 6px 16px;
+            border-radius: 50px;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255,0,0,0.2);
+        }
+        .recording-indicator.active { display: flex; }
+        .recording-indicator .recording-dot {
+            width: 10px;
+            height: 10px;
             border-radius: 50%;
             background: #ff0000;
             animation: pulseDot 1s infinite;
-            display: none;
         }
-        .recording-overlay.active .recording-dot { display: block; }
-        
+        .recording-indicator span {
+            color: #fff;
+            font-size: 14px;
+            font-weight: 500;
+        }
         @keyframes pulseDot {
             0%, 100% { opacity: 1; transform: scale(1); }
             50% { opacity: 0.3; transform: scale(0.8); }
         }
 
         /* ============================================================
-           SUBTÍTULOS
+           BOTTOM CONTROLS
         ============================================================ */
-        .subtitles-status {
+        .bottom-controls {
             position: absolute;
-            bottom: 160px;
-            left: 20px;
-            right: 20px;
-            z-index: 14;
-            display: none;
-            align-items: center;
-            gap: 10px;
-            background: rgba(0,0,0,0.7);
-            backdrop-filter: blur(20px);
-            border-radius: 12px;
-            padding: 10px 16px;
-            border: 1px solid rgba(255,255,255,0.05);
-        }
-        .subtitles-status i { color: #34d399; font-size: 14px; }
-        .subtitles-status #subtitlesText {
-            flex: 1;
-            color: rgba(255,255,255,0.8);
-            font-size: 12px;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            white-space: nowrap;
-        }
-
-        /* ============================================================
-           TEXT TOOLS
-        ============================================================ */
-        .text-tools {
-            position: absolute;
-            bottom: 140px;
+            bottom: 0;
             left: 0;
             right: 0;
-            z-index: 14;
-            display: none;
-            padding: 10px 16px;
-            background: linear-gradient(0deg, rgba(0,0,0,0.6) 0%, transparent 100%);
-        }
-        .text-tools-scroll {
+            z-index: 20;
             display: flex;
-            gap: 8px;
-            overflow-x: auto;
-            padding: 4px 0;
-            flex: 1;
-            -webkit-overflow-scrolling: touch;
+            align-items: center;
+            justify-content: space-around;
+            padding: 16px 20px 34px;
+            background: linear-gradient(0deg, rgba(0,0,0,0.7) 0%, transparent 100%);
         }
-        .text-tools-scroll::-webkit-scrollbar { display: none; }
-        .text-tools .btn-bg {
-            min-width: 32px;
-            height: 32px;
-            border-radius: 50%;
-            border: 2px solid rgba(255,255,255,0.05);
-            cursor: pointer;
-            transition: all 0.2s;
-            flex-shrink: 0;
-        }
-        .text-tools .btn-bg:active { transform: scale(0.85); }
-        .text-tools .btn-bg.active {
-            border-color: #fff;
-            transform: scale(1.15);
-            box-shadow: 0 0 20px rgba(255,255,255,0.2);
-        }
-        .text-tools .btn-back-to-camera {
-            background: rgba(255,255,255,0.1);
+        .bottom-controls .btn-gallery,
+        .bottom-controls .btn-text {
+            background: none;
             border: none;
-            border-radius: 50%;
-            min-width: 32px;
-            height: 32px;
             color: #fff;
-            font-size: 14px;
             cursor: pointer;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 4px;
+            font-size: 10px;
+            opacity: 0.6;
+            transition: all 0.2s;
+        }
+        .bottom-controls .btn-gallery i,
+        .bottom-controls .btn-text i { font-size: 24px; }
+        .bottom-controls .btn-gallery:active,
+        .bottom-controls .btn-text:active { transform: scale(0.9); opacity: 1; }
+
+        .bottom-controls .btn-capture {
+            background: none;
+            border: none;
+            cursor: pointer;
+            padding: 0;
+        }
+        .bottom-controls .btn-capture .capture-outer {
+            width: 72px;
+            height: 72px;
+            border-radius: 50%;
+            background: rgba(255,255,255,0.08);
             display: flex;
             align-items: center;
             justify-content: center;
-            flex-shrink: 0;
-            transition: all 0.2s;
+            border: 2px solid rgba(255,255,255,0.15);
+            transition: all 0.3s;
         }
-        .text-tools .btn-back-to-camera:active {
-            transform: scale(0.85);
-            background: rgba(255,255,255,0.2);
+        .bottom-controls .btn-capture .capture-inner {
+            width: 56px;
+            height: 56px;
+            border-radius: 50%;
+            background: #fff;
+            transition: all 0.3s;
+        }
+        .bottom-controls .btn-capture:active .capture-outer { transform: scale(0.92); }
+        .bottom-controls .btn-capture.recording .capture-outer {
+            border-color: #ff0000;
+            border-width: 3px;
+        }
+        .bottom-controls .btn-capture.recording .capture-inner {
+            width: 28px;
+            height: 28px;
+            border-radius: 4px;
+            background: #ff0000;
         }
 
         /* ============================================================
@@ -1299,20 +1407,21 @@ function injectStyles() {
             display: none;
             justify-content: center;
             gap: 50px;
+            padding: 0 20px;
         }
         .capture-actions .btn-retake,
         .capture-actions .btn-use {
             display: flex;
             flex-direction: column;
             align-items: center;
-            gap: 4px;
+            gap: 6px;
             background: none;
             border: none;
             color: #fff;
             font-size: 11px;
             cursor: pointer;
             transition: all 0.2s;
-            opacity: 0.8;
+            opacity: 0.7;
         }
         .capture-actions .btn-retake i,
         .capture-actions .btn-use i {
@@ -1325,7 +1434,7 @@ function injectStyles() {
             font-size: 18px;
         }
         .capture-actions .btn-retake i {
-            background: rgba(255,255,255,0.1);
+            background: rgba(255,255,255,0.08);
             backdrop-filter: blur(10px);
         }
         .capture-actions .btn-use i {
@@ -1336,6 +1445,47 @@ function injectStyles() {
         .capture-actions .btn-use:active {
             transform: scale(0.9);
             opacity: 1;
+        }
+
+        /* ============================================================
+           PREVIEW ACTIONS
+        ============================================================ */
+        .preview-actions {
+            position: absolute;
+            bottom: 140px;
+            left: 0;
+            right: 0;
+            z-index: 14;
+            display: none;
+            justify-content: center;
+            gap: 20px;
+            padding: 0 20px;
+        }
+        .preview-actions .btn-edit,
+        .preview-actions .btn-next-preview {
+            padding: 10px 24px;
+            border: none;
+            border-radius: 50px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .preview-actions .btn-edit {
+            background: rgba(255,255,255,0.08);
+            color: #fff;
+            backdrop-filter: blur(10px);
+        }
+        .preview-actions .btn-next-preview {
+            background: #fff;
+            color: #000;
+        }
+        .preview-actions .btn-edit:active,
+        .preview-actions .btn-next-preview:active {
+            transform: scale(0.95);
         }
 
         /* ============================================================
@@ -1352,7 +1502,7 @@ function injectStyles() {
         }
         .input-area .input-wrapper {
             position: relative;
-            background: rgba(255,255,255,0.08);
+            background: rgba(255,255,255,0.06);
             border-radius: 12px;
             backdrop-filter: blur(20px);
             border: 1px solid rgba(255,255,255,0.05);
@@ -1389,190 +1539,92 @@ function injectStyles() {
         }
 
         /* ============================================================
-           TOP CONTROLS
+           SUBTITLES STATUS
         ============================================================ */
-        .top-controls {
+        .subtitles-status {
             position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
-            z-index: 20;
-            display: flex;
-            justify-content: space-between;
+            bottom: 180px;
+            left: 20px;
+            right: 20px;
+            z-index: 14;
+            display: none;
             align-items: center;
-            padding: 12px 20px;
-            background: linear-gradient(180deg, rgba(0,0,0,0.6) 0%, transparent 100%);
-        }
-        .top-controls .btn-close {
-            background: rgba(255,255,255,0.1);
-            border: none;
-            border-radius: 50%;
-            width: 36px;
-            height: 36px;
-            color: #fff;
-            font-size: 18px;
-            cursor: pointer;
-            backdrop-filter: blur(10px);
-            transition: all 0.2s;
-        }
-        .top-controls .btn-close:active { transform: scale(0.9); }
-        .top-controls .btn-next {
-            background: #fff;
-            border: none;
-            border-radius: 50px;
-            padding: 6px 16px;
-            font-size: 13px;
-            font-weight: 600;
-            cursor: pointer;
-            display: flex;
-            align-items: center;
-            gap: 6px;
-            transition: all 0.2s;
-            color: #000;
-        }
-        .top-controls .btn-next:disabled { opacity: 0.3; cursor: not-allowed; }
-        .top-controls .btn-next:active:not(:disabled) { transform: scale(0.95); }
-        .top-controls .btn-next i { font-size: 10px; }
-
-        /* ============================================================
-           MODE SELECTOR
-        ============================================================ */
-        .mode-selector {
-            position: absolute;
-            top: 56px;
-            left: 50%;
-            transform: translateX(-50%);
-            z-index: 20;
-            display: flex;
-            gap: 4px;
-            background: rgba(255,255,255,0.1);
-            border-radius: 50px;
-            padding: 4px;
+            gap: 10px;
+            background: rgba(0,0,0,0.6);
             backdrop-filter: blur(20px);
+            border-radius: 12px;
+            padding: 10px 16px;
             border: 1px solid rgba(255,255,255,0.05);
         }
-        .mode-selector .mode-btn {
-            background: none;
-            border: none;
-            color: rgba(255,255,255,0.4);
+        .subtitles-status i { color: #34d399; font-size: 14px; }
+        .subtitles-status #subtitlesText {
+            flex: 1;
+            color: rgba(255,255,255,0.8);
             font-size: 12px;
-            font-weight: 600;
-            padding: 6px 14px;
-            border-radius: 50px;
-            cursor: pointer;
-            transition: all 0.3s;
-            display: flex;
-            align-items: center;
-            gap: 6px;
-        }
-        .mode-selector .mode-btn i { font-size: 14px; }
-        .mode-selector .mode-btn.active {
-            background: #fff;
-            color: #000;
-        }
-        .mode-selector .mode-btn:active { transform: scale(0.95); }
-        .mode-selector .flip-btn {
-            border-left: 1px solid rgba(255,255,255,0.1);
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
         }
 
         /* ============================================================
-           BOTTOM CONTROLS
+           TEXT TOOLS
         ============================================================ */
-        .bottom-controls {
+        .text-tools {
             position: absolute;
-            bottom: 0;
+            bottom: 140px;
             left: 0;
             right: 0;
-            z-index: 20;
-            display: flex;
-            align-items: center;
-            justify-content: space-around;
-            padding: 16px 20px 34px;
-            background: linear-gradient(0deg, rgba(0,0,0,0.7) 0%, transparent 100%);
+            z-index: 14;
+            display: none;
+            padding: 12px 20px;
+            background: linear-gradient(0deg, rgba(0,0,0,0.5) 0%, transparent 100%);
         }
-        .bottom-controls .btn-gallery {
-            background: none;
-            border: none;
-            color: #fff;
-            cursor: pointer;
+        .text-tools-scroll {
             display: flex;
-            flex-direction: column;
-            align-items: center;
-            gap: 4px;
-            font-size: 10px;
-            opacity: 0.7;
-            transition: all 0.2s;
-        }
-        .bottom-controls .btn-gallery i { font-size: 22px; }
-        .bottom-controls .btn-gallery:active { transform: scale(0.9); opacity: 1; }
-
-        .bottom-controls .btn-capture {
-            background: none;
-            border: none;
-            cursor: pointer;
-            padding: 0;
-        }
-        .bottom-controls .btn-capture .capture-outer {
-            width: 72px;
-            height: 72px;
-            border-radius: 50%;
-            background: rgba(255,255,255,0.1);
-            display: flex;
-            align-items: center;
+            gap: 10px;
+            overflow-x: auto;
+            padding: 4px 0;
+            -webkit-overflow-scrolling: touch;
             justify-content: center;
-            border: 2px solid rgba(255,255,255,0.2);
-            transition: all 0.3s;
+            flex-wrap: wrap;
         }
-        .bottom-controls .btn-capture .capture-inner {
-            width: 56px;
-            height: 56px;
+        .text-tools-scroll::-webkit-scrollbar { display: none; }
+        .text-tools .btn-bg {
+            min-width: 36px;
+            height: 36px;
             border-radius: 50%;
-            background: #fff;
-            transition: all 0.3s;
-        }
-        .bottom-controls .btn-capture:active .capture-outer { transform: scale(0.92); }
-        .bottom-controls .btn-capture.recording .capture-outer {
-            border-color: #ff0000;
-            border-width: 3px;
-        }
-        .bottom-controls .btn-capture.recording .capture-inner {
-            width: 28px;
-            height: 28px;
-            border-radius: 4px;
-            background: #ff0000;
-        }
-
-        .bottom-controls .btn-text {
-            background: none;
-            border: none;
-            color: #fff;
+            border: 2px solid rgba(255,255,255,0.05);
             cursor: pointer;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            gap: 4px;
-            font-size: 10px;
-            opacity: 0.7;
             transition: all 0.2s;
+            flex-shrink: 0;
         }
-        .bottom-controls .btn-text i { font-size: 22px; }
-        .bottom-controls .btn-text:active { transform: scale(0.9); opacity: 1; }
+        .text-tools .btn-bg:active { transform: scale(0.85); }
+        .text-tools .btn-bg.active {
+            border-color: #fff;
+            transform: scale(1.15);
+            box-shadow: 0 0 20px rgba(255,255,255,0.2);
+        }
 
         /* ============================================================
            TEXT EDITOR
         ============================================================ */
-        .text-editor {
-            width: 100%;
-            height: 100%;
-            display: flex;
+        .text-editor-container {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            z-index: 15;
+            display: none;
+            flex-direction: column;
             align-items: center;
             justify-content: center;
-            padding: 40px;
-            position: relative;
+            padding: 60px 30px 100px;
+            background: #1a1a2e;
         }
-        .text-editor textarea {
-            width: 80%;
-            max-width: 400px;
+        .text-editor-container textarea {
+            width: 100%;
+            max-width: 500px;
             height: 60%;
             background: transparent;
             border: none;
@@ -1584,30 +1636,49 @@ function injectStyles() {
             padding: 20px;
             font-weight: 500;
             font-family: inherit;
+            line-height: 1.6;
         }
-        .text-editor textarea::placeholder {
+        .text-editor-container textarea::placeholder {
             color: rgba(255,255,255,0.2);
         }
-        .btn-exit-text {
+        .text-editor-tools {
             position: absolute;
-            bottom: 100px;
-            left: 50%;
-            transform: translateX(-50%);
-            background: rgba(255,255,255,0.1);
+            bottom: 60px;
+            left: 0;
+            right: 0;
+            display: flex;
+            justify-content: space-between;
+            padding: 0 20px;
+            gap: 12px;
+            max-width: 500px;
+            margin: 0 auto;
+        }
+        .text-editor-tools .btn-back-camera,
+        .text-editor-tools .btn-confirm-text {
+            padding: 10px 24px;
             border: none;
-            color: #fff;
-            padding: 8px 20px;
             border-radius: 50px;
-            font-size: 13px;
+            font-size: 14px;
+            font-weight: 600;
             cursor: pointer;
-            backdrop-filter: blur(10px);
+            transition: all 0.2s;
             display: flex;
             align-items: center;
             gap: 8px;
-            z-index: 15;
-            transition: all 0.2s;
         }
-        .btn-exit-text:active { transform: scale(0.95); }
+        .text-editor-tools .btn-back-camera {
+            background: rgba(255,255,255,0.08);
+            color: #fff;
+            backdrop-filter: blur(10px);
+        }
+        .text-editor-tools .btn-confirm-text {
+            background: #fff;
+            color: #000;
+        }
+        .text-editor-tools .btn-back-camera:active,
+        .text-editor-tools .btn-confirm-text:active {
+            transform: scale(0.95);
+        }
 
         /* ============================================================
            RESPONSIVE
@@ -1618,21 +1689,29 @@ function injectStyles() {
             .bottom-controls .btn-capture .capture-inner { width: 48px; height: 48px; }
             .bottom-controls .btn-capture.recording .capture-inner { width: 24px; height: 24px; }
             .top-controls { padding: 10px 16px; }
-            .top-controls .btn-close { width: 32px; height: 32px; font-size: 16px; }
+            .top-controls .btn-close { width: 32px; height: 32px; font-size: 14px; }
+            .top-controls .btn-next { font-size: 12px; padding: 6px 16px; }
+            .mode-selector { top: 54px; padding: 3px; }
+            .mode-selector .mode-btn { font-size: 12px; padding: 6px 12px; }
+            .mode-selector .mode-btn i { font-size: 14px; }
             .capture-actions { bottom: 130px; gap: 30px; }
             .capture-actions .btn-retake i,
             .capture-actions .btn-use i { width: 40px; height: 40px; font-size: 15px; }
+            .preview-actions { bottom: 130px; gap: 12px; }
+            .preview-actions .btn-edit,
+            .preview-actions .btn-next-preview { font-size: 12px; padding: 8px 16px; }
             .input-area { bottom: 100px; padding: 0 16px; }
             .input-area .input-wrapper input { font-size: 13px; padding: 10px 12px; padding-left: 36px; padding-right: 50px; }
             .text-tools { bottom: 120px; padding: 8px 12px; }
-            .text-tools .btn-bg { min-width: 28px; height: 28px; }
-            .text-tools .btn-back-to-camera { min-width: 28px; height: 28px; font-size: 12px; }
-            .text-editor textarea { font-size: 20px; width: 90%; }
-            .subtitles-status { bottom: 150px; left: 16px; right: 16px; padding: 8px 12px; }
-            .mode-selector { top: 48px; padding: 3px; }
-            .mode-selector .mode-btn { font-size: 11px; padding: 4px 12px; }
-            .mode-selector .mode-btn i { font-size: 12px; }
-            .recording-timer { top: 52px; font-size: 14px; }
+            .text-tools .btn-bg { min-width: 30px; height: 30px; }
+            .text-editor-container textarea { font-size: 20px; padding: 10px; }
+            .text-editor-tools { bottom: 40px; padding: 0 16px; }
+            .text-editor-tools .btn-back-camera,
+            .text-editor-tools .btn-confirm-text { font-size: 12px; padding: 8px 16px; }
+            .subtitles-status { bottom: 160px; left: 16px; right: 16px; padding: 8px 12px; }
+            .recording-indicator { top: 58px; padding: 4px 12px; }
+            .recording-indicator span { font-size: 12px; }
+            .creator-preview .text-preview { font-size: 22px; padding: 30px; }
         }
 
         @media (max-height: 600px) {
@@ -1641,13 +1720,28 @@ function injectStyles() {
             .bottom-controls .btn-capture .capture-outer { width: 56px; height: 56px; }
             .bottom-controls .btn-capture .capture-inner { width: 40px; height: 40px; }
             .bottom-controls .btn-capture.recording .capture-inner { width: 20px; height: 20px; }
-            .mode-selector { top: 42px; }
-            .mode-selector .mode-btn { font-size: 10px; padding: 3px 10px; }
-            .text-editor textarea { font-size: 18px; height: 50%; }
+            .mode-selector { top: 48px; }
+            .mode-selector .mode-btn { font-size: 11px; padding: 4px 10px; }
+            .mode-selector .mode-btn i { font-size: 12px; }
+            .text-editor-container textarea { font-size: 18px; height: 50%; }
             .capture-actions { bottom: 110px; }
+            .preview-actions { bottom: 110px; }
             .input-area { bottom: 80px; }
-            .subtitles-status { bottom: 120px; }
+            .subtitles-status { bottom: 130px; }
             .text-tools { bottom: 110px; }
+            .text-editor-tools { bottom: 30px; }
+            .recording-indicator { top: 52px; }
+            .creator-preview .text-preview { font-size: 18px; padding: 20px; }
+        }
+
+        @media (min-width: 768px) {
+            .creator-overlay {
+                max-width: 480px;
+                margin: 0 auto;
+                border-radius: 0;
+            }
+            .mode-selector .mode-btn { padding: 10px 20px; }
+            .text-editor-container textarea { font-size: 32px; }
         }
     `;
     document.head.appendChild(styles);
