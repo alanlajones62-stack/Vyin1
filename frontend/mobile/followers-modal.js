@@ -1,6 +1,6 @@
 // ============================================================
 // followers-modal.js - Modal de seguidores/seguidos
-// (CON BARRA DE BÚSQUEDA Y FILTROS)
+// (CON BARRA DE BÚSQUEDA Y FILTROS - CORREGIDO)
 // ============================================================
 
 import { getToken, getCurrentUser, showToast, getAvatar, escapeHtml } from './auth.js';
@@ -19,9 +19,10 @@ let followingList = [];
 let filteredList = [];
 let searchQuery = '';
 let isLoading = false;
+let isOpeningProfile = false;
 
 // ============================================================
-// ABRIR MODAL DE SEGUIDORES - SIN EXPORTAR AQUÍ
+// ABRIR MODAL DE SEGUIDORES
 // ============================================================
 
 async function openFollowersModal(userId, filter = 'followers') {
@@ -45,6 +46,7 @@ async function openFollowersModal(userId, filter = 'followers') {
     currentFilter = filter;
     searchQuery = '';
     isFollowersModalOpen = true;
+    isOpeningProfile = false;
 
     const overlay = document.getElementById('followersModalOverlay');
     if (!overlay) {
@@ -64,7 +66,7 @@ async function openFollowersModal(userId, filter = 'followers') {
 }
 
 // ============================================================
-// CERRAR MODAL DE SEGUIDORES - SIN EXPORTAR AQUÍ
+// CERRAR MODAL DE SEGUIDORES
 // ============================================================
 
 function closeFollowersModal() {
@@ -75,6 +77,7 @@ function closeFollowersModal() {
     followingList = [];
     filteredList = [];
     searchQuery = '';
+    isOpeningProfile = false;
 
     const overlay = document.getElementById('followersModalOverlay');
     if (overlay) {
@@ -99,10 +102,10 @@ function createFollowersModalHTML() {
         <div id="followersModalOverlay" class="followers-modal-overlay" onclick="window.closeFollowersModal()">
             <div class="followers-modal-content" onclick="event.stopPropagation()">
                 <div class="followers-modal-header">
-                    <button class="followers-modal-close" onclick="window.closeFollowersModal()">
+                    <span class="title"><i class="fas fa-users"></i> <span id="followersModalTitle">Seguidores</span></span>
+                    <button class="close-btn" onclick="window.closeFollowersModal()">
                         <i class="fas fa-times"></i>
                     </button>
-                    <h2 id="followersModalTitle">Seguidores</h2>
                 </div>
 
                 <div class="followers-modal-search">
@@ -168,7 +171,7 @@ function createFollowersModalHTML() {
     }
 
     document.addEventListener('keydown', (e) => {
-        if (e.key === 'Escape' && isFollowersModalOpen) {
+        if (e.key === 'Escape' && isFollowersModalOpen && !isOpeningProfile) {
             closeFollowersModal();
         }
     });
@@ -179,7 +182,7 @@ function createFollowersModalHTML() {
     window.handleFollowersFollow = handleFollowersFollow;
     window.openProfileFromFollowers = openProfileFromFollowers;
     
-    // Inyectar estilos
+    // Inyectar estilos (CORREGIDOS - IGUAL QUE PROFILE)
     injectFollowersStyles();
 }
 
@@ -204,7 +207,26 @@ function switchFollowersTab(filter) {
         tab.classList.toggle('active', tab.dataset.filter === filter);
     });
 
+    updateModalTitle();
     filterAndRenderList();
+}
+
+// ============================================================
+// ACTUALIZAR TÍTULO DEL MODAL
+// ============================================================
+
+function updateModalTitle() {
+    const title = document.getElementById('followersModalTitle');
+    if (!title) return;
+
+    const currentUser = getCurrentUser();
+    const isOwnProfile = currentUser?.id === currentUserId;
+    
+    if (currentFilter === 'followers') {
+        title.textContent = isOwnProfile ? 'Tus seguidores' : 'Seguidores';
+    } else {
+        title.textContent = isOwnProfile ? 'A quienes sigues' : 'Siguiendo';
+    }
 }
 
 // ============================================================
@@ -227,7 +249,6 @@ async function loadFollowersData(userId) {
     }
 
     try {
-        // Cargar seguidores
         const followersRes = await fetch(`${API_URL}/api/follows/followers/${userId}`, {
             headers: { 'Authorization': `Bearer ${token}` }
         });
@@ -239,7 +260,6 @@ async function loadFollowersData(userId) {
             console.log(`📊 Seguidores cargados: ${followersList.length}`);
         }
 
-        // Cargar seguidos
         const followingRes = await fetch(`${API_URL}/api/follows/following/${userId}`, {
             headers: { 'Authorization': `Bearer ${token}` }
         });
@@ -251,18 +271,7 @@ async function loadFollowersData(userId) {
             console.log(`📊 Siguiendo cargados: ${followingList.length}`);
         }
 
-        // Actualizar título
-        const currentUser = getCurrentUser();
-        const isOwnProfile = currentUser?.id === userId;
-        const title = document.getElementById('followersModalTitle');
-        if (title) {
-            if (isOwnProfile) {
-                title.textContent = currentFilter === 'followers' ? 'Tus seguidores' : 'A quienes sigues';
-            } else {
-                title.textContent = currentFilter === 'followers' ? 'Seguidores' : 'Siguiendo';
-            }
-        }
-
+        updateModalTitle();
         filterAndRenderList();
 
     } catch (error) {
@@ -331,7 +340,6 @@ function renderList(users) {
         const isFollowing = currentUser?.following?.includes(user.id) || false;
         const isOwn = currentUser?.id === user.id;
 
-        // Badge de verificación
         let badge = '';
         if (user.isVerified) {
             badge = '<i class="fas fa-check-circle verified-badge" title="Verificado"></i>';
@@ -420,23 +428,44 @@ window.handleFollowersFollow = async function(userId, btn) {
 
 window.openProfileFromFollowers = function(userId) {
     if (!userId) return;
-    closeFollowersModal();
-    setTimeout(() => {
-        import('./profile-modal.js').then(({ openProfileModal }) => {
-            openProfileModal(userId);
-        }).catch((err) => {
-            console.error('Error abriendo perfil:', err);
-            if (typeof window.openProfileModal === 'function') {
-                window.openProfileModal(userId);
-            } else {
-                showToast('Error al abrir perfil', true);
+    
+    isOpeningProfile = true;
+    
+    // No cerrar el modal de seguidores, solo abrir el perfil encima
+    import('./profile-modal.js').then(({ openProfileModal }) => {
+        // Modificar el comportamiento de closeProfileModal
+        const originalClose = window.closeProfileModal;
+        window.closeProfileModal = function() {
+            const profileOverlay = document.getElementById('profileModalOverlay');
+            if (profileOverlay) {
+                profileOverlay.classList.remove('active');
+                profileOverlay.style.display = 'none';
             }
-        });
-    }, 100);
+            const followersOverlay = document.getElementById('followersModalOverlay');
+            if (followersOverlay && isFollowersModalOpen) {
+                followersOverlay.style.display = 'flex';
+                followersOverlay.classList.add('active');
+                followersOverlay.style.zIndex = '10004';
+            }
+            document.body.style.overflow = 'hidden';
+            isOpeningProfile = false;
+            window.closeProfileModal = originalClose;
+        };
+        
+        openProfileModal(userId);
+    }).catch((err) => {
+        console.error('Error abriendo perfil:', err);
+        if (typeof window.openProfileModal === 'function') {
+            window.openProfileModal(userId);
+        } else {
+            showToast('Error al abrir perfil', true);
+        }
+        isOpeningProfile = false;
+    });
 };
 
 // ============================================================
-// INYECTAR ESTILOS
+// INYECTAR ESTILOS - IGUAL QUE PROFILE MODAL
 // ============================================================
 
 function injectFollowersStyles() {
@@ -445,135 +474,157 @@ function injectFollowersStyles() {
     const styles = document.createElement('style');
     styles.id = 'followersModalStyles';
     styles.textContent = `
+        /* ============================================================
+           FOLLOWERS MODAL - SIN BORDES REDONDOS (IGUAL QUE PROFILE)
+        ============================================================ */
         .followers-modal-overlay {
             position: fixed;
             top: 0;
             left: 0;
-            width: 100vw;
-            height: 100dvh;
-            background: rgba(0, 0, 0, 0.85);
+            right: 0;
+            bottom: 0;
+            background: rgba(10, 10, 26, 0.92);
             backdrop-filter: blur(24px);
             -webkit-backdrop-filter: blur(24px);
             z-index: 10004;
             display: none;
-            align-items: center;
-            justify-content: center;
-            padding: 20px;
-            animation: followersFadeIn 0.3s ease;
+            flex-direction: column;
+            animation: followersModalFadeIn 0.35s ease;
         }
-        .followers-modal-overlay.active { display: flex; }
 
-        @keyframes followersFadeIn {
-            from { opacity: 0; transform: scale(0.96); }
-            to { opacity: 1; transform: scale(1); }
+        .followers-modal-overlay.active {
+            display: flex;
+        }
+
+        @keyframes followersModalFadeIn {
+            0% { opacity: 0; transform: scale(0.98); }
+            100% { opacity: 1; transform: scale(1); }
         }
 
         .followers-modal-content {
             background: #12122a;
-            border-radius: 16px;
-            max-width: 480px;
+            border-radius: 0;
             width: 100%;
-            max-height: 80vh;
+            max-width: 100%;
+            max-height: 100vh;
+            height: 100vh;
+            overflow: hidden;
+            position: relative;
+            border: none;
+            box-shadow: none;
             display: flex;
             flex-direction: column;
-            overflow: hidden;
-            border: 1px solid rgba(255,255,255,0.04);
-            box-shadow: 0 24px 80px rgba(0,0,0,0.6);
         }
 
+        /* ===== HEADER ===== */
         .followers-modal-header {
             display: flex;
             align-items: center;
-            padding: 16px 20px;
-            border-bottom: 1px solid rgba(255,255,255,0.04);
+            justify-content: space-between;
+            padding: 14px 20px 12px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.04);
             flex-shrink: 0;
-            gap: 12px;
+            background: transparent;
+            min-height: auto;
+            max-height: none;
         }
-        .followers-modal-header h2 {
-            color: #fff;
+
+        .followers-modal-header .title {
+            font-weight: 700;
             font-size: 18px;
-            font-weight: 600;
-            margin: 0;
-            flex: 1;
+            color: #fff;
         }
-        .followers-modal-close {
-            background: rgba(255,255,255,0.05);
+
+        .followers-modal-header .close-btn {
+            background: rgba(255, 255, 255, 0.05);
             border: none;
             width: 36px;
             height: 36px;
             border-radius: 50%;
-            color: rgba(255,255,255,0.4);
-            font-size: 16px;
+            color: rgba(255, 255, 255, 0.4);
+            font-size: 18px;
             cursor: pointer;
             display: flex;
             align-items: center;
             justify-content: center;
             transition: all 0.3s;
-            flex-shrink: 0;
         }
-        .followers-modal-close:active { transform: scale(0.9); }
 
+        .followers-modal-header .close-btn:active {
+            transform: scale(0.88);
+            background: rgba(255, 255, 255, 0.1);
+        }
+
+        /* ===== SEARCH ===== */
         .followers-modal-search {
             display: flex;
             align-items: center;
             gap: 10px;
             padding: 10px 20px;
-            border-bottom: 1px solid rgba(255,255,255,0.04);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.04);
             flex-shrink: 0;
             position: relative;
         }
+
         .followers-modal-search i {
-            color: rgba(255,255,255,0.2);
+            color: rgba(255, 255, 255, 0.2);
             font-size: 14px;
         }
+
         .followers-modal-search input {
             flex: 1;
-            background: rgba(255,255,255,0.04);
-            border: 1px solid rgba(255,255,255,0.06);
+            background: rgba(255, 255, 255, 0.04);
+            border: 1px solid rgba(255, 255, 255, 0.06);
             border-radius: 50px;
             padding: 8px 14px;
             color: #fff;
-            font-size: 13px;
+            font-size: 14px;
             outline: none;
             font-family: inherit;
             transition: all 0.3s;
         }
+
         .followers-modal-search input::placeholder {
-            color: rgba(255,255,255,0.2);
+            color: rgba(255, 255, 255, 0.2);
         }
+
         .followers-modal-search input:focus {
-            border-color: rgba(192,132,252,0.2);
-            background: rgba(255,255,255,0.06);
+            border-color: rgba(192, 132, 252, 0.2);
+            background: rgba(255, 255, 255, 0.06);
         }
+
         .followers-search-clear {
             background: none;
             border: none;
-            color: rgba(255,255,255,0.2);
+            color: rgba(255, 255, 255, 0.2);
             cursor: pointer;
             font-size: 16px;
             padding: 4px;
             display: none;
             transition: all 0.2s;
         }
+
         .followers-search-clear:hover {
-            color: rgba(255,255,255,0.4);
+            color: rgba(255, 255, 255, 0.4);
         }
 
+        /* ===== TABS ===== */
         .followers-modal-tabs {
             display: flex;
             padding: 8px 20px;
             gap: 4px;
-            border-bottom: 1px solid rgba(255,255,255,0.04);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.04);
             flex-shrink: 0;
-            background: rgba(255,255,255,0.02);
+            background: rgba(255, 255, 255, 0.02);
         }
+
         .followers-tab {
             background: none;
             border: none;
-            color: rgba(255,255,255,0.3);
-            padding: 8px 14px;
+            color: rgba(255, 255, 255, 0.3);
+            padding: 8px 16px;
             border-radius: 50px;
-            font-size: 12px;
+            font-size: 13px;
             font-weight: 500;
             cursor: pointer;
             transition: all 0.3s;
@@ -582,64 +633,104 @@ function injectFollowersStyles() {
             gap: 6px;
             font-family: inherit;
         }
-        .followers-tab i { font-size: 13px; }
+
+        .followers-tab i {
+            font-size: 14px;
+        }
+
         .followers-tab .tab-count {
-            background: rgba(255,255,255,0.06);
-            padding: 0 6px;
+            background: rgba(255, 255, 255, 0.06);
+            padding: 0 8px;
             border-radius: 10px;
-            font-size: 10px;
-            min-width: 18px;
+            font-size: 11px;
+            min-width: 20px;
             text-align: center;
         }
-        .followers-tab.active {
-            background: rgba(192,132,252,0.12);
-            color: #c084fc;
-        }
-        .followers-tab.active .tab-count {
-            background: rgba(192,132,252,0.2);
-            color: #c084fc;
-        }
-        .followers-tab:active { transform: scale(0.95); }
 
+        .followers-tab.active {
+            background: rgba(192, 132, 252, 0.12);
+            color: #c084fc;
+        }
+
+        .followers-tab.active .tab-count {
+            background: rgba(192, 132, 252, 0.2);
+            color: #c084fc;
+        }
+
+        .followers-tab:active {
+            transform: scale(0.95);
+        }
+
+        /* ===== LISTA ===== */
         .followers-modal-list {
             flex: 1;
             overflow-y: auto;
             padding: 8px 4px;
         }
+
         .followers-modal-list::-webkit-scrollbar {
             width: 3px;
         }
+
+        .followers-modal-list::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
         .followers-modal-list::-webkit-scrollbar-thumb {
-            background: rgba(192,132,252,0.15);
+            background: rgba(192, 132, 252, 0.2);
             border-radius: 10px;
         }
 
+        .followers-modal-list::-webkit-scrollbar-thumb:hover {
+            background: rgba(192, 132, 252, 0.4);
+        }
+
+        /* ===== LOADING ===== */
         .followers-loading {
             display: flex;
             flex-direction: column;
             align-items: center;
             justify-content: center;
-            padding: 40px 20px;
-            color: rgba(255,255,255,0.15);
-            gap: 8px;
+            padding: 30px;
+            color: rgba(255, 255, 255, 0.15);
         }
-        .followers-loading i { font-size: 24px; }
-        .followers-loading span { font-size: 13px; }
 
+        .followers-loading i {
+            font-size: 32px;
+            margin-bottom: 6px;
+        }
+
+        .followers-loading span {
+            font-size: 13px;
+        }
+
+        /* ===== EMPTY ===== */
         .followers-empty {
             display: flex;
             flex-direction: column;
             align-items: center;
             justify-content: center;
             padding: 40px 20px;
-            color: rgba(255,255,255,0.15);
+            color: rgba(255, 255, 255, 0.15);
             gap: 8px;
             text-align: center;
         }
-        .followers-empty i { font-size: 32px; color: rgba(255,255,255,0.05); }
-        .followers-empty span { font-size: 14px; }
-        .followers-empty small { font-size: 12px; color: rgba(255,255,255,0.08); }
 
+        .followers-empty i {
+            font-size: 32px;
+            color: rgba(255, 255, 255, 0.05);
+        }
+
+        .followers-empty span {
+            font-size: 14px;
+        }
+
+        .followers-empty small {
+            font-size: 12px;
+            color: rgba(255, 255, 255, 0.08);
+        }
+
+        /* ===== ITEM ===== */
         .followers-item {
             display: flex;
             align-items: center;
@@ -650,10 +741,12 @@ function injectFollowersStyles() {
             transition: all 0.2s;
             border: 1px solid transparent;
         }
+
         .followers-item:hover {
-            background: rgba(255,255,255,0.03);
-            border-color: rgba(255,255,255,0.04);
+            background: rgba(255, 255, 255, 0.03);
+            border-color: rgba(255, 255, 255, 0.04);
         }
+
         .followers-item:active {
             transform: scale(0.99);
         }
@@ -664,13 +757,14 @@ function injectFollowersStyles() {
             border-radius: 50%;
             object-fit: cover;
             flex-shrink: 0;
-            border: 1px solid rgba(255,255,255,0.05);
+            border: 1px solid rgba(255, 255, 255, 0.05);
         }
 
         .followers-info {
             flex: 1;
             min-width: 0;
         }
+
         .followers-name {
             font-weight: 600;
             font-size: 14px;
@@ -679,13 +773,15 @@ function injectFollowersStyles() {
             align-items: center;
             gap: 4px;
         }
+
         .followers-name .verified-badge {
             color: #c084fc;
             font-size: 12px;
         }
+
         .followers-username {
             font-size: 12px;
-            color: rgba(255,255,255,0.3);
+            color: rgba(255, 255, 255, 0.3);
         }
 
         .followers-follow-btn {
@@ -698,58 +794,189 @@ function injectFollowersStyles() {
             transition: all 0.3s;
             font-family: inherit;
             flex-shrink: 0;
-            background: rgba(255,255,255,0.06);
-            color: rgba(255,255,255,0.7);
+            background: rgba(255, 255, 255, 0.06);
+            color: rgba(255, 255, 255, 0.7);
         }
+
         .followers-follow-btn:hover {
-            background: rgba(255,255,255,0.1);
+            background: rgba(255, 255, 255, 0.1);
         }
+
         .followers-follow-btn.following {
-            background: rgba(192,132,252,0.12);
+            background: rgba(192, 132, 252, 0.12);
             color: #c084fc;
         }
+
         .followers-follow-btn.following:hover {
-            background: rgba(255,68,68,0.1);
+            background: rgba(255, 68, 68, 0.1);
             color: #ff6b6b;
         }
+
         .followers-follow-btn:disabled {
             opacity: 0.5;
             cursor: not-allowed;
         }
+
         .followers-follow-btn i {
             font-size: 10px;
             margin-right: 4px;
         }
 
-        @media (max-width: 520px) {
-            .followers-modal-overlay { padding: 12px; }
-            .followers-modal-content { max-height: 85vh; border-radius: 12px; }
-            .followers-modal-header { padding: 12px 16px; }
-            .followers-modal-header h2 { font-size: 16px; }
-            .followers-modal-search { padding: 8px 16px; }
-            .followers-modal-tabs { padding: 6px 16px; }
-            .followers-tab { font-size: 11px; padding: 6px 10px; }
-            .followers-item { padding: 8px 12px; }
-            .followers-avatar { width: 36px; height: 36px; }
-            .followers-name { font-size: 13px; }
-            .followers-follow-btn { font-size: 10px; padding: 4px 12px; }
+        /* ============================================================
+           RESPONSIVE
+        ============================================================ */
+        @media (max-width: 480px) {
+            .followers-modal-header {
+                padding: 12px 16px 10px;
+            }
+
+            .followers-modal-header .title {
+                font-size: 16px;
+            }
+
+            .followers-modal-header .close-btn {
+                width: 32px;
+                height: 32px;
+                font-size: 16px;
+            }
+
+            .followers-modal-search {
+                padding: 8px 16px;
+            }
+
+            .followers-modal-search input {
+                font-size: 13px;
+                padding: 6px 12px;
+            }
+
+            .followers-modal-tabs {
+                padding: 6px 16px;
+            }
+
+            .followers-tab {
+                font-size: 12px;
+                padding: 6px 12px;
+            }
+
+            .followers-item {
+                padding: 8px 12px;
+            }
+
+            .followers-avatar {
+                width: 36px;
+                height: 36px;
+            }
+
+            .followers-name {
+                font-size: 13px;
+            }
+
+            .followers-follow-btn {
+                font-size: 10px;
+                padding: 4px 12px;
+            }
+        }
+
+        @media (max-width: 380px) {
+            .followers-modal-header {
+                padding: 10px 12px 8px;
+            }
+
+            .followers-modal-header .title {
+                font-size: 14px;
+            }
+
+            .followers-modal-header .close-btn {
+                width: 28px;
+                height: 28px;
+                font-size: 14px;
+            }
+
+            .followers-modal-search {
+                padding: 6px 12px;
+            }
+
+            .followers-modal-search input {
+                font-size: 12px;
+                padding: 5px 10px;
+            }
+
+            .followers-modal-tabs {
+                padding: 4px 12px;
+            }
+
+            .followers-tab {
+                font-size: 11px;
+                padding: 4px 10px;
+            }
+
+            .followers-item {
+                padding: 6px 10px;
+            }
+
+            .followers-avatar {
+                width: 32px;
+                height: 32px;
+            }
+
+            .followers-name {
+                font-size: 12px;
+            }
+
+            .followers-follow-btn {
+                font-size: 9px;
+                padding: 3px 10px;
+            }
         }
 
         @media (max-height: 600px) {
-            .followers-modal-content { max-height: 90vh; }
-            .followers-modal-header { padding: 10px 14px; }
-            .followers-modal-header h2 { font-size: 15px; }
-            .followers-modal-search { padding: 6px 14px; }
-            .followers-modal-tabs { padding: 4px 14px; }
-            .followers-item { padding: 6px 10px; }
-            .followers-avatar { width: 32px; height: 32px; }
+            .followers-modal-header {
+                padding: 8px 14px 6px;
+            }
+
+            .followers-modal-header .title {
+                font-size: 15px;
+            }
+
+            .followers-modal-header .close-btn {
+                width: 28px;
+                height: 28px;
+                font-size: 14px;
+            }
+
+            .followers-modal-search {
+                padding: 6px 14px;
+            }
+
+            .followers-modal-tabs {
+                padding: 4px 14px;
+            }
+
+            .followers-tab {
+                font-size: 11px;
+                padding: 4px 10px;
+            }
+
+            .followers-item {
+                padding: 6px 10px;
+            }
+
+            .followers-avatar {
+                width: 32px;
+                height: 32px;
+            }
+
+            .followers-follow-btn {
+                font-size: 10px;
+                padding: 4px 10px;
+            }
         }
     `;
     document.head.appendChild(styles);
 }
 
 // ============================================================
-// ✅ EXPORTACIONES - UNA SOLA VEZ (AQUÍ ÚNICAMENTE)
+// ✅ EXPORTACIONES
 // ============================================================
 
 export { 
