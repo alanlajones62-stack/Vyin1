@@ -101,10 +101,17 @@ app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 // ============================================================
 
 const FRONTEND_DIR = path.join(__dirname, '../frontend');
-const MOBILE_DIR = path.join(__dirname, '../mobile');
+const MOBILE_DIR = path.join(__dirname, '../frontend/mobile');
+const UPLOADS_DIR = path.join(FRONTEND_DIR, 'uploads');
 
+// Crear carpetas si no existen
 if (!fs.existsSync(FRONTEND_DIR)) fs.mkdirSync(FRONTEND_DIR, { recursive: true });
 if (!fs.existsSync(MOBILE_DIR)) fs.mkdirSync(MOBILE_DIR, { recursive: true });
+if (!fs.existsSync(UPLOADS_DIR)) fs.mkdirSync(UPLOADS_DIR, { recursive: true });
+
+// ============================================================
+// 🔥 MIDDLEWARE PARA HEADERS
+// ============================================================
 
 app.use((req, res, next) => {
     const url = req.url || req.path || '';
@@ -139,6 +146,10 @@ app.use((req, res, next) => {
     next();
 });
 
+// ============================================================
+// 🔥 ARCHIVOS JS
+// ============================================================
+
 app.get(/.*\.js$/, (req, res) => {
     const cleanPath = req.path || req.url.split('?')[0];
     
@@ -146,7 +157,8 @@ app.get(/.*\.js$/, (req, res) => {
         path.join(FRONTEND_DIR, cleanPath),
         path.join(FRONTEND_DIR, 'feed', path.basename(cleanPath)),
         path.join(FRONTEND_DIR, 'feed', cleanPath.replace(/^\/feed\//, '')),
-        path.join(MOBILE_DIR, path.basename(cleanPath)),
+        path.join(FRONTEND_DIR, 'mobile/components', cleanPath.replace(/^\/mobile\//, '')),
+        path.join(MOBILE_DIR, 'components', path.basename(cleanPath)),
         path.join(__dirname, '..', cleanPath)
     ];
     
@@ -163,6 +175,11 @@ app.get(/.*\.js$/, (req, res) => {
     res.status(404).send('File not found');
 });
 
+// ============================================================
+// 🔥 ARCHIVOS ESTÁTICOS
+// ============================================================
+
+// Frontend principal
 app.use(express.static(FRONTEND_DIR, {
     maxAge: '1d',
     setHeaders: (res, filePath) => {
@@ -199,6 +216,7 @@ app.use(express.static(FRONTEND_DIR, {
     }
 }));
 
+// Mobile
 app.use('/mobile', express.static(MOBILE_DIR, {
     maxAge: '1d',
     setHeaders: (res, filePath) => {
@@ -218,13 +236,17 @@ app.use('/mobile', express.static(MOBILE_DIR, {
     }
 }));
 
-app.use('/uploads', express.static(path.join(FRONTEND_DIR, 'uploads'), {
+// Uploads
+app.use('/uploads', express.static(UPLOADS_DIR, {
     setHeaders: (res) => {
         res.setHeader('Access-Control-Allow-Origin', '*');
     }
 }));
 
-// ========== COMPRESSION ==========
+// ============================================================
+// 🔥 COMPRESSION
+// ============================================================
+
 app.use(compression({
     level: 6,
     threshold: 1024,
@@ -236,7 +258,10 @@ app.use(compression({
     }
 }));
 
-// ========== CACHÉ ==========
+// ============================================================
+// 🔥 CACHÉ
+// ============================================================
+
 class Cache {
     constructor() {
         this.cache = new Map();
@@ -735,7 +760,6 @@ rebuildUserIndex();
 // ============================================================
 
 try {
-    // Sincronizar roles de usuarios con la lista oficial de admins
     adminConfig.syncUserRoles();
     console.log('\n👑 ADMINISTRADORES OFICIALES:');
     const admins = adminConfig.getAllAdmins();
@@ -747,7 +771,6 @@ try {
     console.error('❌ Error sincronizando administradores:', error);
 }
 
-// Hacer disponible el sistema de admins en toda la app
 app.set('adminConfig', adminConfig);
 
 const JWT_SECRET = process.env.JWT_SECRET || 'mi_super_secreto_123';
@@ -1147,12 +1170,41 @@ app.get('/health', (req, res) => {
     res.json(stats);
 });
 
-// ========== REDIRECCIONAR A FEED POR DEFECTO ==========
+// ============================================================
+// 🔥 RUTAS DEL FRONTEND PARA RENDER
+// ============================================================
+
+// Servir archivos estáticos del frontend
+app.use(express.static(FRONTEND_DIR));
+app.use('/mobile', express.static(MOBILE_DIR));
+app.use('/uploads', express.static(UPLOADS_DIR));
+
+// Ruta principal - App móvil
 app.get('/', (req, res) => {
-    res.redirect('/feed.html');
+    res.sendFile(path.join(MOBILE_DIR, 'components/index.html'));
 });
 
-// ========== SOCKET.IO ==========
+// Feed - App móvil
+app.get('/feed.html', (req, res) => {
+    res.sendFile(path.join(MOBILE_DIR, 'components/index.html'));
+});
+
+// Login
+app.get('/login.html', (req, res) => {
+    res.sendFile(path.join(FRONTEND_DIR, 'login.html'));
+});
+
+// Cualquier otra ruta no API - App móvil (SPA)
+app.get('*', (req, res) => {
+    if (!req.path.startsWith('/api')) {
+        res.sendFile(path.join(MOBILE_DIR, 'components/index.html'));
+    }
+});
+
+// ============================================================
+// 🔥 SOCKET.IO
+// ============================================================
+
 io.on('connection', (socket) => {
     logger.info(`🔌 Nueva conexión: ${socket.id}`);
     socket.join(`user_${socket.userId}`);
@@ -1466,7 +1518,6 @@ setInterval(() => {
                     
                     logger.info(`✅ Suspensión expirada para usuario ${user.username} (${user.id})`);
                     
-                    // Notificar al usuario
                     const notifier = new UserNotifications(read, write, io, logger);
                     notifier.notifyWarning(
                         user.id,
