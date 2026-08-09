@@ -1,5 +1,5 @@
 // followers-modal.js - Modal de seguidores/seguidos
-// CON NAVEGACIÓN ESTILO TIKTOK (volver a la lista al cerrar perfil)
+// CON FILTROS CORREGIDOS Y NAVEGACIÓN ESTILO TIKTOK
 // ============================================================
 
 import { getToken, getCurrentUser, showToast, getAvatar, escapeHtml } from './auth.js';
@@ -12,7 +12,7 @@ const API_URL = window.location.origin;
 
 let isFollowersModalOpen = false;
 let currentUserId = null;
-let currentFilter = 'followers';
+let currentFilter = 'followers'; // 'followers' o 'following'
 let followersList = [];
 let followingList = [];
 let filteredList = [];
@@ -24,7 +24,7 @@ let isFromProfile = false;
 let followersContext = null;
 
 // ============================================================
-// ABRIR MODAL DE SEGUIDORES (SUPERPUESTO)
+// ABRIR MODAL DE SEGUIDORES
 // ============================================================
 
 async function openFollowersModal(userId, filter = 'followers', fromProfile = false) {
@@ -47,7 +47,7 @@ async function openFollowersModal(userId, filter = 'followers', fromProfile = fa
     // 🔥 Guardar contexto
     isFromProfile = fromProfile;
     currentUserId = userId;
-    currentFilter = filter;
+    currentFilter = filter || 'followers'; // 🔥 Asegurar que siempre tenga un valor
     searchQuery = '';
     followersList = [];
     followingList = [];
@@ -76,13 +76,10 @@ async function openFollowersModal(userId, filter = 'followers', fromProfile = fa
 // CERRAR MODAL DE SEGUIDORES
 // ============================================================
 
-function closeFollowersModal(restoreParent = true) {
-    console.log('🔒 Cerrando modal de seguidores, isFromProfile:', isFromProfile, 'restoreParent:', restoreParent);
+function closeFollowersModal() {
+    console.log('🔒 Cerrando modal de seguidores');
     
-    const wasFromProfile = isFromProfile;
-    const contextToRestore = followersContext;
-    
-    // 🔥 LIMPIAR CONTENIDO DEL MODAL
+    // 🔥 LIMPIAR CONTENIDO
     const container = document.getElementById('followersListContainer');
     if (container) {
         container.innerHTML = `
@@ -93,26 +90,21 @@ function closeFollowersModal(restoreParent = true) {
         `;
     }
 
+    // 🔥 LIMPIAR ESTADO
     isFollowersModalOpen = false;
+    const wasFromProfile = isFromProfile;
+    isFromProfile = false;
     currentUserId = null;
     followersList = [];
     followingList = [];
     filteredList = [];
     searchQuery = '';
-    isFromProfile = false;
 
     const overlay = document.getElementById('followersModalOverlay');
     if (overlay) {
         overlay.classList.remove('active');
         overlay.style.display = 'none';
         overlay.style.zIndex = '';
-    }
-
-    // 🔥 Si veníamos de perfil y hay que restaurar, NO restaurar aquí
-    // La restauración se hace desde el perfil cuando se cierra
-    if (wasFromProfile && restoreParent && contextToRestore) {
-        console.log(`🔄 Contexto de seguidores guardado:`, contextToRestore);
-        // No restaurar aquí, el perfil lo hará al cerrarse
     }
 
     document.body.style.overflow = '';
@@ -131,9 +123,9 @@ function restoreFollowersModal() {
     const context = followersContext;
     console.log(`🔄 Restaurando modal de seguidores: userId=${context.userId}, filter=${context.filter}`);
 
-    // Restaurar estado
+    // 🔥 Restaurar estado
     currentUserId = context.userId;
-    currentFilter = context.filter;
+    currentFilter = context.filter || 'followers';
     isFromProfile = true;
     isFollowersModalOpen = true;
 
@@ -156,10 +148,14 @@ function restoreFollowersModal() {
         clearBtn.style.display = 'none';
     }
 
-    // Actualizar tabs
+    // 🔥 ACTUALIZAR TABS CORRECTAMENTE
     document.querySelectorAll('.followers-tab').forEach(tab => {
-        tab.classList.toggle('active', tab.dataset.filter === context.filter);
+        const tabFilter = tab.dataset.filter;
+        tab.classList.toggle('active', tabFilter === context.filter);
     });
+
+    // 🔥 Actualizar título
+    updateModalTitle();
 
     document.body.style.overflow = 'hidden';
 
@@ -195,12 +191,12 @@ function createFollowersModalHTML() {
                 </div>
 
                 <div class="followers-modal-tabs">
-                    <button class="followers-tab active" data-filter="followers" onclick="window.switchFollowersTab('followers')">
+                    <button class="followers-tab ${currentFilter === 'followers' ? 'active' : ''}" data-filter="followers" onclick="window.switchFollowersTab('followers')">
                         <i class="fas fa-users"></i>
                         <span>Seguidores</span>
                         <span class="tab-count" id="followersCount">0</span>
                     </button>
-                    <button class="followers-tab" data-filter="following" onclick="window.switchFollowersTab('following')">
+                    <button class="followers-tab ${currentFilter === 'following' ? 'active' : ''}" data-filter="following" onclick="window.switchFollowersTab('following')">
                         <i class="fas fa-user-friends"></i>
                         <span>Siguiendo</span>
                         <span class="tab-count" id="followingCount">0</span>
@@ -266,13 +262,17 @@ function createFollowersModalHTML() {
 }
 
 // ============================================================
-// CAMBIAR FILTRO (Seguidores/Siguiendo)
+// 🔥 CAMBIAR FILTRO (Seguidores/Siguiendo) - CORREGIDO
 // ============================================================
 
 function switchFollowersTab(filter) {
+    console.log(`🔄 Cambiando a filtro: ${filter}`);
+    
+    // 🔥 ACTUALIZAR FILTRO
     currentFilter = filter;
     searchQuery = '';
     
+    // Limpiar búsqueda
     const searchInput = document.getElementById('followersSearchInput');
     if (searchInput) {
         searchInput.value = '';
@@ -282,11 +282,20 @@ function switchFollowersTab(filter) {
         clearBtn.style.display = 'none';
     }
 
+    // 🔥 ACTUALIZAR TABS - SOLO UNO ACTIVO
     document.querySelectorAll('.followers-tab').forEach(tab => {
-        tab.classList.toggle('active', tab.dataset.filter === filter);
+        const tabFilter = tab.dataset.filter;
+        if (tabFilter === filter) {
+            tab.classList.add('active');
+        } else {
+            tab.classList.remove('active');
+        }
     });
 
+    // 🔥 Actualizar título
     updateModalTitle();
+
+    // 🔥 Renderizar con el filtro correcto
     filterAndRenderList();
 }
 
@@ -309,7 +318,7 @@ function updateModalTitle() {
 }
 
 // ============================================================
-// CARGAR DATOS DE SEGUIDORES/SEGUIDOS (SIEMPRE FRESCO)
+// CARGAR DATOS DE SEGUIDORES/SEGUIDOS
 // ============================================================
 
 async function loadFollowersData(userId) {
@@ -377,11 +386,14 @@ async function loadFollowersData(userId) {
 }
 
 // ============================================================
-// FILTRAR Y RENDERIZAR LISTA
+// 🔥 FILTRAR Y RENDERIZAR LISTA - CORREGIDO
 // ============================================================
 
 function filterAndRenderList() {
+    // 🔥 Usar currentFilter para decidir qué lista mostrar
     const list = currentFilter === 'followers' ? followersList : followingList;
+    
+    console.log(`📋 Filtrando lista: ${currentFilter}, total: ${list.length}`);
     
     if (searchQuery) {
         filteredList = list.filter(user => 
@@ -456,7 +468,7 @@ function renderList(users) {
 }
 
 // ============================================================
-// MANEJAR SEGUIR/DESSEGUIR DESDE EL MODAL
+// MANEJAR SEGUIR/DESSEGUIR
 // ============================================================
 
 window.handleFollowersFollow = async function(userId, btn) {
@@ -510,7 +522,7 @@ window.handleFollowersFollow = async function(userId, btn) {
 };
 
 // ============================================================
-// 🔥 ABRIR PERFIL DESDE EL MODAL DE SEGUIDORES (ESTILO TIKTOK)
+// 🔥 ABRIR PERFIL DESDE SEGUIDORES (ESTILO TIKTOK)
 // ============================================================
 
 window.openProfileFromFollowers = function(userId) {
@@ -518,7 +530,7 @@ window.openProfileFromFollowers = function(userId) {
     
     console.log(`👤 Abriendo perfil de ${userId} desde seguidores`);
     
-    // 🔥 Guardar contexto para volver a seguidores (ESTILO TIKTOK)
+    // 🔥 Guardar contexto para volver a seguidores
     followersContext = {
         userId: currentUserId,
         filter: currentFilter,
@@ -527,47 +539,27 @@ window.openProfileFromFollowers = function(userId) {
     
     console.log(`📌 Contexto guardado:`, followersContext);
     
-    // 🔥 Ocultar modal de seguidores (pero NO cerrarlo completamente)
+    // 🔥 Guardar en window para que profile-modal lo vea
+    window._followersContextData = followersContext;
+    window._fromFollowers = true;
+    
+    // 🔥 Ocultar modal de seguidores (NO cerrar)
     const overlay = document.getElementById('followersModalOverlay');
     if (overlay) {
         overlay.style.display = 'none';
         overlay.classList.remove('active');
     }
     
-    // 🔥 Abrir perfil SUPERPUESTO
+    // 🔥 Abrir perfil
     if (typeof window.openProfileModal === 'function') {
-        // Pasar flag para que el perfil sepa que viene de seguidores
-        window._fromFollowers = true;
-        window._followersContextData = followersContext;
         window.openProfileModal(userId, true);
     } else {
         import('./profile-modal.js').then(({ openProfileModal }) => {
-            window._fromFollowers = true;
-            window._followersContextData = followersContext;
             openProfileModal(userId, true);
         }).catch((err) => {
             console.error('Error abriendo perfil:', err);
             showToast('Error al abrir perfil', true);
         });
-    }
-};
-
-// ============================================================
-// 🔥 FUNCIÓN PARA QUE EL PERFIL RESTAURE SEGUIDORES AL CERRARSE
-// ============================================================
-
-window.restoreFollowersFromProfile = function() {
-    console.log(`🔄 Restaurando seguidores desde perfil`);
-    
-    // 🔥 Restaurar el modal de seguidores
-    if (followersContext) {
-        const context = followersContext;
-        console.log(`📌 Restaurando: userId=${context.userId}, filter=${context.filter}`);
-        
-        // No limpiar el contexto todavía, se usará para restaurar
-        restoreFollowersModal();
-    } else {
-        console.log('⚠️ No hay contexto de seguidores para restaurar');
     }
 };
 
