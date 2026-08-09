@@ -43,11 +43,17 @@
             max-height: 98dvh;
             overflow-y: auto;
             transition: all 0.3s ease;
+            animation: containerIn 0.5s ease;
         }
 
         .container::-webkit-scrollbar { width: 3px; }
         .container::-webkit-scrollbar-track { background: transparent; }
         .container::-webkit-scrollbar-thumb { background: rgba(192,132,252,0.2); border-radius: 10px; }
+
+        @keyframes containerIn {
+            from { opacity: 0; transform: translateY(20px) scale(0.97); }
+            to { opacity: 1; transform: translateY(0) scale(1); }
+        }
 
         /* ============================================================
            LOGO
@@ -79,70 +85,6 @@
             margin-bottom: 20px;
             font-weight: 400;
             letter-spacing: 0.3px;
-        }
-
-        /* ============================================================
-           LOCATION INFO
-        ============================================================ */
-        .location-info {
-            background: rgba(192, 132, 252, 0.06);
-            border: 1px solid rgba(192, 132, 252, 0.1);
-            border-radius: 12px;
-            padding: 10px 14px;
-            margin-bottom: 18px;
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            font-size: 12px;
-            transition: all 0.3s;
-        }
-
-        .location-info .icon {
-            font-size: 16px;
-            color: #c084fc;
-            flex-shrink: 0;
-            width: 24px;
-            text-align: center;
-        }
-
-        .location-info .info-text {
-            flex: 1;
-            color: rgba(255,255,255,0.5);
-            font-size: 12px;
-            line-height: 1.3;
-            min-width: 0;
-        }
-
-        .location-info .info-text strong {
-            color: #c084fc;
-            font-weight: 600;
-        }
-
-        .location-info .status {
-            color: rgba(255,255,255,0.25);
-            font-size: 10px;
-            white-space: nowrap;
-            flex-shrink: 0;
-        }
-
-        .location-info .status .spinner {
-            display: inline-block;
-            width: 12px;
-            height: 12px;
-            border: 2px solid rgba(255,255,255,0.15);
-            border-top: 2px solid #c084fc;
-            border-radius: 50%;
-            animation: spin 0.8s linear infinite;
-            vertical-align: middle;
-            margin-right: 4px;
-        }
-
-        .location-info .status i {
-            font-size: 12px;
-        }
-
-        @keyframes spin {
-            to { transform: rotate(360deg); }
         }
 
         /* ============================================================
@@ -178,21 +120,7 @@
             margin-left: 2px;
         }
 
-        label .auto-detected {
-            color: #22c55e;
-            font-size: 9px;
-            font-weight: 400;
-            margin-left: 4px;
-        }
-
-        label .readonly-badge {
-            color: #fbbf24;
-            font-size: 9px;
-            font-weight: 400;
-            margin-left: 4px;
-        }
-
-        input, select {
+        input {
             width: 100%;
             padding: 10px 14px;
             background: rgba(255,255,255,0.05);
@@ -206,48 +134,21 @@
             appearance: none;
         }
 
-        input:focus, select:focus {
+        input:focus {
             outline: none;
             border-color: #c084fc;
             background: rgba(255,255,255,0.08);
             box-shadow: 0 0 0 3px rgba(192,132,252,0.1);
         }
 
-        input:disabled, select:disabled {
-            opacity: 0.5;
-            cursor: not-allowed;
-            background: rgba(255,255,255,0.02);
-        }
-
         input::placeholder {
             color: rgba(255,255,255,0.2);
         }
 
-        select {
-            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='rgba(255,255,255,0.3)' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
-            background-repeat: no-repeat;
-            background-position: right 12px center;
-            padding-right: 36px;
-        }
-
-        select option {
-            background: #1a1a2e;
-            color: #fff;
-        }
-
-        /* ============================================================
-           GRID
-        ============================================================ */
-        .form-row {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 10px;
-        }
-
-        .form-row-3 {
-            display: grid;
-            grid-template-columns: 1fr 1fr 1fr;
-            gap: 10px;
+        .password-hint {
+            font-size: 10px;
+            color: rgba(255,255,255,0.2);
+            margin-top: 3px;
         }
 
         /* ============================================================
@@ -284,33 +185,6 @@
             cursor: not-allowed;
             transform: none !important;
             box-shadow: none !important;
-        }
-
-        /* ============================================================
-           TOGGLE
-        ============================================================ */
-        .toggle-mode {
-            text-align: center;
-            margin-top: 16px;
-            color: rgba(255,255,255,0.3);
-            font-size: 13px;
-        }
-
-        .toggle-mode a {
-            color: #c084fc;
-            cursor: pointer;
-            font-weight: 500;
-            transition: all 0.2s;
-            text-decoration: none;
-        }
-
-        .toggle-mode a:hover {
-            color: #db2777;
-            text-decoration: underline;
-        }
-
-        .toggle-mode a:active {
-            opacity: 0.7;
         }
 
         /* ============================================================
@@ -355,22 +229,6 @@
         /* ============================================================
            UTILIDADES
         ============================================================ */
-        .hidden {
-            display: none !important;
-        }
-
-        .password-hint {
-            font-size: 10px;
-            color: rgba(255,255,255,0.2);
-            margin-top: 3px;
-        }
-
-        .dob-hint {
-            font-size: 10px;
-            color: rgba(255,255,255,0.2);
-            margin-top: 3px;
-        }
-
         .loading-spinner {
             display: inline-block;
             width: 18px;
@@ -383,14 +241,62 @@
             margin-right: 8px;
         }
 
-        .detected-badge {
-            display: inline-block;
-            background: rgba(34,197,94,0.12);
-            color: #22c55e;
-            font-size: 9px;
-            padding: 1px 8px;
-            border-radius: 20px;
-            margin-left: 4px;
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        /* ============================================================
+           LINKS
+        ============================================================ */
+        .auth-links {
+            margin-top: 16px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .auth-links .divider {
+            width: 100%;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            color: rgba(255,255,255,0.08);
+            font-size: 11px;
+        }
+
+        .auth-links .divider::before,
+        .auth-links .divider::after {
+            content: '';
+            flex: 1;
+            height: 1px;
+            background: rgba(255,255,255,0.05);
+        }
+
+        .auth-links a {
+            color: rgba(255,255,255,0.4);
+            text-decoration: none;
+            font-size: 13px;
+            transition: all 0.3s ease;
+            padding: 8px 16px;
+            border-radius: 50px;
+            background: rgba(255,255,255,0.02);
+            border: 1px solid rgba(255,255,255,0.04);
+        }
+
+        .auth-links a:hover {
+            color: #c084fc;
+            background: rgba(192,132,252,0.06);
+            border-color: rgba(192,132,252,0.1);
+        }
+
+        .auth-links a:active {
+            transform: scale(0.97);
+        }
+
+        .auth-links a i {
+            margin-right: 8px;
+            font-size: 13px;
         }
 
         /* ============================================================
@@ -401,21 +307,16 @@
             .container { padding: 20px 16px; border-radius: 20px; max-height: 96vh; max-height: 96dvh; }
             .logo { font-size: 22px; }
             .subtitle { font-size: 12px; margin-bottom: 16px; }
-            .form-row { grid-template-columns: 1fr; gap: 0; }
-            .form-row-3 { grid-template-columns: 1fr; gap: 0; }
             h2 { font-size: 17px; margin-bottom: 14px; }
-            input, select { font-size: 15px; padding: 11px 12px; }
+            input { font-size: 15px; padding: 11px 12px; }
             .btn { font-size: 15px; padding: 12px; }
-            .location-info { font-size: 11px; padding: 8px 12px; }
-            .location-info .icon { font-size: 14px; }
-            .toggle-mode { font-size: 12px; margin-top: 14px; }
             .message { font-size: 12px; padding: 8px 12px; }
         }
 
         @media (max-width: 380px) {
             .container { padding: 14px 12px; }
             .logo { font-size: 19px; }
-            input, select { font-size: 14px; padding: 9px 10px; }
+            input { font-size: 14px; padding: 9px 10px; }
             .btn { font-size: 14px; padding: 10px; }
             label { font-size: 11px; }
         }
@@ -431,13 +332,11 @@
             .subtitle { font-size: 11px; margin-bottom: 10px; }
             h2 { font-size: 15px; margin-bottom: 10px; }
             .form-group { margin-bottom: 8px; }
-            input, select { padding: 8px 10px; font-size: 13px; }
+            input { padding: 8px 10px; font-size: 13px; }
             .btn { padding: 9px; font-size: 13px; margin-top: 4px; }
-            .location-info { padding: 6px 10px; margin-bottom: 10px; font-size: 10px; }
-            .toggle-mode { margin-top: 10px; font-size: 11px; }
-            .form-row { grid-template-columns: 1fr 1fr; gap: 6px; }
-            .form-row-3 { grid-template-columns: 1fr 1fr 1fr; gap: 6px; }
             .message { padding: 6px 10px; font-size: 11px; margin-bottom: 8px; }
+            .auth-links { margin-top: 10px; }
+            .auth-links a { font-size: 11px; padding: 6px 12px; }
         }
 
         @media (min-width: 1024px) {
@@ -445,7 +344,7 @@
         }
 
         /* ============================================================
-           DARK MODE SUPPORT (POR SI ACASO)
+           DARK MODE SUPPORT
         ============================================================ */
         @media (prefers-color-scheme: light) {
             .container {
@@ -455,21 +354,9 @@
         }
 
         /* ============================================================
-           ANIMACIONES ADICIONALES
-        ============================================================ */
-        .container {
-            animation: containerIn 0.5s ease;
-        }
-
-        @keyframes containerIn {
-            from { opacity: 0; transform: translateY(20px) scale(0.97); }
-            to { opacity: 1; transform: translateY(0) scale(1); }
-        }
-
-        /* ============================================================
            MEJORAS DE ACCESIBILIDAD
         ============================================================ */
-        input:focus-visible, select:focus-visible, .btn:focus-visible {
+        input:focus-visible, .btn:focus-visible, .auth-links a:focus-visible {
             outline: 2px solid #c084fc;
             outline-offset: 2px;
         }
@@ -484,71 +371,15 @@
     </style>
 </head>
 <body>
-    <div class="container" role="main" aria-label="Login y registro">
+    <div class="container" role="main" aria-label="Iniciar sesión">
         <div class="logo"><i class="fas fa-bolt"></i> Vyn Social</div>
         <div class="subtitle">Conecta con el mundo</div>
         
-        <!-- Ubicación detectada automáticamente -->
-        <div class="location-info" id="locationInfo" role="status" aria-live="polite">
-            <div class="icon"><i class="fas fa-globe-americas"></i></div>
-            <div class="info-text">
-                <span id="locationText">Detectando ubicación...</span>
-            </div>
-            <div class="status" id="locationStatus">
-                <span class="spinner"></span> Buscando...
-            </div>
-        </div>
-        
-        <h2 id="formTitle">Iniciar Sesión</h2>
+        <h2>Iniciar Sesión</h2>
         
         <div id="message" class="message" role="alert"></div>
         
-        <form id="authForm" novalidate>
-            <!-- Campos de registro -->
-            <div id="registerFields" class="hidden">
-                <div class="form-group">
-                    <label>Nombre de usuario <span class="required">*</span></label>
-                    <input type="text" id="username" placeholder="ej: juan_perez" autocomplete="username" maxlength="30" aria-label="Nombre de usuario">
-                </div>
-                
-                <div class="form-group">
-                    <label>Nombre completo <span class="required">*</span></label>
-                    <input type="text" id="fullName" placeholder="Juan Pérez" autocomplete="name" maxlength="50" aria-label="Nombre completo">
-                </div>
-                
-                <div class="form-row-3">
-                    <div class="form-group">
-                        <label>Fecha de nacimiento <span class="required">*</span></label>
-                        <input type="date" id="birthDate" max="2013-01-01" min="1900-01-01" aria-label="Fecha de nacimiento">
-                        <div class="dob-hint">Debes tener al menos 13 años</div>
-                    </div>
-                    <div class="form-group">
-                        <label>Edad</label>
-                        <input type="text" id="ageDisplay" disabled placeholder="-- años" aria-label="Edad calculada">
-                    </div>
-                    <div class="form-group">
-                        <label>Idioma <span class="required">*</span></label>
-                        <select id="language" aria-label="Idioma">
-                            <!-- Cargado por JavaScript -->
-                        </select>
-                    </div>
-                </div>
-                
-                <div class="form-row">
-                    <div class="form-group">
-                        <label>País <span class="auto-detected">(detectado)</span></label>
-                        <input type="text" id="countryDisplay" disabled placeholder="Detectando país..." aria-label="País detectado">
-                        <input type="hidden" id="countryCode">
-                    </div>
-                    <div class="form-group">
-                        <label>Región / Continente <span class="readonly-badge">(no modificable)</span></label>
-                        <input type="text" id="regionDisplay" disabled placeholder="Detectando región..." aria-label="Región detectada">
-                        <input type="hidden" id="region">
-                    </div>
-                </div>
-            </div>
-            
-            <!-- Campos comunes -->
+        <form id="loginForm" novalidate>
             <div class="form-group">
                 <label>Email <span class="required">*</span></label>
                 <input type="email" id="email" required placeholder="tu@email.com" autocomplete="email" aria-label="Correo electrónico">
@@ -560,19 +391,24 @@
                 <div class="password-hint">Mínimo 6 caracteres</div>
             </div>
             
-            <button type="submit" class="btn" id="submitBtn" aria-label="Enviar formulario">
+            <button type="submit" class="btn" id="submitBtn" aria-label="Iniciar sesión">
                 <span id="btnText">Iniciar Sesión</span>
             </button>
         </form>
         
-        <div class="toggle-mode">
-            <a id="toggleLink" role="button" tabindex="0">¿No tienes cuenta? Regístrate</a>
+        <div class="auth-links">
+            <div class="divider">
+                <span>o</span>
+            </div>
+            <a href="/register.html" id="registerLink">
+                <i class="fas fa-user-plus"></i> Crear nueva cuenta
+            </a>
         </div>
     </div>
 
     <script>
         // ============================================================
-        // DETECCIÓN DE DISPOSITIVO MÓVIL (SOLO TELÉFONOS)
+        // DETECCIÓN DE DISPOSITIVO MÓVIL
         // ============================================================
 
         function isMobileDevice() {
@@ -607,10 +443,8 @@
             }
         }
 
-        // Ejecutar inmediatamente
         redirectToMobileIfNeeded();
 
-        // También al cambiar el tamaño de la ventana
         let resizeTimeout;
         window.addEventListener('resize', () => {
             clearTimeout(resizeTimeout);
@@ -622,380 +456,20 @@
         });
 
         // ============================================================
-        // REGIONES / CONTINENTES
-        // ============================================================
-        const REGIONS = {
-            'north_america': '🌎 América del Norte',
-            'central_america': '🌎 Centroamérica y Caribe',
-            'south_america': '🌎 Sudamérica',
-            'europe': '🌍 Europa',
-            'asia': '🌏 Asia',
-            'africa': '🌍 África',
-            'oceania': '🌏 Oceanía',
-            'antarctica': '❄️ Antártida',
-            'other': '🌐 Otra región'
-        };
-
-        // ============================================================
-        // PAÍSES
-        // ============================================================
-        const COUNTRIES = {
-            'CA': 'Canadá', 'US': 'Estados Unidos', 'MX': 'México', 'GL': 'Groenlandia',
-            'BZ': 'Belice', 'CR': 'Costa Rica', 'SV': 'El Salvador', 'GT': 'Guatemala',
-            'HN': 'Honduras', 'NI': 'Nicaragua', 'PA': 'Panamá',
-            'AI': 'Anguila', 'AG': 'Antigua y Barbuda', 'AW': 'Aruba', 'BS': 'Bahamas',
-            'BB': 'Barbados', 'BQ': 'Bonaire', 'KY': 'Islas Caimán', 'CU': 'Cuba',
-            'CW': 'Curazao', 'DM': 'Dominica', 'DO': 'República Dominicana', 'GD': 'Granada',
-            'GP': 'Guadalupe', 'HT': 'Haití', 'JM': 'Jamaica', 'MQ': 'Martinica',
-            'MS': 'Montserrat', 'PR': 'Puerto Rico', 'BL': 'San Bartolomé', 'KN': 'San Cristóbal y Nieves',
-            'LC': 'Santa Lucía', 'MF': 'San Martín', 'VC': 'San Vicente y las Granadinas',
-            'SX': 'Sint Maarten', 'TT': 'Trinidad y Tobago', 'TC': 'Islas Turcas y Caicos',
-            'VG': 'Islas Vírgenes Británicas', 'VI': 'Islas Vírgenes de EE.UU.',
-            'AR': 'Argentina', 'BO': 'Bolivia', 'BR': 'Brasil', 'CL': 'Chile',
-            'CO': 'Colombia', 'EC': 'Ecuador', 'GY': 'Guyana', 'PY': 'Paraguay',
-            'PE': 'Perú', 'SR': 'Surinam', 'UY': 'Uruguay', 'VE': 'Venezuela',
-            'GF': 'Guayana Francesa', 'FK': 'Islas Malvinas',
-            'AL': 'Albania', 'DE': 'Alemania', 'AD': 'Andorra', 'AT': 'Austria',
-            'BY': 'Bielorrusia', 'BE': 'Bélgica', 'BA': 'Bosnia y Herzegovina', 'BG': 'Bulgaria',
-            'VA': 'Ciudad del Vaticano', 'HR': 'Croacia', 'DK': 'Dinamarca', 'SK': 'Eslovaquia',
-            'SI': 'Eslovenia', 'ES': 'España', 'EE': 'Estonia', 'FI': 'Finlandia',
-            'FR': 'Francia', 'GR': 'Grecia', 'HU': 'Hungría', 'IE': 'Irlanda',
-            'IS': 'Islandia', 'IT': 'Italia', 'XK': 'Kosovo', 'LV': 'Letonia',
-            'LI': 'Liechtenstein', 'LT': 'Lituania', 'LU': 'Luxemburgo', 'MT': 'Malta',
-            'MD': 'Moldavia', 'MC': 'Mónaco', 'ME': 'Montenegro', 'NO': 'Noruega',
-            'NL': 'Países Bajos', 'PL': 'Polonia', 'PT': 'Portugal', 'GB': 'Reino Unido',
-            'CZ': 'República Checa', 'RO': 'Rumania', 'RU': 'Rusia', 'SM': 'San Marino',
-            'RS': 'Serbia', 'SE': 'Suecia', 'CH': 'Suiza', 'UA': 'Ucrania',
-            'FO': 'Islas Feroe', 'GI': 'Gibraltar', 'IM': 'Isla de Man',
-            'JE': 'Jersey', 'GG': 'Guernsey',
-            'AF': 'Afganistán', 'SA': 'Arabia Saudita', 'AM': 'Armenia', 'AZ': 'Azerbaiyán',
-            'BH': 'Baréin', 'BD': 'Bangladés', 'BT': 'Bután', 'BN': 'Brunéi',
-            'KH': 'Camboya', 'KZ': 'Kazajistán', 'CN': 'China', 'CY': 'Chipre',
-            'KR': 'Corea del Sur', 'KP': 'Corea del Norte', 'AE': 'Emiratos Árabes Unidos',
-            'PH': 'Filipinas', 'GE': 'Georgia', 'IN': 'India', 'ID': 'Indonesia',
-            'IR': 'Irán', 'IQ': 'Irak', 'IL': 'Israel', 'JP': 'Japón',
-            'JO': 'Jordania', 'KW': 'Kuwait', 'LA': 'Laos', 'LB': 'Líbano',
-            'MY': 'Malasia', 'MV': 'Maldivas', 'MN': 'Mongolia', 'MM': 'Myanmar',
-            'NP': 'Nepal', 'OM': 'Omán', 'PK': 'Pakistán', 'PS': 'Palestina',
-            'QA': 'Catar', 'SG': 'Singapur', 'SY': 'Siria', 'LK': 'Sri Lanka',
-            'TH': 'Tailandia', 'TW': 'Taiwán', 'TJ': 'Tayikistán', 'TL': 'Timor-Leste',
-            'TR': 'Turquía', 'TM': 'Turkmenistán', 'UZ': 'Uzbekistán', 'VN': 'Vietnam',
-            'YE': 'Yemen', 'HK': 'Hong Kong', 'MO': 'Macao',
-            'ZA': 'Sudáfrica', 'DZ': 'Argelia', 'AO': 'Angola', 'BJ': 'Benín',
-            'BW': 'Botsuana', 'BF': 'Burkina Faso', 'BI': 'Burundi', 'CV': 'Cabo Verde',
-            'CM': 'Camerún', 'CF': 'República Centroafricana', 'TD': 'Chad', 'KM': 'Comoras',
-            'CG': 'Congo', 'CD': 'Congo (RDC)', 'CI': 'Costa de Marfil', 'DJ': 'Yibuti',
-            'EG': 'Egipto', 'ER': 'Eritrea', 'SZ': 'Esuatini', 'ET': 'Etiopía',
-            'GA': 'Gabón', 'GM': 'Gambia', 'GH': 'Ghana', 'GN': 'Guinea',
-            'GW': 'Guinea-Bisáu', 'GQ': 'Guinea Ecuatorial', 'KE': 'Kenia', 'LS': 'Lesoto',
-            'LR': 'Liberia', 'LY': 'Libia', 'MG': 'Madagascar', 'MW': 'Malaui',
-            'ML': 'Malí', 'MA': 'Marruecos', 'MU': 'Mauricio', 'MR': 'Mauritania',
-            'MZ': 'Mozambique', 'NA': 'Namibia', 'NE': 'Níger', 'NG': 'Nigeria',
-            'RW': 'Ruanda', 'ST': 'Santo Tomé y Príncipe', 'SN': 'Senegal', 'SC': 'Seychelles',
-            'SL': 'Sierra Leona', 'SO': 'Somalia', 'SD': 'Sudán', 'SS': 'Sudán del Sur',
-            'TZ': 'Tanzania', 'TG': 'Togo', 'TN': 'Túnez', 'UG': 'Uganda',
-            'ZM': 'Zambia', 'ZW': 'Zimbabue', 'EH': 'Sahara Occidental',
-            'AU': 'Australia', 'FJ': 'Fiyi', 'FM': 'Micronesia', 'GU': 'Guam',
-            'KI': 'Kiribati', 'MH': 'Islas Marshall', 'NR': 'Nauru', 'NC': 'Nueva Caledonia',
-            'NZ': 'Nueva Zelanda', 'PW': 'Palaos', 'PG': 'Papúa Nueva Guinea',
-            'SB': 'Islas Salomón', 'WS': 'Samoa', 'TO': 'Tonga', 'TV': 'Tuvalu',
-            'VU': 'Vanuatu', 'PF': 'Polinesia Francesa',
-            'AQ': 'Antártida', 'GS': 'Islas Georgias del Sur', 'BV': 'Isla Bouvet',
-            'HM': 'Islas Heard y McDonald'
-        };
-
-        // ============================================================
-        // IDIOMAS
-        // ============================================================
-        const LANGUAGES = [
-            { code: 'es', name: 'Español' },
-            { code: 'en', name: 'Inglés' },
-            { code: 'pt', name: 'Portugués' },
-            { code: 'fr', name: 'Francés' },
-            { code: 'de', name: 'Alemán' },
-            { code: 'it', name: 'Italiano' },
-            { code: 'nl', name: 'Neerlandés' },
-            { code: 'ru', name: 'Ruso' },
-            { code: 'zh', name: 'Chino' },
-            { code: 'ja', name: 'Japonés' },
-            { code: 'ko', name: 'Coreano' },
-            { code: 'ar', name: 'Árabe' },
-            { code: 'hi', name: 'Hindi' },
-            { code: 'bn', name: 'Bengalí' },
-            { code: 'pa', name: 'Punyabí' },
-            { code: 'ur', name: 'Urdu' },
-            { code: 'fa', name: 'Persa' },
-            { code: 'tr', name: 'Turco' },
-            { code: 'vi', name: 'Vietnamita' },
-            { code: 'th', name: 'Tailandés' },
-            { code: 'id', name: 'Indonesio' },
-            { code: 'ms', name: 'Malayo' },
-            { code: 'tl', name: 'Tagalo' },
-            { code: 'sw', name: 'Suajili' },
-            { code: 'af', name: 'Afrikáans' },
-            { code: 'am', name: 'Amárico' },
-            { code: 'yo', name: 'Yoruba' },
-            { code: 'ig', name: 'Igbo' },
-            { code: 'ha', name: 'Hausa' },
-            { code: 'so', name: 'Somalí' },
-            { code: 'el', name: 'Griego' },
-            { code: 'pl', name: 'Polaco' },
-            { code: 'cs', name: 'Checo' },
-            { code: 'hu', name: 'Húngaro' },
-            { code: 'ro', name: 'Rumano' },
-            { code: 'bg', name: 'Búlgaro' },
-            { code: 'sr', name: 'Serbio' },
-            { code: 'hr', name: 'Croata' },
-            { code: 'sk', name: 'Eslovaco' },
-            { code: 'sl', name: 'Esloveno' },
-            { code: 'lt', name: 'Lituano' },
-            { code: 'lv', name: 'Letón' },
-            { code: 'et', name: 'Estonio' },
-            { code: 'fi', name: 'Finlandés' },
-            { code: 'sv', name: 'Sueco' },
-            { code: 'no', name: 'Noruego' },
-            { code: 'da', name: 'Danés' },
-            { code: 'is', name: 'Islandés' },
-            { code: 'ga', name: 'Irlandés' },
-            { code: 'cy', name: 'Galés' }
-        ];
-
-        // ============================================================
-        // MAPA DE PAÍSES POR REGIÓN
-        // ============================================================
-        const COUNTRY_REGION_MAP = {
-            'CA': 'north_america', 'US': 'north_america', 'MX': 'north_america', 'GL': 'north_america',
-            'BZ': 'central_america', 'CR': 'central_america', 'SV': 'central_america',
-            'GT': 'central_america', 'HN': 'central_america', 'NI': 'central_america', 'PA': 'central_america',
-            'AI': 'central_america', 'AG': 'central_america', 'AW': 'central_america',
-            'BS': 'central_america', 'BB': 'central_america', 'BQ': 'central_america',
-            'KY': 'central_america', 'CU': 'central_america', 'CW': 'central_america',
-            'DM': 'central_america', 'DO': 'central_america', 'GD': 'central_america',
-            'GP': 'central_america', 'HT': 'central_america', 'JM': 'central_america',
-            'MQ': 'central_america', 'MS': 'central_america', 'PR': 'central_america',
-            'BL': 'central_america', 'KN': 'central_america', 'LC': 'central_america',
-            'MF': 'central_america', 'VC': 'central_america', 'SX': 'central_america',
-            'TT': 'central_america', 'TC': 'central_america', 'VG': 'central_america', 'VI': 'central_america',
-            'AR': 'south_america', 'BO': 'south_america', 'BR': 'south_america',
-            'CL': 'south_america', 'CO': 'south_america', 'EC': 'south_america',
-            'GY': 'south_america', 'PY': 'south_america', 'PE': 'south_america',
-            'SR': 'south_america', 'UY': 'south_america', 'VE': 'south_america',
-            'GF': 'south_america', 'FK': 'south_america',
-            'AL': 'europe', 'DE': 'europe', 'AD': 'europe', 'AT': 'europe',
-            'BY': 'europe', 'BE': 'europe', 'BA': 'europe', 'BG': 'europe',
-            'VA': 'europe', 'HR': 'europe', 'DK': 'europe', 'SK': 'europe',
-            'SI': 'europe', 'ES': 'europe', 'EE': 'europe', 'FI': 'europe',
-            'FR': 'europe', 'GR': 'europe', 'HU': 'europe', 'IE': 'europe',
-            'IS': 'europe', 'IT': 'europe', 'XK': 'europe', 'LV': 'europe',
-            'LI': 'europe', 'LT': 'europe', 'LU': 'europe', 'MT': 'europe',
-            'MD': 'europe', 'MC': 'europe', 'ME': 'europe', 'NO': 'europe',
-            'NL': 'europe', 'PL': 'europe', 'PT': 'europe', 'GB': 'europe',
-            'CZ': 'europe', 'RO': 'europe', 'RU': 'europe', 'SM': 'europe',
-            'RS': 'europe', 'SE': 'europe', 'CH': 'europe', 'UA': 'europe',
-            'FO': 'europe', 'GI': 'europe', 'IM': 'europe', 'JE': 'europe', 'GG': 'europe',
-            'TR': 'europe',
-            'AF': 'asia', 'SA': 'asia', 'AM': 'asia', 'AZ': 'asia',
-            'BH': 'asia', 'BD': 'asia', 'BT': 'asia', 'BN': 'asia',
-            'KH': 'asia', 'KZ': 'asia', 'CN': 'asia', 'CY': 'asia',
-            'KR': 'asia', 'KP': 'asia', 'AE': 'asia', 'PH': 'asia',
-            'GE': 'asia', 'IN': 'asia', 'ID': 'asia', 'IR': 'asia',
-            'IQ': 'asia', 'IL': 'asia', 'JP': 'asia', 'JO': 'asia',
-            'KW': 'asia', 'LA': 'asia', 'LB': 'asia', 'MY': 'asia',
-            'MV': 'asia', 'MN': 'asia', 'MM': 'asia', 'NP': 'asia',
-            'OM': 'asia', 'PK': 'asia', 'PS': 'asia', 'QA': 'asia',
-            'SG': 'asia', 'SY': 'asia', 'LK': 'asia', 'TH': 'asia',
-            'TW': 'asia', 'TJ': 'asia', 'TL': 'asia', 'TM': 'asia',
-            'UZ': 'asia', 'VN': 'asia', 'YE': 'asia', 'HK': 'asia', 'MO': 'asia',
-            'ZA': 'africa', 'DZ': 'africa', 'AO': 'africa', 'BJ': 'africa',
-            'BW': 'africa', 'BF': 'africa', 'BI': 'africa', 'CV': 'africa',
-            'CM': 'africa', 'CF': 'africa', 'TD': 'africa', 'KM': 'africa',
-            'CG': 'africa', 'CD': 'africa', 'CI': 'africa', 'DJ': 'africa',
-            'EG': 'africa', 'ER': 'africa', 'SZ': 'africa', 'ET': 'africa',
-            'GA': 'africa', 'GM': 'africa', 'GH': 'africa', 'GN': 'africa',
-            'GW': 'africa', 'GQ': 'africa', 'KE': 'africa', 'LS': 'africa',
-            'LR': 'africa', 'LY': 'africa', 'MG': 'africa', 'MW': 'africa',
-            'ML': 'africa', 'MA': 'africa', 'MU': 'africa', 'MR': 'africa',
-            'MZ': 'africa', 'NA': 'africa', 'NE': 'africa', 'NG': 'africa',
-            'RW': 'africa', 'ST': 'africa', 'SN': 'africa', 'SC': 'africa',
-            'SL': 'africa', 'SO': 'africa', 'SD': 'africa', 'SS': 'africa',
-            'TZ': 'africa', 'TG': 'africa', 'TN': 'africa', 'UG': 'africa',
-            'ZM': 'africa', 'ZW': 'africa', 'EH': 'africa',
-            'AU': 'oceania', 'FJ': 'oceania', 'FM': 'oceania', 'GU': 'oceania',
-            'KI': 'oceania', 'MH': 'oceania', 'NR': 'oceania', 'NC': 'oceania',
-            'NZ': 'oceania', 'PW': 'oceania', 'PG': 'oceania', 'SB': 'oceania',
-            'WS': 'oceania', 'TO': 'oceania', 'TV': 'oceania', 'VU': 'oceania', 'PF': 'oceania',
-            'AQ': 'antarctica', 'GS': 'antarctica', 'BV': 'antarctica', 'HM': 'antarctica'
-        };
-
-        // ============================================================
         // CONFIGURACIÓN
         // ============================================================
         const API_URL = window.location.origin;
-        let isLogin = true;
         let isLoading = false;
-        let locationDetected = false;
-        let userCountry = null;
-        let userCountryCode = null;
-        let detectedRegion = null;
 
         // ============================================================
         // DOM ELEMENTS
         // ============================================================
-        const form = document.getElementById('authForm');
-        const title = document.getElementById('formTitle');
+        const form = document.getElementById('loginForm');
         const submitBtn = document.getElementById('submitBtn');
         const btnText = document.getElementById('btnText');
-        const toggleLink = document.getElementById('toggleLink');
         const messageEl = document.getElementById('message');
-        const registerFields = document.getElementById('registerFields');
-        const locationText = document.getElementById('locationText');
-        const locationStatus = document.getElementById('locationStatus');
-
         const emailInput = document.getElementById('email');
         const passwordInput = document.getElementById('password');
-        const usernameInput = document.getElementById('username');
-        const fullNameInput = document.getElementById('fullName');
-        const birthDateInput = document.getElementById('birthDate');
-        const ageDisplayInput = document.getElementById('ageDisplay');
-        const languageSelect = document.getElementById('language');
-        const countryDisplay = document.getElementById('countryDisplay');
-        const countryCodeInput = document.getElementById('countryCode');
-        const regionDisplay = document.getElementById('regionDisplay');
-        const regionInput = document.getElementById('region');
-
-        // ============================================================
-        // CARGAR IDIOMAS
-        // ============================================================
-        function loadLanguages() {
-            languageSelect.innerHTML = '';
-            LANGUAGES.sort((a, b) => a.name.localeCompare(b.name));
-            LANGUAGES.forEach(lang => {
-                const option = document.createElement('option');
-                option.value = lang.code;
-                option.textContent = lang.name;
-                languageSelect.appendChild(option);
-            });
-            const browserLang = navigator.language.split('-')[0];
-            const langMatch = LANGUAGES.find(l => l.code === browserLang);
-            if (langMatch) languageSelect.value = langMatch.code;
-        }
-
-        // ============================================================
-        // CALCULAR EDAD
-        // ============================================================
-        function calculateAge(birthDate) {
-            if (!birthDate) return null;
-            const today = new Date();
-            const birth = new Date(birthDate);
-            let age = today.getFullYear() - birth.getFullYear();
-            const m = today.getMonth() - birth.getMonth();
-            if (m < 0 || (m === 0 && today.getDate() < birth.getDate())) age--;
-            return age;
-        }
-
-        birthDateInput.addEventListener('change', function() {
-            const age = calculateAge(this.value);
-            if (age !== null) {
-                ageDisplayInput.value = age + ' años';
-                if (age < 13) {
-                    ageDisplayInput.style.color = '#ff6b6b';
-                    showMessage('Debes tener al menos 13 años para registrarte', 'error');
-                } else {
-                    ageDisplayInput.style.color = '#22c55e';
-                    hideMessage();
-                }
-            } else {
-                ageDisplayInput.value = '-- años';
-                ageDisplayInput.style.color = '';
-            }
-        });
-
-        // ============================================================
-        // DETECCIÓN DE UBICACIÓN
-        // ============================================================
-        function detectLocation() {
-            locationText.textContent = 'Detectando ubicación...';
-            locationStatus.innerHTML = '<span class="spinner"></span> Buscando...';
-
-            fetch('https://ipapi.co/json/')
-                .then(res => res.json())
-                .then(data => {
-                    if (data && data.country_code && data.country_name) {
-                        userCountryCode = data.country_code.toUpperCase();
-                        userCountry = data.country_name;
-                        detectedRegion = COUNTRY_REGION_MAP[userCountryCode] || 'other';
-                        updateLocationUI(true);
-                        return;
-                    }
-                    throw new Error('No se pudo obtener ubicación por IP');
-                })
-                .catch(() => {
-                    fetch('http://ip-api.com/json/')
-                        .then(res => res.json())
-                        .then(data => {
-                            if (data && data.status === 'success') {
-                                userCountryCode = data.countryCode;
-                                userCountry = data.country;
-                                detectedRegion = COUNTRY_REGION_MAP[userCountryCode] || 'other';
-                                updateLocationUI(true);
-                            } else {
-                                updateLocationUI(false);
-                            }
-                        })
-                        .catch(() => {
-                            try {
-                                const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
-                                let region = 'other';
-                                if (timezone.includes('America')) {
-                                    if (timezone.includes('North') || timezone.includes('US') || timezone.includes('Canada') || timezone.includes('Mexico')) {
-                                        region = 'north_america';
-                                    } else if (timezone.includes('Central') || timezone.includes('Caribbean')) {
-                                        region = 'central_america';
-                                    } else {
-                                        region = 'south_america';
-                                    }
-                                } else if (timezone.includes('Europe')) {
-                                    region = 'europe';
-                                } else if (timezone.includes('Asia')) {
-                                    region = 'asia';
-                                } else if (timezone.includes('Africa')) {
-                                    region = 'africa';
-                                } else if (timezone.includes('Pacific') || timezone.includes('Australia')) {
-                                    region = 'oceania';
-                                } else if (timezone.includes('Antarctica')) {
-                                    region = 'antarctica';
-                                }
-                                detectedRegion = region;
-                                userCountry = 'Desconocido';
-                                userCountryCode = 'OT';
-                                updateLocationUI(false);
-                            } catch (e) {
-                                updateLocationUI(false);
-                            }
-                        });
-                });
-        }
-
-        function updateLocationUI(success) {
-            locationDetected = true;
-            if (success && userCountry) {
-                const countryName = COUNTRIES[userCountryCode] || userCountry;
-                countryDisplay.value = countryName;
-                countryCodeInput.value = userCountryCode;
-                const regionName = REGIONS[detectedRegion] || '🌐 Otra región';
-                regionDisplay.value = regionName;
-                regionInput.value = detectedRegion || 'other';
-                locationText.textContent = `📍 ${countryName} • ${regionName}`;
-                locationStatus.innerHTML = '<i class="fas fa-check-circle" style="color:#22c55e;"></i> Detectado';
-                locationStatus.style.color = '#22c55e';
-            } else {
-                countryDisplay.value = 'No detectado (selecciona manualmente)';
-                regionDisplay.value = 'No detectado (selecciona manualmente)';
-                locationText.textContent = '🌍 Ubicación no detectada';
-                locationStatus.innerHTML = '<i class="fas fa-exclamation-circle" style="color:#fbbf24;"></i> Manual';
-                locationStatus.style.color = '#fbbf24';
-            }
-        }
 
         // ============================================================
         // FUNCIONES
@@ -1016,7 +490,7 @@
             if (loading) {
                 btnText.innerHTML = '<span class="loading-spinner"></span> Cargando...';
             } else {
-                btnText.textContent = isLogin ? 'Iniciar Sesión' : 'Registrarse';
+                btnText.textContent = 'Iniciar Sesión';
             }
         }
 
@@ -1027,43 +501,6 @@
         function validatePassword(password) {
             return password.length >= 6;
         }
-
-        function validateAge(birthDate) {
-            const age = calculateAge(birthDate);
-            return age !== null && age >= 13;
-        }
-
-        // ============================================================
-        // TOGGLE MODE
-        // ============================================================
-        toggleLink.addEventListener('click', () => {
-            isLogin = !isLogin;
-            hideMessage();
-            if (isLogin) {
-                registerFields.classList.add('hidden');
-                title.textContent = 'Iniciar Sesión';
-                btnText.textContent = 'Iniciar Sesión';
-                toggleLink.textContent = '¿No tienes cuenta? Regístrate';
-            } else {
-                registerFields.classList.remove('hidden');
-                title.textContent = 'Crear Cuenta';
-                btnText.textContent = 'Registrarse';
-                toggleLink.textContent = '¿Ya tienes cuenta? Inicia Sesión';
-                if (locationDetected) {
-                    updateLocationUI(true);
-                } else {
-                    detectLocation();
-                }
-            }
-        });
-
-        // Soporte para teclado (Enter en toggle)
-        toggleLink.addEventListener('keydown', (e) => {
-            if (e.key === 'Enter' || e.key === ' ') {
-                e.preventDefault();
-                toggleLink.click();
-            }
-        });
 
         // ============================================================
         // SUBMIT
@@ -1077,7 +514,7 @@
             const password = passwordInput.value;
 
             if (!email || !password) {
-                showMessage('Por favor, completa todos los campos obligatorios', 'error');
+                showMessage('Por favor, completa todos los campos', 'error');
                 return;
             }
             if (!validateEmail(email)) {
@@ -1089,67 +526,13 @@
                 return;
             }
 
-            let url = `${API_URL}/api/auth/login`;
-            let body = { email, password };
-
-            if (!isLogin) {
-                const username = usernameInput.value.trim();
-                const fullName = fullNameInput.value.trim();
-                const birthDate = birthDateInput.value;
-                const language = languageSelect.value;
-                const region = regionInput.value || 'other';
-
-                if (!username || !fullName || !birthDate) {
-                    showMessage('Por favor, completa todos los campos de registro', 'error');
-                    return;
-                }
-                if (username.length < 3) {
-                    showMessage('El nombre de usuario debe tener al menos 3 caracteres', 'error');
-                    return;
-                }
-                if (!validateAge(birthDate)) {
-                    showMessage('Debes tener al menos 13 años para registrarte', 'error');
-                    return;
-                }
-
-                let country = countryCodeInput.value || 'OT';
-                let countryName = countryDisplay.value || 'Otro';
-                if (country && country !== 'OT' && COUNTRIES[country]) {
-                    countryName = COUNTRIES[country];
-                }
-                if (!countryCodeInput.value && countryDisplay.value && countryDisplay.value !== 'No detectado (selecciona manualmente)') {
-                    const found = Object.entries(COUNTRIES).find(([code, name]) => 
-                        name.toLowerCase() === countryDisplay.value.toLowerCase()
-                    );
-                    if (found) {
-                        country = found[0];
-                        countryName = found[1];
-                    }
-                }
-
-                const age = calculateAge(birthDate);
-                url = `${API_URL}/api/auth/register`;
-                body = {
-                    username,
-                    email,
-                    password,
-                    fullName,
-                    birthDate,
-                    age,
-                    language,
-                    region,
-                    country,
-                    countryName
-                };
-            }
-
             setLoading(true);
 
             try {
-                const res = await fetch(url, {
+                const res = await fetch(`${API_URL}/api/auth/login`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(body)
+                    body: JSON.stringify({ email, password })
                 });
 
                 const data = await res.json();
@@ -1157,7 +540,7 @@
                 if (res.ok) {
                     localStorage.setItem('token', data.token);
                     localStorage.setItem('user', JSON.stringify(data.user));
-                    showMessage('¡Éxito! Redirigiendo...', 'success');
+                    showMessage('¡Bienvenido! Redirigiendo...', 'success');
                     setTimeout(() => {
                         if (isMobileDevice()) {
                             window.location.href = '/mobile/index.html';
@@ -1166,7 +549,7 @@
                         }
                     }, 1200);
                 } else {
-                    showMessage(data.error || 'Error al procesar la solicitud', 'error');
+                    showMessage(data.error || 'Error al iniciar sesión', 'error');
                     setLoading(false);
                 }
             } catch (err) {
@@ -1196,11 +579,8 @@
         });
 
         // ============================================================
-        // INICIALIZACIÓN
+        // VERIFICAR SESIÓN
         // ============================================================
-        loadLanguages();
-        detectLocation();
-
         (function checkAuth() {
             const token = localStorage.getItem('token');
             if (token) {
@@ -1222,9 +602,6 @@
 
         console.log('🔐 Vyn Social Login cargado');
         console.log('📱 Detección de móvil activa');
-        console.log('🌍 Regiones disponibles:', Object.keys(REGIONS).length);
-        console.log('🌎 Países disponibles:', Object.keys(COUNTRIES).length);
-        console.log('🗣️ Idiomas disponibles:', LANGUAGES.length);
     </script>
 </body>
 </html>
