@@ -1,6 +1,6 @@
 // followers-modal.js - Modal de seguidores/seguidos (VERSIÓN CORREGIDA)
 // CON NAVEGACIÓN POR PILA Y CONTEXTO COMPLETO
-// 🔥 EL PERFIL PROPIO SE ABRE EN EL MODAL, NO EN PROFILE-NATIVE
+// 🔥 SOPORTE PARA PROFILE-NATIVE Y PROFILE-MODAL
 
 import { getToken, getCurrentUser, showToast, getAvatar, escapeHtml } from './auth.js';
 
@@ -19,8 +19,9 @@ let filteredList = [];
 let searchQuery = '';
 let isLoading = false;
 let isFromProfile = false;
+let isFromNative = false; // 🔥 NUEVO: saber si vino de profile-native
 
-// 🔥 CONTEXTO PARA NAVEGACIÓN (se mantiene entre modales)
+// 🔥 CONTEXTO PARA NAVEGACIÓN
 let followersContext = null;
 let followersNavigationStack = [];
 
@@ -32,7 +33,7 @@ const MAX_CACHE_SIZE = 30;
 // ABRIR MODAL DE SEGUIDORES
 // ============================================================
 
-async function openFollowersModal(userId, filter = 'followers', fromProfile = false) {
+async function openFollowersModal(userId, filter = 'followers', fromProfile = false, fromNative = false) {
     if (!userId) {
         showToast('Usuario no encontrado', true);
         return;
@@ -47,10 +48,11 @@ async function openFollowersModal(userId, filter = 'followers', fromProfile = fa
         return;
     }
 
-    console.log(`📊 Abriendo modal de seguidores: userId=${userId}, filter=${filter}, desde perfil: ${fromProfile}`);
+    console.log(`📊 Abriendo modal de seguidores: userId=${userId}, filter=${filter}, desde perfil: ${fromProfile}, desde native: ${fromNative}`);
 
     // Guardar contexto
     isFromProfile = fromProfile;
+    isFromNative = fromNative;
     currentUserId = userId;
     currentFilter = filter || 'followers';
     searchQuery = '';
@@ -104,6 +106,7 @@ function updateTabs(filter) {
 function closeFollowersModal() {
     console.log('🔒 Cerrando modal de seguidores');
     console.log(`📊 Pila de followers: ${followersNavigationStack.length} elementos`);
+    console.log(`📊 isFromNative: ${isFromNative}`);
     
     const container = document.getElementById('followersListContainer');
     if (container) {
@@ -137,24 +140,71 @@ function closeFollowersModal() {
 
         document.body.style.overflow = '';
 
-        // 🔥 RESTAURAR PERFIL ANTERIOR - SIEMPRE CON EL MODAL
+        // 🔥 RESTAURAR PERFIL ANTERIOR
         setTimeout(() => {
-            import('./profile-modal.js').then(({ openProfileModal }) => {
-                // Pasamos el contexto de followers guardado
-                const context = previous.context || null;
-                // 🔥 SIEMPRE usar openProfileModal, NUNCA profile-native
-                openProfileModal(previous.userId, previous.fromFollowers || false, context);
-            }).catch(err => {
-                console.error('❌ Error importando profile-modal:', err);
-                showToast('Error al restaurar perfil', true);
-            });
+            // 🔥 SI VIENE DE NATIVE, VOLVER A PROFILE-NATIVE
+            if (isFromNative) {
+                console.log(`🔄 Volviendo a profile-native para usuario: ${previous.userId}`);
+                import('./profile-native.js').then(({ showProfileNative }) => {
+                    showProfileNative(previous.userId);
+                }).catch(err => {
+                    console.error('❌ Error importando profile-native:', err);
+                    // Fallback: usar modal
+                    import('./profile-modal.js').then(({ openProfileModal }) => {
+                        openProfileModal(previous.userId, previous.fromFollowers || false, previous.context);
+                    });
+                });
+            } else {
+                // 🔥 SIEMPRE usar openProfileModal para los que vienen de modal
+                import('./profile-modal.js').then(({ openProfileModal }) => {
+                    const context = previous.context || null;
+                    openProfileModal(previous.userId, previous.fromFollowers || false, context);
+                }).catch(err => {
+                    console.error('❌ Error importando profile-modal:', err);
+                    showToast('Error al restaurar perfil', true);
+                });
+            }
         }, 150);
         return;
     }
 
     // 🔥 Si no hay pila, cerrar normalmente
+    // Si venía de profile-native, volver al perfil nativo
+    if (isFromNative) {
+        console.log('🔄 Volviendo a profile-native (sin pila)');
+        const userId = currentUserId;
+        isFollowersModalOpen = false;
+        isFromNative = false;
+        isFromProfile = false;
+        currentUserId = null;
+        followersList = [];
+        followingList = [];
+        filteredList = [];
+        searchQuery = '';
+
+        const overlay = document.getElementById('followersModalOverlay');
+        if (overlay) {
+            overlay.classList.remove('active');
+            overlay.style.display = 'none';
+            overlay.style.zIndex = '';
+        }
+
+        document.body.style.overflow = '';
+
+        if (userId) {
+            import('./profile-native.js').then(({ showProfileNative }) => {
+                showProfileNative(userId);
+            }).catch(err => {
+                console.error('❌ Error volviendo a profile-native:', err);
+            });
+        }
+        return;
+    }
+
+    // Cierre normal
     isFollowersModalOpen = false;
     isFromProfile = false;
+    isFromNative = false;
     currentUserId = null;
     followersList = [];
     followingList = [];
@@ -187,6 +237,7 @@ function restoreFollowersModal() {
     currentUserId = context.userId;
     currentFilter = context.filter || 'followers';
     isFromProfile = true;
+    isFromNative = context.fromNative || false;
     isFollowersModalOpen = true;
 
     const overlay = document.getElementById('followersModalOverlay');
@@ -638,23 +689,26 @@ window.handleFollowersFollow = async function(userId, btn) {
 
 // ============================================================
 // 🔥🔥🔥 ABRIR PERFIL DESDE SEGUIDORES - CORREGIDO
-// 🔥🔥🔥 NUNCA REDIRIGIR A PROFILE-NATIVE, SIEMPRE USAR EL MODAL
+// 🔥🔥🔥 SOPORTA TANTO PROFILE-MODAL COMO PROFILE-NATIVE
 // ============================================================
 
 window.openProfileFromFollowers = function(userId) {
     if (!userId) return;
     
     console.log(`👤 Abriendo perfil de ${userId} desde seguidores`);
+    console.log(`📊 isFromNative: ${isFromNative}`);
     
     // 🔥 GUARDAR EL FOLLOWERS ACTUAL EN LA PILA CON CONTEXTO COMPLETO
     followersNavigationStack.push({
         userId: currentUserId,
         filter: currentFilter,
         fromFollowers: true,
+        fromNative: isFromNative, // 🔥 Guardar si venía de native
         context: window._followersContextData || null,
         followersContext: {
             userId: currentUserId,
-            filter: currentFilter
+            filter: currentFilter,
+            fromNative: isFromNative
         }
     });
     
@@ -664,11 +718,13 @@ window.openProfileFromFollowers = function(userId) {
     followersContext = {
         userId: currentUserId,
         filter: currentFilter,
-        returnToFollowers: true
+        returnToFollowers: true,
+        fromNative: isFromNative
     };
     
     window._followersContextData = followersContext;
     window._fromFollowers = true;
+    window._fromNativeFollowers = isFromNative;
     
     // Ocultar modal de seguidores
     const overlay = document.getElementById('followersModalOverlay');
@@ -677,19 +733,39 @@ window.openProfileFromFollowers = function(userId) {
         overlay.classList.remove('active');
     }
     
-    // 🔥🔥🔥 CRUCIAL: SIEMPRE ABRIR CON openProfileModal
-    // 🔥🔥🔥 NUNCA, BAJO NINGUNA CIRCUNSTANCIA, REDIRIGIR A profile-native
-    // 🔥🔥🔥 El perfil propio DEBE abrirse en el modal también
+    document.body.style.overflow = '';
     
-    console.log(`📌 Abriendo perfil ${userId} en el modal (incluso si es el propio usuario)`);
+    // 🔥🔥🔥 DECISIÓN CRÍTICA: ¿USAR PROFILE-NATIVE O PROFILE-MODAL?
+    // 🔥 Si el usuario está viendo su propio perfil nativo y abre un seguidor,
+    // 🔥 el perfil del seguidor DEBE abrirse en el MODAL (profile-modal)
+    // 🔥 Pero al cerrarlo, debe volver al profile-native
     
-    import('./profile-modal.js').then(({ openProfileModal }) => {
-        // Siempre usar openProfileModal, sin excepciones
-        openProfileModal(userId, true, followersContext);
-    }).catch((err) => {
-        console.error('❌ Error abriendo perfil:', err);
-        showToast('Error al abrir perfil', true);
-    });
+    const currentUser = getCurrentUser();
+    const isOwnProfile = currentUser?.id === userId;
+    
+    // 🔥 SIEMPRE abrir en el modal, excepto cuando es el propio usuario y estamos en native
+    // En ese caso, usamos profile-native para el propio perfil
+    if (isFromNative && isOwnProfile) {
+        console.log(`📌 Usuario propio desde native, abriendo en profile-native`);
+        import('./profile-native.js').then(({ showProfileNative }) => {
+            showProfileNative(userId);
+        }).catch((err) => {
+            console.error('❌ Error abriendo profile-native:', err);
+            // Fallback al modal
+            import('./profile-modal.js').then(({ openProfileModal }) => {
+                openProfileModal(userId, true, followersContext);
+            });
+        });
+    } else {
+        // 🔥 Para TODOS los demás casos, usar profile-modal
+        console.log(`📌 Abriendo perfil ${userId} en el modal`);
+        import('./profile-modal.js').then(({ openProfileModal }) => {
+            openProfileModal(userId, true, followersContext);
+        }).catch((err) => {
+            console.error('❌ Error abriendo perfil:', err);
+            showToast('Error al abrir perfil', true);
+        });
+    }
 };
 
 // ============================================================
