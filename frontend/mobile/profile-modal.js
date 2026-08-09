@@ -1,5 +1,5 @@
 // profile-modal.js - Modal para ver perfil de usuario (VERSIÓN CORREGIDA)
-// CON Z-INDEX CORRECTO Y NAVEGACIÓN ANIDADA
+// CON CACHÉ, NAVEGACIÓN INFINITA Y CARGA INSTANTÁNEA
 
 import {
     getToken, getCurrentUser, showToast,
@@ -16,27 +16,22 @@ let isProfileModalOpen = false;
 let isEditMode = false;
 let refreshInterval = null;
 
-// 🔥 CONTEXTO DE NAVEGACIÓN ANIDADA
+// 🔥 PILA DE NAVEGACIÓN INFINITA
 let profileNavigationStack = [];
 
-// ============================================================
-// 🔥 CACHÉ DE PERFILES Y HISTORIAS (CON LÍMITE)
-// ============================================================
-
+// 🔥 CACHÉ DE PERFILES
 const profileCache = new Map();
 const storiesCache = new Map();
-const MAX_CACHE_SIZE = 20;
+const MAX_CACHE_SIZE = 50;
 
 function cleanCache() {
     if (profileCache.size > MAX_CACHE_SIZE) {
         const keys = Array.from(profileCache.keys());
         const toRemove = keys.slice(0, keys.length - MAX_CACHE_SIZE);
-        toRemove.forEach(key => profileCache.delete(key));
-    }
-    if (storiesCache.size > MAX_CACHE_SIZE) {
-        const keys = Array.from(storiesCache.keys());
-        const toRemove = keys.slice(0, keys.length - MAX_CACHE_SIZE);
-        toRemove.forEach(key => storiesCache.delete(key));
+        toRemove.forEach(key => {
+            profileCache.delete(key);
+            storiesCache.delete(key);
+        });
     }
 }
 
@@ -81,7 +76,6 @@ function restoreFollowersFromProfile() {
                 window._fromFollowers = false;
             }, 150);
         } else {
-            console.warn('⚠️ [PROFILE] restoreFollowersModal no está disponible');
             import('./followers-modal.js').then(({ restoreFollowersModal }) => {
                 setTimeout(() => {
                     restoreFollowersModal();
@@ -92,8 +86,6 @@ function restoreFollowersFromProfile() {
                 console.error('❌ Error importando followers-modal:', err);
             });
         }
-    } else {
-        console.log('ℹ️ [PROFILE] No hay contexto de seguidores para restaurar');
     }
 }
 
@@ -105,7 +97,9 @@ function redirectToNativeProfile(userId) {
     console.log(`🔄 Redirigiendo al perfil nativo: ${userId}`);
     
     if (isProfileModalOpen) {
-        closeProfileModal();
+        // Cerrar todo el stack
+        profileNavigationStack = [];
+        closeProfileModalInternal(false);
     }
     
     import('./profile-native.js').then(({ showProfileNative }) => {
@@ -114,6 +108,26 @@ function redirectToNativeProfile(userId) {
         console.error('❌ Error importando profile-native:', err);
         showToast('Error al abrir perfil', true);
     });
+}
+
+// ============================================================
+// 🔥 FUNCIÓN PARA CARGAR PERFIL CON CACHÉ
+// ============================================================
+
+async function loadProfileWithCache(userId) {
+    // 🔥 1. Verificar caché
+    if (profileCache.has(userId)) {
+        console.log(`📦 Perfil ${userId} desde caché`);
+        const user = profileCache.get(userId);
+        const stories = storiesCache.get(userId) || [];
+        currentProfileData = user;
+        updateProfileModalUI(user, stories);
+        
+        // 🔥 2. Actualizar en segundo plano
+        refreshProfileInBackground(userId);
+        return true;
+    }
+    return false;
 }
 
 // ============================================================
@@ -142,15 +156,15 @@ function openProfileModal(userId, fromFollowers = false) {
         return;
     }
 
-    // 🔥 Si hay un perfil abierto, guardar en pila y cerrar
+    // 🔥 Si hay un perfil abierto, guardar en pila
     if (isProfileModalOpen) {
-        // Guardar el estado actual en la pila
         profileNavigationStack.push({
             userId: currentProfileUserId,
             data: currentProfileData,
-            fromFollowers: window._fromFollowers || false
+            fromFollowers: window._fromFollowers || false,
+            scrollPosition: document.querySelector('.profile-modal-body')?.scrollTop || 0
         });
-        // Cerrar sin restaurar seguidores (se restaurarán al volver)
+        // Cerrar sin restaurar seguidores
         closeProfileModalInternal(false);
     }
 
@@ -162,6 +176,7 @@ function openProfileModal(userId, fromFollowers = false) {
         window._fromFollowers = true;
     }
 
+    // 🔥 Asegurar overlay
     const overlay = document.getElementById('profileModalOverlay');
     if (!overlay) {
         createProfileModalHTML();
@@ -171,19 +186,25 @@ function openProfileModal(userId, fromFollowers = false) {
     if (overlayEl) {
         overlayEl.style.display = 'flex';
         overlayEl.classList.add('active');
-        // 🔥 Z-INDEX: 10006 (por encima de followers que es 10005)
         overlayEl.style.zIndex = '10006';
     }
 
     document.body.style.overflow = 'hidden';
-    clearModalContent();
 
+    // 🔥 1. Mostrar caché primero (INSTANTÁNEO)
+    const cached = loadProfileWithCache(userId);
+    
+    if (!cached) {
+        // 🔥 2. Si no hay caché, mostrar loading y cargar
+        clearModalContent();
+        loadProfileData(userId);
+    }
+
+    // 🔥 3. Refresco en segundo plano
     if (refreshInterval) {
         clearInterval(refreshInterval);
         refreshInterval = null;
     }
-
-    loadProfileData(userId);
 
     refreshInterval = setInterval(() => {
         if (isProfileModalOpen && currentProfileUserId === userId) {
@@ -240,8 +261,6 @@ function closeProfileModalInternal(restoreFollowers = true) {
 
     if (restoreFollowers && wasFromFollowers && contextData) {
         console.log('🔄 [CLOSE] Restaurando seguidores desde perfil');
-        console.log(`📌 [CLOSE] Contexto: userId=${contextData.userId}, filter=${contextData.filter}`);
-        
         setTimeout(() => {
             if (typeof window.restoreFollowersModal === 'function') {
                 window.restoreFollowersModal();
@@ -266,6 +285,7 @@ function closeProfileModalInternal(restoreFollowers = true) {
 
 function closeProfileModal() {
     console.log('🔒 Cerrando modal de perfil (público)');
+    console.log(`📊 Pila actual: ${profileNavigationStack.length} elementos`);
     
     if (isEditMode) {
         if (typeof window.closeEditProfileModal === 'function') {
@@ -282,10 +302,48 @@ function closeProfileModal() {
         // Cerrar el actual sin restaurar seguidores
         closeProfileModalInternal(false);
         
-        // Abrir el anterior
+        // 🔥 Abrir el anterior INSTANTÁNEAMENTE (desde caché)
         setTimeout(() => {
-            openProfileModal(previous.userId, previous.fromFollowers);
-        }, 150);
+            // Restaurar estado
+            currentProfileUserId = previous.userId;
+            currentProfileData = previous.data;
+            isProfileModalOpen = true;
+            
+            if (previous.fromFollowers) {
+                window._fromFollowers = true;
+            }
+            
+            const overlay = document.getElementById('profileModalOverlay');
+            if (overlay) {
+                overlay.style.display = 'flex';
+                overlay.classList.add('active');
+                overlay.style.zIndex = '10006';
+            }
+            
+            document.body.style.overflow = 'hidden';
+            
+            // 🔥 Mostrar desde caché o cargar
+            if (profileCache.has(previous.userId)) {
+                const user = profileCache.get(previous.userId);
+                const stories = storiesCache.get(previous.userId) || [];
+                currentProfileData = user;
+                updateProfileModalUI(user, stories);
+                // Actualizar en segundo plano
+                refreshProfileInBackground(previous.userId);
+            } else {
+                clearModalContent();
+                loadProfileData(previous.userId);
+            }
+            
+            // Restaurar scroll position
+            setTimeout(() => {
+                const body = document.querySelector('.profile-modal-body');
+                if (body && previous.scrollPosition) {
+                    body.scrollTop = previous.scrollPosition;
+                }
+            }, 50);
+            
+        }, 100);
         return;
     }
 
@@ -372,31 +430,35 @@ function openFollowersFromProfile(filter) {
     
     const userId = currentProfileUserId;
     
-    window._profileContext = {
-        userId: currentProfileUserId,
-        filter: filter
-    };
-    
-    // 🔥 Guardar el perfil actual en la pila antes de abrir followers
+    // 🔥 Guardar el perfil actual en la pila
     profileNavigationStack.push({
         userId: currentProfileUserId,
         data: currentProfileData,
-        fromFollowers: window._fromFollowers || false
+        fromFollowers: window._fromFollowers || false,
+        scrollPosition: document.querySelector('.profile-modal-body')?.scrollTop || 0
     });
     
+    // 🔥 Cerrar perfil SIN restaurar seguidores
+    closeProfileModalInternal(false);
+    
+    // 🔥 Abrir followers
     import('./followers-modal.js').then(({ openFollowersModal }) => {
-        // 🔥 Cerrar perfil SIN restaurar seguidores
-        closeProfileModalInternal(false);
-        // Abrir followers
         openFollowersModal(userId, filter, true);
     }).catch((err) => {
         console.error('❌ Error cargando followers-modal:', err);
         showToast('Error al abrir seguidores', true);
+        // Restaurar perfil si falla
+        const previous = profileNavigationStack.pop();
+        if (previous) {
+            setTimeout(() => {
+                openProfileModal(previous.userId, previous.fromFollowers);
+            }, 100);
+        }
     });
 }
 
 // ============================================================
-// CARGAR DATOS DEL PERFIL
+// CARGAR DATOS DEL PERFIL (CON CACHÉ)
 // ============================================================
 
 async function loadProfileData(userId) {
@@ -431,6 +493,7 @@ async function loadProfileData(userId) {
         const user = await res.json();
         currentProfileData = user;
 
+        // 🔥 Guardar en caché
         profileCache.set(userId, user);
         cleanCache();
 
@@ -471,18 +534,22 @@ async function refreshProfileInBackground(userId) {
         if (res.ok) {
             const user = await res.json();
             profileCache.set(userId, user);
-            currentProfileData = user;
             
             const storiesRes = await fetch(`${API_URL}/api/stories/user/${userId}`, {
                 headers: { 'Authorization': `Bearer ${token}` }
             });
+            
+            let stories = [];
             if (storiesRes.ok) {
-                const stories = await storiesRes.json();
+                stories = await storiesRes.json();
                 storiesCache.set(userId, stories);
                 window._profileStories = stories;
-                if (isProfileModalOpen && currentProfileUserId === userId) {
-                    updateStoriesOnly(stories);
-                }
+            }
+
+            // 🔥 Solo actualizar UI si sigue siendo el perfil visible
+            if (isProfileModalOpen && currentProfileUserId === userId) {
+                currentProfileData = user;
+                updateProfileModalUI(user, stories);
             }
             
             console.log(`🔄 Perfil ${userId} actualizado en segundo plano`);
@@ -786,6 +853,8 @@ async function handleFollowUser(userId, btn) {
             }
             
             clearProfileCache(userId);
+            // Actualizar caché en segundo plano
+            refreshProfileInBackground(userId);
         } else {
             showToast(data.error || 'Error al seguir', true);
         }

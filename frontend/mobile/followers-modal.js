@@ -1,5 +1,5 @@
 // followers-modal.js - Modal de seguidores/seguidos
-// CON Z-INDEX CORRECTO Y NAVEGACIÓN ANIDADA
+// CON Z-INDEX CORRECTO Y NAVEGACIÓN INFINITA
 // ============================================================
 
 import { getToken, getCurrentUser, showToast, getAvatar, escapeHtml } from './auth.js';
@@ -23,6 +23,10 @@ let isFromProfile = false;
 // 🔥 CONTEXTO PARA NAVEGACIÓN ESTILO TIKTOK
 let followersContext = null;
 let followersNavigationStack = [];
+
+// 🔥 CACHÉ DE LISTAS
+const followersCache = new Map();
+const MAX_CACHE_SIZE = 30;
 
 // ============================================================
 // ABRIR MODAL DE SEGUIDORES
@@ -66,15 +70,11 @@ async function openFollowersModal(userId, filter = 'followers', fromProfile = fa
     if (overlay) {
         overlay.style.display = 'flex';
         overlay.classList.add('active');
-        // 🔥 Z-INDEX: 10005 (por debajo de profile que es 10006)
         overlay.style.zIndex = '10005';
     }
 
     document.body.style.overflow = 'hidden';
-
-    // 🔥 ACTUALIZAR TABS
     updateTabs(currentFilter);
-
     await loadFollowersData(userId);
 }
 
@@ -168,7 +168,6 @@ function restoreFollowersModal() {
     }
 
     updateTabs(context.filter);
-
     document.body.style.overflow = 'hidden';
 
     loadFollowersData(context.userId);
@@ -228,7 +227,6 @@ function createFollowersModalHTML() {
     div.innerHTML = html;
     document.body.appendChild(div.firstElementChild);
 
-    // Configurar eventos
     const searchInput = document.getElementById('followersSearchInput');
     if (searchInput) {
         searchInput.addEventListener('input', (e) => {
@@ -261,7 +259,6 @@ function createFollowersModalHTML() {
         }
     });
 
-    // Funciones globales
     window.closeFollowersModal = closeFollowersModal;
     window.switchFollowersTab = switchFollowersTab;
     window.handleFollowersFollow = handleFollowersFollow;
@@ -291,7 +288,6 @@ function switchFollowersTab(filter) {
     }
 
     updateTabs(filter);
-
     filterAndRenderList();
 }
 
@@ -314,7 +310,7 @@ function updateModalTitle() {
 }
 
 // ============================================================
-// CARGAR DATOS DE SEGUIDORES/SEGUIDOS
+// CARGAR DATOS DE SEGUIDORES/SEGUIDOS (CON CACHÉ)
 // ============================================================
 
 async function loadFollowersData(userId) {
@@ -335,6 +331,23 @@ async function loadFollowersData(userId) {
     try {
         console.log(`📡 Cargando seguidores para userId: ${userId}`);
 
+        // 🔥 Verificar caché
+        const cacheKey = `followers_${userId}`;
+        if (followersCache.has(cacheKey)) {
+            const cached = followersCache.get(cacheKey);
+            console.log(`📦 Seguidores desde caché: ${cached.followersList.length} seguidores`);
+            followersList = cached.followersList;
+            followingList = cached.followingList;
+            updateCounts();
+            filterAndRenderList();
+            isLoading = false;
+            
+            // 🔥 Actualizar en segundo plano
+            refreshFollowersInBackground(userId);
+            return;
+        }
+
+        // 🔥 Cargar desde servidor
         const followersRes = await fetch(`${API_URL}/api/follows/followers/${userId}?t=${Date.now()}`, {
             headers: { 
                 'Authorization': `Bearer ${token}`,
@@ -344,8 +357,6 @@ async function loadFollowersData(userId) {
 
         if (followersRes.ok) {
             followersList = await followersRes.json();
-            const countEl = document.getElementById('followersCount');
-            if (countEl) countEl.textContent = followersList.length;
             console.log(`📊 Seguidores cargados: ${followersList.length}`);
         }
 
@@ -358,12 +369,24 @@ async function loadFollowersData(userId) {
 
         if (followingRes.ok) {
             followingList = await followingRes.json();
-            const countEl = document.getElementById('followingCount');
-            if (countEl) countEl.textContent = followingList.length;
             console.log(`📊 Siguiendo cargados: ${followingList.length}`);
         }
 
-        updateModalTitle();
+        // 🔥 Guardar en caché
+        followersCache.set(cacheKey, {
+            followersList: followersList,
+            followingList: followingList,
+            timestamp: Date.now()
+        });
+
+        // Limpiar caché si es muy grande
+        if (followersCache.size > MAX_CACHE_SIZE) {
+            const keys = Array.from(followersCache.keys());
+            const toRemove = keys.slice(0, keys.length - MAX_CACHE_SIZE);
+            toRemove.forEach(key => followersCache.delete(key));
+        }
+
+        updateCounts();
         filterAndRenderList();
 
     } catch (error) {
@@ -378,6 +401,70 @@ async function loadFollowersData(userId) {
         }
     } finally {
         isLoading = false;
+    }
+}
+
+// ============================================================
+// 🔥 REFRESCAR SEGUIDORES EN SEGUNDO PLANO
+// ============================================================
+
+async function refreshFollowersInBackground(userId) {
+    try {
+        const token = getToken();
+        if (!token) return;
+
+        const cacheKey = `followers_${userId}`;
+        const followersRes = await fetch(`${API_URL}/api/follows/followers/${userId}`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+
+        let newFollowers = [];
+        let newFollowing = [];
+
+        if (followersRes.ok) {
+            newFollowers = await followersRes.json();
+        }
+
+        const followingRes = await fetch(`${API_URL}/api/follows/following/${userId}`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+
+        if (followingRes.ok) {
+            newFollowing = await followingRes.json();
+        }
+
+        // 🔥 Actualizar caché
+        followersCache.set(cacheKey, {
+            followersList: newFollowers,
+            followingList: newFollowing,
+            timestamp: Date.now()
+        });
+
+        // 🔥 Si sigue siendo el modal visible, actualizar UI
+        if (isFollowersModalOpen && currentUserId === userId) {
+            followersList = newFollowers;
+            followingList = newFollowing;
+            updateCounts();
+            filterAndRenderList();
+            console.log(`🔄 Seguidores de ${userId} actualizados en segundo plano`);
+        }
+    } catch (e) {
+        // Silencioso
+    }
+}
+
+// ============================================================
+// 🔥 ACTUALIZAR CONTADORES
+// ============================================================
+
+function updateCounts() {
+    const followersCount = document.getElementById('followersCount');
+    if (followersCount) {
+        followersCount.textContent = followersList.length;
+    }
+    const followingCount = document.getElementById('followingCount');
+    if (followingCount) {
+        followingCount.textContent = followingList.length;
     }
 }
 
@@ -502,6 +589,13 @@ window.handleFollowersFollow = async function(userId, btn) {
                 btn.innerHTML = '<i class="fas fa-check"></i> Siguiendo';
                 showToast('✅ Ahora sigues a este usuario');
             }
+            
+            // 🔥 Invalidar caché
+            const cacheKey = `followers_${currentUserId}`;
+            followersCache.delete(cacheKey);
+            
+            // Recargar datos
+            loadFollowersData(currentUserId);
         } else {
             const errorData = await res.json();
             showToast(errorData.error || 'Error al procesar', true);
@@ -517,7 +611,7 @@ window.handleFollowersFollow = async function(userId, btn) {
 };
 
 // ============================================================
-// 🔥 ABRIR PERFIL DESDE SEGUIDORES (ESTILO TIKTOK)
+// 🔥 ABRIR PERFIL DESDE SEGUIDORES (NAVEGACIÓN INFINITA)
 // ============================================================
 
 window.openProfileFromFollowers = function(userId) {
@@ -534,7 +628,6 @@ window.openProfileFromFollowers = function(userId) {
     
     console.log(`📌 Contexto guardado:`, followersContext);
     
-    // 🔥 Guardar en window para que profile-modal lo vea
     window._followersContextData = followersContext;
     window._fromFollowers = true;
     
@@ -545,7 +638,7 @@ window.openProfileFromFollowers = function(userId) {
         overlay.classList.remove('active');
     }
     
-    // 🔥 Abrir perfil con z-index alto
+    // 🔥 Abrir perfil INSTANTÁNEAMENTE
     if (typeof window.openProfileModal === 'function') {
         window.openProfileModal(userId, true);
     } else {
