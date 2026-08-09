@@ -1,5 +1,6 @@
 // ============================================================
 // app.js - VERSIÓN COMPLETA CON FEED INFINITO POR CURSOR
+// (CORREGIDO: SEPARACIÓN DE RECIENTES Y PARA TI POR ANTIGÜEDAD)
 // ============================================================
 
 import {
@@ -88,6 +89,12 @@ let isInitialLoad = true;
 
 // 🔥 Caché de traducciones
 let translationCache = {};
+
+// ============================================================
+// CONSTANTES DE TIEMPO
+// ============================================================
+
+const TEN_MINUTES = 10 * 60 * 1000; // 10 minutos en milisegundos
 
 // ============================================================
 // CARGAR CACHÉ DE TRADUCCIONES
@@ -558,7 +565,7 @@ function hideNewStoriesBadge() {
 }
 
 // ============================================================
-// 🔥 FETCH FEED POR CURSOR
+// 🔥 FETCH FEED POR CURSOR - CORREGIDO CON FILTRO DE TIEMPO
 // ============================================================
 
 async function fetchFeedByCursor(filter, cursor = null) {
@@ -609,13 +616,36 @@ async function fetchFeedByCursor(filter, cursor = null) {
 
         console.log(`📡 Recibidas ${stories.length} historias (más: ${hasMoreStories}, restantes: ${totalRemaining})`);
 
-        // 🔥 FILTRAR historias ya vistas globalmente (solo PARA TI)
-        if (filter === 'ranked') {
+        // ============================================================
+        // 🔥 FILTRAR POR TIEMPO SEGÚN EL MODO
+        // ============================================================
+        
+        const now = Date.now();
+
+        if (filter === 'recent') {
+            // RECIENTES: Solo historias con menos de 10 minutos
+            stories = stories.filter(s => {
+                const createdAt = new Date(s.createdAt).getTime();
+                const age = now - createdAt;
+                return age < TEN_MINUTES;
+            });
+            console.log(`📊 [RECIENTES] ${stories.length} historias con menos de 10 minutos`);
+            
+            // 🔥 RECIENTES: Filtrar historias vistas en RECIENTES
+            stories = stories.filter(s => !isViewedInRecent(s.id));
+            
+        } else if (filter === 'ranked') {
+            // PARA TI: Solo historias con más de 10 minutos
+            stories = stories.filter(s => {
+                const createdAt = new Date(s.createdAt).getTime();
+                const age = now - createdAt;
+                return age >= TEN_MINUTES;
+            });
+            console.log(`📊 [PARA TI] ${stories.length} historias con más de 10 minutos`);
+            
+            // 🔥 PARA TI: Filtrar historias ya vistas GLOBALMENTE
             stories = stories.filter(s => !isStoryViewed(s.id));
         }
-
-        // 🔥 FILTRAR historias vistas en RECIENTES
-        stories = stories.filter(s => !isViewedInRecent(s.id));
 
         // 🔥 FILTRAR historias del propio usuario
         const currentUser = getCurrentUser();
@@ -788,6 +818,10 @@ function preloadNextPage() {
     }, 1500);
 }
 
+// ============================================================
+// 🔥 LOAD MORE STORIES - CORREGIDO CON FILTRO DE TIEMPO
+// ============================================================
+
 async function loadMoreStories(preload = false) {
     if (isLoadingMore || !hasMoreStories) return;
     
@@ -822,11 +856,32 @@ async function loadMoreStories(preload = false) {
         totalRemaining = pagination.totalRemaining || 0;
         const nextCursor = pagination.nextCursor || null;
         
-        // Filtrar historias ya vistas
-        if (currentFilter === 'ranked') {
+        // ============================================================
+        // 🔥 FILTRAR POR TIEMPO SEGÚN EL MODO
+        // ============================================================
+        
+        const now = Date.now();
+
+        if (currentFilter === 'recent') {
+            // RECIENTES: Solo historias con menos de 10 minutos
+            stories = stories.filter(s => {
+                const createdAt = new Date(s.createdAt).getTime();
+                const age = now - createdAt;
+                return age < TEN_MINUTES;
+            });
+            // RECIENTES: Filtrar historias vistas en RECIENTES
+            stories = stories.filter(s => !isViewedInRecent(s.id));
+            
+        } else if (currentFilter === 'ranked') {
+            // PARA TI: Solo historias con más de 10 minutos
+            stories = stories.filter(s => {
+                const createdAt = new Date(s.createdAt).getTime();
+                const age = now - createdAt;
+                return age >= TEN_MINUTES;
+            });
+            // PARA TI: Filtrar historias ya vistas GLOBALMENTE
             stories = stories.filter(s => !isStoryViewed(s.id));
         }
-        stories = stories.filter(s => !isViewedInRecent(s.id));
         
         const currentUser = getCurrentUser();
         if (currentUser) {
@@ -866,7 +921,6 @@ async function loadMoreStories(preload = false) {
         if (newStories.length > 0) {
             displayedStories = [...displayedStories, ...newStories];
             
-            // 🔥 Actualizar cursor
             if (nextCursor) {
                 feedCursor = nextCursor;
                 saveFeedCursor(feedCursor);
@@ -881,7 +935,6 @@ async function loadMoreStories(preload = false) {
                 console.log(`📦 Pre-cargados ${newStories.length} historias (total: ${displayedStories.length})`);
             }
             
-            // Pre-cargar siguiente página
             if (hasMoreStories) {
                 preloadNextPage();
             }
@@ -991,8 +1044,8 @@ function renderFeed(storiesData) {
 
     if (!storiesData || storiesData.length === 0) {
         const messages = {
-            ranked: 'No hay más historias para ti',
-            recent: 'No hay historias recientes',
+            ranked: 'No hay historias disponibles para ti',
+            recent: 'No hay historias recientes en tu región',
             public: 'No hay historias públicas disponibles'
         };
         container.innerHTML = `
