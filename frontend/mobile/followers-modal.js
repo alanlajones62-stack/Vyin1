@@ -24,7 +24,7 @@ let isLoading = false;
 // ABRIR MODAL DE SEGUIDORES
 // ============================================================
 
-export async function openFollowersModal(userId, filter = 'followers') {
+export function openFollowersModal(userId, filter = 'followers') {
     if (!userId) {
         showToast('Usuario no encontrado', true);
         return;
@@ -60,7 +60,7 @@ export async function openFollowersModal(userId, filter = 'followers') {
 
     document.body.style.overflow = 'hidden';
 
-    await loadFollowersData(userId);
+    loadFollowersData(userId);
 }
 
 // ============================================================
@@ -142,26 +142,30 @@ function createFollowersModalHTML() {
 
     // Configurar eventos
     const searchInput = document.getElementById('followersSearchInput');
-    searchInput?.addEventListener('input', (e) => {
-        searchQuery = e.target.value.trim().toLowerCase();
-        const clearBtn = document.getElementById('followersSearchClear');
-        if (clearBtn) {
-            clearBtn.style.display = searchQuery.length > 0 ? 'flex' : 'none';
-        }
-        filterAndRenderList();
-    });
+    if (searchInput) {
+        searchInput.addEventListener('input', (e) => {
+            searchQuery = e.target.value.trim().toLowerCase();
+            const clearBtn = document.getElementById('followersSearchClear');
+            if (clearBtn) {
+                clearBtn.style.display = searchQuery.length > 0 ? 'flex' : 'none';
+            }
+            filterAndRenderList();
+        });
+    }
 
     const clearBtn = document.getElementById('followersSearchClear');
-    clearBtn?.addEventListener('click', () => {
-        const searchInput = document.getElementById('followersSearchInput');
-        if (searchInput) {
-            searchInput.value = '';
-            searchQuery = '';
-            clearBtn.style.display = 'none';
-            filterAndRenderList();
-            searchInput.focus();
-        }
-    });
+    if (clearBtn) {
+        clearBtn.addEventListener('click', () => {
+            const searchInputEl = document.getElementById('followersSearchInput');
+            if (searchInputEl) {
+                searchInputEl.value = '';
+                searchQuery = '';
+                clearBtn.style.display = 'none';
+                filterAndRenderList();
+                searchInputEl.focus();
+            }
+        });
+    }
 
     document.addEventListener('keydown', (e) => {
         if (e.key === 'Escape' && isFollowersModalOpen) {
@@ -230,7 +234,8 @@ async function loadFollowersData(userId) {
 
         if (followersRes.ok) {
             followersList = await followersRes.json();
-            document.getElementById('followersCount').textContent = followersList.length;
+            const countEl = document.getElementById('followersCount');
+            if (countEl) countEl.textContent = followersList.length;
             console.log(`📊 Seguidores cargados: ${followersList.length}`);
         }
 
@@ -241,7 +246,8 @@ async function loadFollowersData(userId) {
 
         if (followingRes.ok) {
             followingList = await followingRes.json();
-            document.getElementById('followingCount').textContent = followingList.length;
+            const countEl = document.getElementById('followingCount');
+            if (countEl) countEl.textContent = followingList.length;
             console.log(`📊 Siguiendo cargados: ${followingList.length}`);
         }
 
@@ -302,7 +308,8 @@ function renderList(users) {
     if (!container) return;
 
     if (users.length === 0) {
-        const isOwnProfile = getCurrentUser()?.id === currentUserId;
+        const currentUser = getCurrentUser();
+        const isOwnProfile = currentUser?.id === currentUserId;
         const emptyMessage = currentFilter === 'followers' 
             ? (isOwnProfile ? 'No tienes seguidores aún' : 'Este usuario no tiene seguidores')
             : (isOwnProfile ? 'No sigues a nadie aún' : 'Este usuario no sigue a nadie');
@@ -357,7 +364,7 @@ function renderList(users) {
 // MANEJAR SEGUIR/DESSEGUIR DESDE EL MODAL
 // ============================================================
 
-async function handleFollowersFollow(userId, btn) {
+window.handleFollowersFollow = async function(userId, btn) {
     const token = getToken();
     if (!token) {
         showToast('Inicia sesión para seguir', true);
@@ -394,8 +401,8 @@ async function handleFollowersFollow(userId, btn) {
                 showToast('✅ Ahora sigues a este usuario');
             }
         } else {
-            const data = await res.json();
-            showToast(data.error || 'Error al procesar', true);
+            const errorData = await res.json();
+            showToast(errorData.error || 'Error al procesar', true);
             btn.innerHTML = originalText;
             btn.disabled = false;
         }
@@ -405,19 +412,20 @@ async function handleFollowersFollow(userId, btn) {
         btn.innerHTML = originalText;
         btn.disabled = false;
     }
-}
+};
 
 // ============================================================
 // ABRIR PERFIL DESDE EL MODAL DE SEGUIDORES
 // ============================================================
 
-function openProfileFromFollowers(userId) {
+window.openProfileFromFollowers = function(userId) {
     if (!userId) return;
     closeFollowersModal();
     setTimeout(() => {
         import('./profile-modal.js').then(({ openProfileModal }) => {
             openProfileModal(userId);
-        }).catch(() => {
+        }).catch((err) => {
+            console.error('Error abriendo perfil:', err);
             if (typeof window.openProfileModal === 'function') {
                 window.openProfileModal(userId);
             } else {
@@ -425,7 +433,7 @@ function openProfileFromFollowers(userId) {
             }
         });
     }, 100);
-}
+};
 
 // ============================================================
 // INYECTAR ESTILOS
@@ -437,9 +445,6 @@ function injectFollowersStyles() {
     const styles = document.createElement('style');
     styles.id = 'followersModalStyles';
     styles.textContent = `
-        /* ============================================================
-           FOLLOWERS MODAL - Z-INDEX MÁS ALTO
-        ============================================================ */
         .followers-modal-overlay {
             position: fixed;
             top: 0;
@@ -463,9 +468,6 @@ function injectFollowersStyles() {
             to { opacity: 1; transform: scale(1); }
         }
 
-        /* ============================================================
-           CONTENIDO
-        ============================================================ */
         .followers-modal-content {
             background: #12122a;
             border-radius: 16px;
@@ -479,9 +481,6 @@ function injectFollowersStyles() {
             box-shadow: 0 24px 80px rgba(0,0,0,0.6);
         }
 
-        /* ============================================================
-           HEADER
-        ============================================================ */
         .followers-modal-header {
             display: flex;
             align-items: center;
@@ -514,9 +513,6 @@ function injectFollowersStyles() {
         }
         .followers-modal-close:active { transform: scale(0.9); }
 
-        /* ============================================================
-           SEARCH
-        ============================================================ */
         .followers-modal-search {
             display: flex;
             align-items: center;
@@ -563,9 +559,6 @@ function injectFollowersStyles() {
             color: rgba(255,255,255,0.4);
         }
 
-        /* ============================================================
-           TABS
-        ============================================================ */
         .followers-modal-tabs {
             display: flex;
             padding: 8px 20px;
@@ -608,9 +601,6 @@ function injectFollowersStyles() {
         }
         .followers-tab:active { transform: scale(0.95); }
 
-        /* ============================================================
-           LISTA
-        ============================================================ */
         .followers-modal-list {
             flex: 1;
             overflow-y: auto;
@@ -650,9 +640,6 @@ function injectFollowersStyles() {
         .followers-empty span { font-size: 14px; }
         .followers-empty small { font-size: 12px; color: rgba(255,255,255,0.08); }
 
-        /* ============================================================
-           ITEM DE USUARIO
-        ============================================================ */
         .followers-item {
             display: flex;
             align-items: center;
@@ -734,9 +721,6 @@ function injectFollowersStyles() {
             margin-right: 4px;
         }
 
-        /* ============================================================
-           RESPONSIVE
-        ============================================================ */
         @media (max-width: 520px) {
             .followers-modal-overlay { padding: 12px; }
             .followers-modal-content { max-height: 85vh; border-radius: 12px; }
