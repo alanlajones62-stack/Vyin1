@@ -1,5 +1,5 @@
 // profile-modal.js - Modal para ver perfil de usuario (VERSIÓN CORREGIDA)
-// CON CACHÉ, NAVEGACIÓN INFINITA Y CARGA INSTANTÁNEA
+// CON NAVEGACIÓN POR PILA Y CONTEXTO DE VISTA
 
 import {
     getToken, getCurrentUser, showToast,
@@ -16,8 +16,8 @@ let isProfileModalOpen = false;
 let isEditMode = false;
 let refreshInterval = null;
 
-// 🔥 PILA DE NAVEGACIÓN INFINITA
-let profileNavigationStack = [];
+// 🔥 PILA DE NAVEGACIÓN (guarda el contexto completo)
+let navigationStack = [];
 
 // 🔥 CACHÉ DE PERFILES
 const profileCache = new Map();
@@ -59,37 +59,6 @@ function clearModalContent() {
 }
 
 // ============================================================
-// 🔥 FUNCIÓN PARA RESTAURAR SEGUIDORES DESDE PERFIL
-// ============================================================
-
-function restoreFollowersFromProfile() {
-    console.log('🔄 [PROFILE] Restaurando seguidores desde perfil');
-    
-    if (window._followersContextData) {
-        const context = window._followersContextData;
-        console.log(`📌 [PROFILE] Contexto encontrado: userId=${context.userId}, filter=${context.filter}`);
-        
-        if (typeof window.restoreFollowersModal === 'function') {
-            setTimeout(() => {
-                window.restoreFollowersModal();
-                window._followersContextData = null;
-                window._fromFollowers = false;
-            }, 150);
-        } else {
-            import('./followers-modal.js').then(({ restoreFollowersModal }) => {
-                setTimeout(() => {
-                    restoreFollowersModal();
-                    window._followersContextData = null;
-                    window._fromFollowers = false;
-                }, 150);
-            }).catch(err => {
-                console.error('❌ Error importando followers-modal:', err);
-            });
-        }
-    }
-}
-
-// ============================================================
 // 🔥 FUNCIÓN PARA REDIRIGIR A PERFIL NATIVO
 // ============================================================
 
@@ -97,8 +66,7 @@ function redirectToNativeProfile(userId) {
     console.log(`🔄 Redirigiendo al perfil nativo: ${userId}`);
     
     if (isProfileModalOpen) {
-        // Cerrar todo el stack
-        profileNavigationStack = [];
+        navigationStack = [];
         closeProfileModalInternal(false);
     }
     
@@ -115,15 +83,12 @@ function redirectToNativeProfile(userId) {
 // ============================================================
 
 async function loadProfileWithCache(userId) {
-    // 🔥 1. Verificar caché
     if (profileCache.has(userId)) {
         console.log(`📦 Perfil ${userId} desde caché`);
         const user = profileCache.get(userId);
         const stories = storiesCache.get(userId) || [];
         currentProfileData = user;
         updateProfileModalUI(user, stories);
-        
-        // 🔥 2. Actualizar en segundo plano
         refreshProfileInBackground(userId);
         return true;
     }
@@ -142,7 +107,6 @@ function openProfileModal(userId, fromFollowers = false) {
 
     console.log(`👤 Abriendo perfil modal: ${userId}, desde seguidores: ${fromFollowers}`);
 
-    // 🔥 VERIFICAR SI ES EL PROPIO USUARIO
     const currentUser = getCurrentUser();
     if (currentUser?.id === userId) {
         console.log('👤 Es el propio usuario, redirigiendo a perfil nativo');
@@ -158,13 +122,13 @@ function openProfileModal(userId, fromFollowers = false) {
 
     // 🔥 Si hay un perfil abierto, guardar en pila
     if (isProfileModalOpen) {
-        profileNavigationStack.push({
+        navigationStack.push({
+            type: 'profile',
             userId: currentProfileUserId,
             data: currentProfileData,
             fromFollowers: window._fromFollowers || false,
             scrollPosition: document.querySelector('.profile-modal-body')?.scrollTop || 0
         });
-        // Cerrar sin restaurar seguidores
         closeProfileModalInternal(false);
     }
 
@@ -176,7 +140,6 @@ function openProfileModal(userId, fromFollowers = false) {
         window._fromFollowers = true;
     }
 
-    // 🔥 Asegurar overlay
     const overlay = document.getElementById('profileModalOverlay');
     if (!overlay) {
         createProfileModalHTML();
@@ -191,16 +154,13 @@ function openProfileModal(userId, fromFollowers = false) {
 
     document.body.style.overflow = 'hidden';
 
-    // 🔥 1. Mostrar caché primero (INSTANTÁNEO)
+    // 🔥 Intentar cargar desde caché
     const cached = loadProfileWithCache(userId);
-    
     if (!cached) {
-        // 🔥 2. Si no hay caché, mostrar loading y cargar
         clearModalContent();
         loadProfileData(userId);
     }
 
-    // 🔥 3. Refresco en segundo plano
     if (refreshInterval) {
         clearInterval(refreshInterval);
         refreshInterval = null;
@@ -230,10 +190,10 @@ function bringProfileToFront() {
 }
 
 // ============================================================
-// CERRAR MODAL DE PERFIL - INTERNO (SIN RESTAURAR)
+// CERRAR MODAL DE PERFIL - INTERNO
 // ============================================================
 
-function closeProfileModalInternal(restoreFollowers = true) {
+function closeProfileModalInternal(restoreFromStack = true) {
     console.log('🔒 Cerrando modal de perfil (interno)');
     
     if (refreshInterval) {
@@ -250,33 +210,10 @@ function closeProfileModalInternal(restoreFollowers = true) {
         overlay.style.zIndex = '';
     }
 
-    const wasFromFollowers = window._fromFollowers || false;
-    const contextData = window._followersContextData || null;
-    
     isProfileModalOpen = false;
     currentProfileUserId = null;
     currentProfileData = null;
-
     document.body.style.overflow = '';
-
-    if (restoreFollowers && wasFromFollowers && contextData) {
-        console.log('🔄 [CLOSE] Restaurando seguidores desde perfil');
-        setTimeout(() => {
-            if (typeof window.restoreFollowersModal === 'function') {
-                window.restoreFollowersModal();
-                window._followersContextData = null;
-                window._fromFollowers = false;
-            } else {
-                import('./followers-modal.js').then(({ restoreFollowersModal }) => {
-                    restoreFollowersModal();
-                    window._followersContextData = null;
-                    window._fromFollowers = false;
-                }).catch(err => {
-                    console.error('❌ Error importando followers-modal:', err);
-                });
-            }
-        }, 200);
-    }
 }
 
 // ============================================================
@@ -285,7 +222,7 @@ function closeProfileModalInternal(restoreFollowers = true) {
 
 function closeProfileModal() {
     console.log('🔒 Cerrando modal de perfil (público)');
-    console.log(`📊 Pila actual: ${profileNavigationStack.length} elementos`);
+    console.log(`📊 Pila actual: ${navigationStack.length} elementos`);
     
     if (isEditMode) {
         if (typeof window.closeEditProfileModal === 'function') {
@@ -294,61 +231,100 @@ function closeProfileModal() {
         isEditMode = false;
     }
 
-    // 🔥 Verificar si hay elementos en la pila para volver
-    if (profileNavigationStack.length > 0) {
-        const previous = profileNavigationStack.pop();
-        console.log(`🔄 Volviendo al perfil anterior: ${previous.userId}`);
+    // 🔥 Verificar si hay elementos en la pila
+    if (navigationStack.length > 0) {
+        const previous = navigationStack.pop();
+        console.log(`🔄 Restaurando: ${previous.type} - ${previous.userId || 'N/A'}`);
         
-        // Cerrar el actual sin restaurar seguidores
+        // Cerrar el actual
         closeProfileModalInternal(false);
         
-        // 🔥 Abrir el anterior INSTANTÁNEAMENTE (desde caché)
+        // 🔥 Restaurar según el tipo
         setTimeout(() => {
-            // Restaurar estado
-            currentProfileUserId = previous.userId;
-            currentProfileData = previous.data;
-            isProfileModalOpen = true;
-            
-            if (previous.fromFollowers) {
-                window._fromFollowers = true;
+            if (previous.type === 'profile') {
+                // Restaurar perfil anterior
+                restorePreviousProfile(previous);
+            } else if (previous.type === 'followers') {
+                // Restaurar lista de seguidores anterior
+                restorePreviousFollowers(previous);
             }
-            
-            const overlay = document.getElementById('profileModalOverlay');
-            if (overlay) {
-                overlay.style.display = 'flex';
-                overlay.classList.add('active');
-                overlay.style.zIndex = '10006';
-            }
-            
-            document.body.style.overflow = 'hidden';
-            
-            // 🔥 Mostrar desde caché o cargar
-            if (profileCache.has(previous.userId)) {
-                const user = profileCache.get(previous.userId);
-                const stories = storiesCache.get(previous.userId) || [];
-                currentProfileData = user;
-                updateProfileModalUI(user, stories);
-                // Actualizar en segundo plano
-                refreshProfileInBackground(previous.userId);
-            } else {
-                clearModalContent();
-                loadProfileData(previous.userId);
-            }
-            
-            // Restaurar scroll position
-            setTimeout(() => {
-                const body = document.querySelector('.profile-modal-body');
-                if (body && previous.scrollPosition) {
-                    body.scrollTop = previous.scrollPosition;
-                }
-            }, 50);
-            
         }, 100);
         return;
     }
 
     // Si no hay pila, cerrar normalmente
-    closeProfileModalInternal(true);
+    closeProfileModalInternal(false);
+}
+
+// ============================================================
+// 🔥 RESTAURAR PERFIL ANTERIOR
+// ============================================================
+
+function restorePreviousProfile(previous) {
+    console.log(`🔄 Restaurando perfil: ${previous.userId}`);
+    
+    currentProfileUserId = previous.userId;
+    currentProfileData = previous.data;
+    isProfileModalOpen = true;
+    
+    if (previous.fromFollowers) {
+        window._fromFollowers = true;
+    }
+    
+    const overlay = document.getElementById('profileModalOverlay');
+    if (overlay) {
+        overlay.style.display = 'flex';
+        overlay.classList.add('active');
+        overlay.style.zIndex = '10006';
+    }
+    
+    document.body.style.overflow = 'hidden';
+    
+    // Mostrar desde caché o cargar
+    if (profileCache.has(previous.userId)) {
+        const user = profileCache.get(previous.userId);
+        const stories = storiesCache.get(previous.userId) || [];
+        currentProfileData = user;
+        updateProfileModalUI(user, stories);
+        refreshProfileInBackground(previous.userId);
+    } else {
+        clearModalContent();
+        loadProfileData(previous.userId);
+    }
+    
+    // Restaurar scroll
+    setTimeout(() => {
+        const body = document.querySelector('.profile-modal-body');
+        if (body && previous.scrollPosition) {
+            body.scrollTop = previous.scrollPosition;
+        }
+    }, 50);
+}
+
+// ============================================================
+// 🔥 RESTAURAR LISTA DE SEGUIDORES ANTERIOR
+// ============================================================
+
+function restorePreviousFollowers(previous) {
+    console.log(`🔄 Restaurando lista de seguidores: userId=${previous.userId}, filter=${previous.filter}`);
+    
+    import('./followers-modal.js').then(({ openFollowersModal, restoreFollowersModal }) => {
+        // Primero restaurar el modal de seguidores
+        if (typeof restoreFollowersModal === 'function') {
+            // Si hay contexto guardado, restaurarlo
+            if (window._followersContextData) {
+                restoreFollowersModal();
+            } else {
+                // Si no, abrir directamente
+                openFollowersModal(previous.userId, previous.filter || 'followers', true);
+            }
+        }
+        window._followersContextData = null;
+        window._fromFollowers = false;
+    }).catch(err => {
+        console.error('❌ Error importando followers-modal:', err);
+        showToast('Error al restaurar seguidores', true);
+    });
 }
 
 // ============================================================
@@ -392,7 +368,6 @@ function createProfileModalHTML() {
     window.handleProfileFollow = handleFollowUser;
     window.openStoryFromProfileOverlay = openStoryFromProfileOverlay;
     window.openEditProfileFromModal = openEditProfileFromModal;
-    window.restoreFollowersFromProfile = restoreFollowersFromProfile;
     window.redirectToNativeProfile = redirectToNativeProfile;
 }
 
@@ -430,35 +405,34 @@ function openFollowersFromProfile(filter) {
     
     const userId = currentProfileUserId;
     
-    // 🔥 Guardar el perfil actual en la pila
-    profileNavigationStack.push({
+    // 🔥 Guardar el perfil actual en la pila (tipo 'profile')
+    navigationStack.push({
+        type: 'profile',
         userId: currentProfileUserId,
         data: currentProfileData,
         fromFollowers: window._fromFollowers || false,
         scrollPosition: document.querySelector('.profile-modal-body')?.scrollTop || 0
     });
     
-    // 🔥 Cerrar perfil SIN restaurar seguidores
+    // 🔥 Cerrar perfil
     closeProfileModalInternal(false);
     
     // 🔥 Abrir followers
     import('./followers-modal.js').then(({ openFollowersModal }) => {
+        // Guardar contexto para que followers sepa que viene de perfil
+        window._profileContext = {
+            userId: currentProfileUserId,
+            filter: filter
+        };
         openFollowersModal(userId, filter, true);
     }).catch((err) => {
         console.error('❌ Error cargando followers-modal:', err);
         showToast('Error al abrir seguidores', true);
-        // Restaurar perfil si falla
-        const previous = profileNavigationStack.pop();
-        if (previous) {
-            setTimeout(() => {
-                openProfileModal(previous.userId, previous.fromFollowers);
-            }, 100);
-        }
     });
 }
 
 // ============================================================
-// CARGAR DATOS DEL PERFIL (CON CACHÉ)
+// CARGAR DATOS DEL PERFIL
 // ============================================================
 
 async function loadProfileData(userId) {
@@ -493,7 +467,6 @@ async function loadProfileData(userId) {
         const user = await res.json();
         currentProfileData = user;
 
-        // 🔥 Guardar en caché
         profileCache.set(userId, user);
         cleanCache();
 
@@ -546,7 +519,6 @@ async function refreshProfileInBackground(userId) {
                 window._profileStories = stories;
             }
 
-            // 🔥 Solo actualizar UI si sigue siendo el perfil visible
             if (isProfileModalOpen && currentProfileUserId === userId) {
                 currentProfileData = user;
                 updateProfileModalUI(user, stories);
@@ -853,7 +825,6 @@ async function handleFollowUser(userId, btn) {
             }
             
             clearProfileCache(userId);
-            // Actualizar caché en segundo plano
             refreshProfileInBackground(userId);
         } else {
             showToast(data.error || 'Error al seguir', true);
@@ -975,7 +946,6 @@ window.openStoryFromProfileOverlay = openStoryFromProfileOverlay;
 window.openEditProfileFromModal = openEditProfileFromModal;
 window.clearProfileCache = clearProfileCache;
 window.refreshCurrentProfile = refreshCurrentProfile;
-window.restoreFollowersFromProfile = restoreFollowersFromProfile;
 window.redirectToNativeProfile = redirectToNativeProfile;
 
 window.openStoryFromProfile = function(storyId) {
@@ -1018,6 +988,5 @@ export {
     openFollowersFromProfile,
     clearProfileCache,
     refreshCurrentProfile,
-    restoreFollowersFromProfile,
     redirectToNativeProfile
 };
