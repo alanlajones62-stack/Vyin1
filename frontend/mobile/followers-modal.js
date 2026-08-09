@@ -1,5 +1,6 @@
 // followers-modal.js - Modal de seguidores/seguidos (VERSIÓN CORREGIDA)
 // CON NAVEGACIÓN POR PILA Y CONTEXTO COMPLETO
+// 🔥 EL PERFIL PROPIO SE ABRE EN EL MODAL, NO EN PROFILE-NATIVE
 
 import { getToken, getCurrentUser, showToast, getAvatar, escapeHtml } from './auth.js';
 
@@ -141,6 +142,7 @@ function closeFollowersModal() {
             import('./profile-modal.js').then(({ openProfileModal }) => {
                 // Pasamos el contexto de followers guardado
                 const context = previous.context || null;
+                // 🔥 IMPORTANTE: No hay tratamiento especial para perfil propio
                 openProfileModal(previous.userId, previous.fromFollowers || false, context);
             }).catch(err => {
                 console.error('❌ Error importando profile-modal:', err);
@@ -636,6 +638,7 @@ window.handleFollowersFollow = async function(userId, btn) {
 
 // ============================================================
 // 🔥 ABRIR PERFIL DESDE SEGUIDORES (CORREGIDO CON PILA COMPLETA)
+// 🔥 EL PERFIL PROPIO SE ABRE EN EL MODAL, NO EN PROFILE-NATIVE
 // ============================================================
 
 window.openProfileFromFollowers = function(userId) {
@@ -677,6 +680,8 @@ window.openProfileFromFollowers = function(userId) {
     }
     
     // 🔥 ABRIR PERFIL CON CONTEXTO COMPLETO
+    // 🔥 IMPORTANTE: No hay ningún chequeo para redirigir a profile-native
+    // El perfil propio se abre en el modal como cualquier otro perfil
     if (typeof window.openProfileModal === 'function') {
         window.openProfileModal(userId, true, followersContext);
     } else {
