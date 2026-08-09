@@ -1,5 +1,5 @@
 // profile-modal.js - Modal para ver perfil de usuario (VERSIÓN CORREGIDA)
-// CON RESTAURACIÓN DE NAVEGACIÓN A INICIO Y EXPORTACIÓN CORRECTA
+// CON LIMPIEZA DE CONTENIDO AL CERRAR
 
 import {
     getToken, getCurrentUser, showToast,
@@ -55,6 +55,23 @@ function restoreNavToHome() {
 }
 
 // ============================================================
+// 🔥 FUNCIÓN PARA LIMPIAR EL CONTENIDO DEL MODAL
+// ============================================================
+
+function clearModalContent() {
+    const container = document.getElementById('profileModalBody');
+    if (!container) return;
+    
+    // 🔥 Mostrar estado de carga limpio
+    container.innerHTML = `
+        <div class="profile-loading">
+            <i class="fas fa-spinner fa-pulse"></i>
+            <span>Cargando perfil...</span>
+        </div>
+    `;
+}
+
+// ============================================================
 // ABRIR MODAL DE PERFIL
 // ============================================================
 
@@ -92,6 +109,9 @@ function openProfileModal(userId, fromFollowers = false) {
 
     document.body.style.overflow = 'hidden';
 
+    // 🔥 LIMPIAR CONTENIDO ANTES DE CARGAR
+    clearModalContent();
+
     if (refreshInterval) {
         clearInterval(refreshInterval);
         refreshInterval = null;
@@ -110,7 +130,7 @@ function openProfileModal(userId, fromFollowers = false) {
 }
 
 // ============================================================
-// CERRAR MODAL DE PERFIL
+// CERRAR MODAL DE PERFIL - 🔥 CON LIMPIEZA MEJORADA
 // ============================================================
 
 function closeProfileModal() {
@@ -128,6 +148,9 @@ function closeProfileModal() {
         refreshInterval = null;
     }
 
+    // 🔥 LIMPIAR CONTENIDO DEL MODAL
+    clearModalContent();
+
     const overlay = document.getElementById('profileModalOverlay');
     if (overlay) {
         overlay.classList.remove('active');
@@ -135,6 +158,7 @@ function closeProfileModal() {
         overlay.style.zIndex = '';
     }
 
+    // 🔥 LIMPIAR ESTADO
     isProfileModalOpen = false;
     currentProfileUserId = null;
     currentProfileData = null;
@@ -768,7 +792,7 @@ window.goToProfileUserFromModal = function() {
 };
 
 // ============================================================
-// ✅ EXPORTAR - UNA SOLA VEZ - ASEGURAR QUE TODAS LAS FUNCIONES ESTÁN AQUÍ
+// ✅ EXPORTAR - UNA SOLA VEZ
 // ============================================================
 
 export { 
