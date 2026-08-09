@@ -1,5 +1,5 @@
 // ============================================================
-// auth.js - AUTENTICACIÓN Y SESIÓN (VERSIÓN MÓVIL)
+// auth.js - AUTENTICACIÓN Y SESIÓN (VERSIÓN CORREGIDA)
 // ============================================================
 
 const API_URL = window.location.origin || 'http://localhost:3000';
@@ -12,15 +12,22 @@ let token = localStorage.getItem('token');
 // ============================================================
 
 export function getToken() {
-    return token || localStorage.getItem('token');
+    // Siempre verificar localStorage para mantener sincronía
+    const stored = localStorage.getItem('token');
+    if (stored) {
+        token = stored;
+    }
+    return token || null;
 }
 
 export function setToken(newToken) {
     token = newToken;
     if (newToken) {
         localStorage.setItem('token', newToken);
+        console.log('✅ Token guardado en localStorage');
     } else {
         localStorage.removeItem('token');
+        console.log('🗑️ Token eliminado de localStorage');
     }
 }
 
@@ -46,6 +53,7 @@ export function getCurrentUser() {
                 console.log('🔄 Usuario cargado desde localStorage:', currentUser.username);
             } catch (e) {
                 console.error('Error cargando usuario:', e);
+                currentUser = null;
             }
         }
     }
@@ -56,8 +64,10 @@ export function setCurrentUser(user) {
     currentUser = user;
     if (user) {
         localStorage.setItem('user', JSON.stringify(user));
+        console.log('✅ Usuario guardado en localStorage:', user.username);
     } else {
         localStorage.removeItem('user');
+        console.log('🗑️ Usuario eliminado de localStorage');
     }
 }
 
@@ -254,7 +264,7 @@ export async function detectLanguage(text) {
 }
 
 // ============================================================
-// SESIÓN
+// 🔥 SESIÓN - CORREGIDO
 // ============================================================
 
 export function restoreSession() {
@@ -273,17 +283,35 @@ export function restoreSession() {
             return true;
         } catch (e) {
             console.error('❌ Error restaurando sesión:', e);
+            // Limpiar datos corruptos
+            localStorage.removeItem('token');
+            localStorage.removeItem('user');
+            token = null;
+            currentUser = null;
             return false;
         }
     }
+    
+    // Si no hay token pero hay user, limpiar
+    if (!savedToken && savedUser) {
+        console.warn('⚠️ Token ausente pero user existe - limpiando');
+        localStorage.removeItem('user');
+        currentUser = null;
+        return false;
+    }
+    
     return false;
 }
 
 export async function verifySession() {
     const t = getToken();
-    if (!t) return false;
+    if (!t) {
+        console.log('🔒 No hay token para verificar');
+        return false;
+    }
     
     try {
+        console.log('🔍 Verificando sesión con token...');
         const res = await fetch(`${API_URL}/api/auth/verify`, {
             headers: { 'Authorization': `Bearer ${t}` }
         });
@@ -298,6 +326,7 @@ export async function verifySession() {
             }
             return false;
         } else if (res.status === 401) {
+            console.warn('⚠️ Token inválido - limpiando sesión');
             localStorage.removeItem('token');
             localStorage.removeItem('user');
             token = null;
@@ -307,6 +336,7 @@ export async function verifySession() {
         return false;
     } catch (error) {
         console.error('❌ Error verificando sesión:', error);
+        // Si hay usuario local, asumir que la sesión es válida (fallback)
         return !!currentUser;
     }
 }
@@ -317,6 +347,13 @@ export function logout() {
     localStorage.removeItem('user');
     token = null;
     currentUser = null;
+    
+    // Cerrar socket si existe
+    if (window.socket) {
+        window.socket.disconnect();
+        window.socket = null;
+    }
+    
     window.location.href = 'index.html';
 }
 
