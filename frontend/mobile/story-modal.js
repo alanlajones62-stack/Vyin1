@@ -27,7 +27,7 @@ let translationCache = {};
 // ABRIR MODAL
 // ============================================================
 
-export async function openStoryModal(storyId, storiesList = null, fromProfile = false, profileUserId = null) {
+async function openStoryModal(storyId, storiesList = null, fromProfile = false, profileUserId = null) {
     if (!storyId) {
         showToast('Historia no encontrada', true);
         return;
@@ -98,7 +98,7 @@ export async function openStoryModal(storyId, storiesList = null, fromProfile = 
 // CERRAR MODAL
 // ============================================================
 
-export function closeStoryModal() {
+function closeStoryModal() {
     console.log('📱 [STORY-MODAL] Cerrando modal...');
     
     isModalOpen = false;
@@ -144,7 +144,7 @@ export function closeStoryModal() {
 // NAVEGAR ENTRE HISTORIAS
 // ============================================================
 
-export async function navigateStory(direction) {
+async function navigateStory(direction) {
     if (isNavigating) return;
     if (!currentStoriesList || currentStoriesList.length <= 1) {
         showToast('Solo hay una historia disponible');
@@ -396,7 +396,7 @@ function setupModalEvents() {
 }
 
 // ============================================================
-// 🔥 ELIMINAR HISTORIA - SIN EXPORT (solo función interna)
+// ELIMINAR HISTORIA
 // ============================================================
 
 async function deleteStory(storyId) {
@@ -411,11 +411,9 @@ async function deleteStory(storyId) {
         return;
     }
 
-    // Confirmar eliminación
     const confirmDelete = confirm('¿Estás seguro de que quieres eliminar esta historia? Esta acción no se puede deshacer.');
     if (!confirmDelete) return;
 
-    // Mostrar indicador de carga
     const deleteBtn = document.getElementById('modalDeleteBtn');
     if (deleteBtn) {
         deleteBtn.disabled = true;
@@ -434,19 +432,16 @@ async function deleteStory(storyId) {
         if (res.ok) {
             showToast('🗑️ Historia eliminada correctamente');
             
-            // Eliminar de la lista local
             if (currentStoriesList && currentStoriesList.length > 0) {
                 const idx = currentStoriesList.findIndex(s => s.id === storyId);
                 if (idx !== -1) {
                     currentStoriesList.splice(idx, 1);
                     
-                    // Si quedan historias, navegar a la siguiente
                     if (currentStoriesList.length > 0) {
                         const nextIdx = Math.min(idx, currentStoriesList.length - 1);
                         currentStoryIndex = nextIdx;
                         await loadStoryData(currentStoriesList[nextIdx].id, true);
                     } else {
-                        // No quedan historias, cerrar modal
                         closeStoryModal();
                     }
                 }
@@ -454,12 +449,10 @@ async function deleteStory(storyId) {
                 closeStoryModal();
             }
             
-            // Emitir evento para actualizar feeds (si hay socket)
             try {
                 if (window.io) {
                     window.io.emit('story_deleted', { storyId });
                 }
-                // También emitir localmente
                 document.dispatchEvent(new CustomEvent('storyDeleted', { 
                     detail: { storyId } 
                 }));
@@ -531,10 +524,8 @@ async function handleSendComment() {
         if (res.ok) {
             input.value = '';
             
-            // Actualizar contador
             updateCommentCount(1);
             
-            // Actualizar datos
             if (currentStoryData) {
                 if (!currentStoryData.comments) currentStoryData.comments = [];
                 currentStoryData.comments.push(data);
@@ -548,7 +539,6 @@ async function handleSendComment() {
                 }
             }
 
-            // Añadir a la UI sin duplicar
             addCommentToUI(data);
             
             showToast('💬 Comentario enviado');
@@ -614,10 +604,8 @@ async function handleSendReply(storyId, commentId) {
             input.value = '';
             wrapper.style.display = 'none';
 
-            // Actualizar contador
             updateCommentCount(1);
 
-            // Añadir respuesta a la UI sin duplicar
             addReplyToUI(commentId, data);
             
             showToast('💬 Respuesta enviada');
@@ -645,7 +633,6 @@ function addReplyToUI(parentCommentId, reply) {
     const repliesContainer = document.getElementById(`replies-${parentCommentId}`);
     if (!repliesContainer) return;
 
-    // Verificar si la respuesta ya existe
     const existingReply = repliesContainer.querySelector(`[data-comment-id="${reply.id}"]`);
     if (existingReply) {
         console.log('⚠️ Respuesta ya existe en la UI, omitiendo duplicado');
@@ -861,7 +848,6 @@ async function toggleTranslation() {
         return;
     }
     
-    // Si ya está traducida, mostrar original
     if (currentStoryData.translated && currentStoryData._originalTextContent) {
         console.log('📝 Mostrando original');
         
@@ -894,7 +880,6 @@ async function toggleTranslation() {
         return;
     }
 
-    // Verificar caché en memoria
     const cacheKey = `${currentStoryId}_${userLanguage}`;
     if (translationCache[cacheKey] && translationCache[cacheKey].translated) {
         console.log('📦 Usando traducción desde caché');
@@ -938,7 +923,6 @@ async function toggleTranslation() {
         return;
     }
 
-    // Si no está en caché, traducir
     if (translateBtn) {
         translateBtn.innerHTML = '<i class="fas fa-spinner fa-pulse"></i> Traduciendo...';
         translateBtn.disabled = true;
@@ -1125,7 +1109,6 @@ async function loadStoryData(storyId, isNavigation = false) {
         currentStoryData = story;
         currentStoryId = story.id;
 
-        // Verificar si hay traducción en caché
         const cacheKey = `${storyId}_${userLanguage}`;
         if (translationCache[cacheKey] && !story.translated) {
             console.log('📦 Aplicando traducción desde caché');
@@ -1181,9 +1164,6 @@ function updateModalUI(story) {
     document.getElementById('modalUserHandle').textContent = `@${user.username || 'usuario'}`;
     window._modalUserId = user.id;
 
-    // ============================================================
-    // 🔥 MOSTRAR/OCULTAR BOTÓN DE ELIMINAR
-    // ============================================================
     const deleteBtn = document.getElementById('modalDeleteBtn');
     if (deleteBtn) {
         const currentUser = getCurrentUser();
@@ -1198,7 +1178,6 @@ function updateModalUI(story) {
         }
     }
 
-    // Botón de traducción - siempre visible
     const contentLanguage = story.language || story.originalLanguage || 'es';
     const isDifferentLanguage = contentLanguage !== userLanguage;
     const isTranslated = story.translated || false;
@@ -1460,7 +1439,7 @@ async function handleModalLike() {
 }
 
 // ============================================================
-// FUNCIONES GLOBALES
+// FUNCIONES GLOBALES PARA WINDOW
 // ============================================================
 
 window.openStoryModal = openStoryModal;
