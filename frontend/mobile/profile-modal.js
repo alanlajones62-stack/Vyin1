@@ -1,6 +1,7 @@
 // profile-modal.js - Modal para ver perfil de usuario (VERSIÓN COMPLETA CON BLOQUEO Y PRIVACIDAD)
 // CON NAVEGACIÓN POR PILA Y CONTEXTO DE VISTA
 // 🔥 EL PERFIL PROPIO SE MUESTRA EN EL MODAL, NO EN PROFILE-NATIVE
+// 🔥 BLOQUEOS: El bloqueador ve el perfil con botón "Desbloquear", el bloqueado ve "Usuario no encontrado"
 
 import {
     getToken, getCurrentUser, showToast,
@@ -393,7 +394,7 @@ window.handleBlockUser = async function(userId) {
         }
 
         if (isBlocked) {
-            // Desbloquear
+            // 🔥 DESBLOQUEAR
             const res = await fetch(`${API_URL}/api/blocked/unblock/${userId}`, {
                 method: 'DELETE',
                 headers: { 'Authorization': `Bearer ${token}` }
@@ -402,15 +403,14 @@ window.handleBlockUser = async function(userId) {
             if (res.ok) {
                 showToast('✅ Usuario desbloqueado');
                 // Recargar perfil para actualizar UI
-                loadProfileData(userId);
-                // Actualizar caché
                 clearProfileCache(userId);
+                loadProfileData(userId);
             } else {
                 const data = await res.json();
                 showToast(data.error || 'Error al desbloquear', true);
             }
         } else {
-            // Bloquear
+            // 🔥 BLOQUEAR
             const res = await fetch(`${API_URL}/api/blocked/block`, {
                 method: 'POST',
                 headers: {
@@ -422,7 +422,8 @@ window.handleBlockUser = async function(userId) {
 
             if (res.ok) {
                 showToast('🔒 Usuario bloqueado');
-                // Cerrar modal - el usuario bloqueado no debe ver el perfil
+                // El bloqueador sigue viendo el perfil, solo cambia el botón
+                // Pero cerramos el modal para que el bloqueado no pueda interactuar
                 closeProfileModal();
                 // Actualizar caché
                 clearProfileCache(userId);
@@ -450,12 +451,14 @@ function updateProfileModalUI(user, stories) {
     const hasPendingRequest = user.hasPendingRequest || false;
     const isOwnProfile = currentUser?.id === user.id;
 
-    // 🔥 VERIFICAR SI EL USUARIO ESTÁ BLOQUEADO
-    // Si el usuario actual está bloqueado por el dueño del perfil, mostrar "Usuario no encontrado"
+    // 🔥 VERIFICAR BLOQUEOS
+    // isBlockedBy: true si el DUEÑO del perfil bloqueó al usuario actual
+    // isBlocked: true si el usuario actual bloqueó al DUEÑO del perfil
     const isBlockedByOwner = user.isBlockedBy || false;
     const isBlocked = user.isBlocked || false;
 
-    // Si el dueño del perfil bloqueó al usuario actual, mostrar error
+    // 🔥 CASO 1: El dueño del perfil bloqueó al usuario actual
+    // → Mostrar "Usuario no encontrado"
     if (isBlockedByOwner) {
         container.innerHTML = `
             <div class="profile-not-found">
@@ -528,16 +531,24 @@ function updateProfileModalUI(user, stories) {
     let followIcon = '<i class="fas fa-user-plus"></i>';
     let followOnClick = `window.handleProfileFollow()`;
 
-    // 🔥 BOTÓN DE BLOQUEO - Solo visible para otros usuarios (y si no está bloqueado por el dueño)
+    // 🔥 CASO 2: El usuario actual bloqueó al dueño del perfil
+    // → Mostrar botón "Desbloquear" (el bloqueador ve el perfil)
     let blockButton = '';
     let blockText = 'Bloquear';
     let blockIcon = '<i class="fas fa-ban"></i>';
     let blockClass = 'btn-block';
     
-    if (!isOwnProfile && !isBlockedByOwner) {
-        blockText = isBlocked ? 'Desbloquear' : 'Bloquear';
-        blockIcon = isBlocked ? '<i class="fas fa-unlock"></i>' : '<i class="fas fa-ban"></i>';
-        blockClass = isBlocked ? 'btn-block blocked' : 'btn-block';
+    if (!isOwnProfile) {
+        // Si el usuario actual bloqueó al dueño del perfil → mostrar "Desbloquear"
+        if (isBlocked) {
+            blockText = 'Desbloquear';
+            blockIcon = '<i class="fas fa-unlock"></i>';
+            blockClass = 'btn-block blocked';
+        } else {
+            blockText = 'Bloquear';
+            blockIcon = '<i class="fas fa-ban"></i>';
+            blockClass = 'btn-block';
+        }
         
         blockButton = `
             <button class="${blockClass}" onclick="window.handleBlockUser('${user.id}')">
@@ -569,17 +580,22 @@ function updateProfileModalUI(user, stories) {
     const bio = user.bio ? escapeHtml(user.bio) : '';
     const countryName = user.countryName ? escapeHtml(user.countryName) : '';
 
+    // 🔥 Si el usuario está bloqueado por el actual, mostrar el perfil pero con estilo "bloqueado"
+    const isBlockedByCurrent = isBlocked;
+
     container.innerHTML = `
-        <div class="profile-cover">
+        <div class="profile-cover ${isBlockedByCurrent ? 'profile-blocked' : ''}">
             <div class="profile-avatar-wrapper">
                 <img class="profile-avatar" src="${avatarUrl}" 
                      alt="${fullName}" 
                      loading="eager"
                      onerror="this.src='${getAvatar(user.fullName || 'U')}'" />
+                ${isBlockedByCurrent ? `<div class="blocked-overlay"><i class="fas fa-ban"></i></div>` : ''}
             </div>
             <div class="profile-name">
                 ${fullName}
                 ${badgeHtml}
+                ${isBlockedByCurrent ? `<span class="blocked-badge">🔒 Bloqueado</span>` : ''}
             </div>
             <div class="profile-username">@${username}</div>
             ${bio ? `<div class="profile-bio">${bio}</div>` : ''}
@@ -596,7 +612,7 @@ function updateProfileModalUI(user, stories) {
             ${blockButton}
         </div>
 
-        <div class="profile-stats">
+        <div class="profile-stats ${isBlockedByCurrent ? 'profile-stats-blocked' : ''}">
             <div class="stat" onclick="window.openFollowersFromProfile('followers')" style="cursor:pointer;">
                 <span class="number">${formatNumber(followersCount)}</span>
                 <span class="label">Seguidores</span>
@@ -611,7 +627,7 @@ function updateProfileModalUI(user, stories) {
             </div>
         </div>
 
-        <div class="profile-stories-section">
+        <div class="profile-stories-section ${isBlockedByCurrent ? 'profile-stories-blocked' : ''}">
             <div class="section-title">
                 <i class="fas fa-images"></i> Historias
                 <span style="font-size:9px;color:rgba(255,255,255,0.15);margin-left:auto;">${stories?.length || 0}</span>

@@ -1,6 +1,6 @@
 /* ============================================================
    PROFILE MODAL - OPTIMIZADO PARA RENDIMIENTO
-   SIN BORDES REDONDOS (IGUAL QUE EXPLORER)
+   CON SISTEMA DE BLOQUEO Y PRIVACIDAD
    ============================================================ */
 
 /* ============================================================
@@ -376,7 +376,7 @@
 }
 
 /* ============================================================
-   BOTÓN SEGUIR
+   BOTÓN DE SEGUIR
    ============================================================ */
 
 .profile-follow-btn {
@@ -421,7 +421,6 @@
     color: #ff6b6b;
 }
 
-/* 🔥 BOTÓN EDITAR PERFIL */
 .profile-follow-btn .btn-edit-profile {
     background: linear-gradient(135deg, #c084fc, #db2777);
     color: #fff;
@@ -441,6 +440,56 @@
 
 .profile-follow-btn .btn-edit-profile:active {
     transform: scale(0.95);
+}
+
+/* ============================================================
+   CONTENEDOR DE ACCIONES (SEGUIR + BLOQUEAR)
+   ============================================================ */
+
+.profile-actions {
+    display: flex;
+    gap: 10px;
+    justify-content: center;
+    margin: 8px 0 16px;
+    flex-wrap: wrap;
+}
+
+/* ============================================================
+   BOTÓN DE BLOQUEO
+   ============================================================ */
+
+.btn-block {
+    padding: 8px 24px;
+    border-radius: 50px;
+    border: none;
+    font-weight: 600;
+    font-size: 13px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    background: rgba(255, 68, 68, 0.1);
+    color: #ff6b6b;
+    font-family: inherit;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.btn-block:hover {
+    background: rgba(255, 68, 68, 0.2);
+    transform: scale(1.02);
+}
+
+.btn-block:active {
+    transform: scale(0.95);
+}
+
+.btn-block.blocked {
+    background: rgba(34, 197, 94, 0.1);
+    color: #22c55e;
+}
+
+.btn-block.blocked:hover {
+    background: rgba(34, 197, 94, 0.2);
 }
 
 /* ============================================================
@@ -482,6 +531,79 @@
     color: rgba(255, 255, 255, 0.3);
     text-transform: uppercase;
     letter-spacing: 0.5px;
+}
+
+/* ============================================================
+   ESTADO BLOQUEADO (PARA EL BLOQUEADOR)
+   ============================================================ */
+
+.profile-blocked {
+    opacity: 0.7;
+}
+
+.blocked-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.3);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 24px;
+    color: rgba(255, 255, 255, 0.3);
+}
+
+.blocked-badge {
+    font-size: 11px;
+    color: rgba(255, 68, 68, 0.5);
+    background: rgba(255, 68, 68, 0.1);
+    padding: 2px 10px;
+    border-radius: 12px;
+    margin-left: 6px;
+}
+
+.profile-stats-blocked {
+    opacity: 0.5;
+}
+
+.profile-stories-blocked {
+    opacity: 0.4;
+}
+
+/* ============================================================
+   USUARIO NO ENCONTRADO (PARA EL BLOQUEADO)
+   ============================================================ */
+
+.profile-not-found {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 300px;
+    color: rgba(255, 255, 255, 0.3);
+    text-align: center;
+    padding: 40px 20px;
+}
+
+.profile-not-found i {
+    font-size: 48px;
+    color: rgba(255, 255, 255, 0.05);
+    margin-bottom: 16px;
+}
+
+.profile-not-found h3 {
+    font-size: 20px;
+    color: rgba(255, 255, 255, 0.2);
+    font-weight: 400;
+    margin-bottom: 4px;
+}
+
+.profile-not-found p {
+    font-size: 13px;
+    color: rgba(255, 255, 255, 0.08);
 }
 
 /* ============================================================
@@ -785,6 +907,11 @@
         padding: 6px 28px;
     }
 
+    .btn-block {
+        font-size: 12px;
+        padding: 6px 18px;
+    }
+
     .profile-story-thumb {
         min-height: 55px;
     }
@@ -804,6 +931,14 @@
 
     .profile-skeleton .skeleton-line {
         height: 10px;
+    }
+
+    .profile-not-found i {
+        font-size: 36px;
+    }
+
+    .profile-not-found h3 {
+        font-size: 17px;
     }
 }
 
@@ -913,6 +1048,11 @@
     .profile-follow-btn button {
         font-size: 12px;
         padding: 5px 22px;
+    }
+
+    .btn-block {
+        font-size: 11px;
+        padding: 5px 14px;
     }
 
     .profile-story-thumb {
@@ -1036,6 +1176,11 @@
         padding: 5px 22px;
     }
 
+    .btn-block {
+        font-size: 11px;
+        padding: 5px 14px;
+    }
+
     .profile-stories-grid {
         gap: 3px;
     }
@@ -1122,5 +1267,201 @@
     
     .profile-stats .stat .number {
         color: #fff;
+    }
+}
+
+/* ============================================================
+   RESPONSIVE EXTRA - TABLETS Y PANTALLAS MEDIANAS
+   ============================================================ */
+
+@media (min-width: 481px) and (max-width: 768px) {
+    .profile-modal-header {
+        padding: 16px 24px 14px;
+    }
+
+    .profile-modal-header .title {
+        font-size: 20px;
+    }
+
+    .profile-modal-body {
+        padding: 20px 24px 100px;
+    }
+
+    .profile-cover .profile-avatar {
+        width: 96px;
+        height: 96px;
+    }
+
+    .profile-cover .profile-name {
+        font-size: 26px;
+    }
+
+    .profile-stats .stat .number {
+        font-size: 24px;
+    }
+
+    .profile-follow-btn button {
+        font-size: 16px;
+        padding: 10px 44px;
+    }
+
+    .btn-block {
+        font-size: 14px;
+        padding: 10px 28px;
+    }
+
+    .profile-stories-grid {
+        gap: 8px;
+    }
+
+    .profile-story-thumb {
+        min-height: 80px;
+        border-radius: 10px;
+    }
+
+    .verification-badge {
+        width: 28px;
+        height: 28px;
+        font-size: 14px;
+    }
+
+    .verification-badge.verified::after {
+        font-size: 16px;
+    }
+}
+
+/* ============================================================
+   RESPONSIVE EXTRA - PANTALLAS GRANDES
+   ============================================================ */
+
+@media (min-width: 769px) {
+    .profile-modal-content {
+        max-width: 420px;
+        max-height: 90vh;
+        height: auto;
+        border-radius: 16px;
+        margin: auto;
+        box-shadow: 0 24px 80px rgba(0,0,0,0.6);
+    }
+
+    .profile-modal-overlay {
+        align-items: center;
+        justify-content: center;
+    }
+
+    .profile-modal-body {
+        padding: 20px 24px 100px;
+    }
+
+    .profile-cover .profile-avatar {
+        width: 100px;
+        height: 100px;
+    }
+
+    .profile-cover .profile-name {
+        font-size: 28px;
+    }
+
+    .profile-stats .stat .number {
+        font-size: 26px;
+    }
+
+    .profile-follow-btn button {
+        font-size: 16px;
+        padding: 10px 48px;
+    }
+
+    .btn-block {
+        font-size: 14px;
+        padding: 10px 30px;
+    }
+
+    .profile-stories-grid {
+        gap: 8px;
+    }
+
+    .profile-story-thumb {
+        min-height: 90px;
+        border-radius: 10px;
+    }
+
+    .verification-badge {
+        width: 30px;
+        height: 30px;
+        font-size: 14px;
+    }
+
+    .verification-badge.verified::after {
+        font-size: 16px;
+    }
+}
+
+/* ============================================================
+   RESPONSIVE EXTRA - PANTALLAS MUY PEQUEÑAS
+   ============================================================ */
+
+@media (max-width: 320px) {
+    .profile-modal-header .title {
+        font-size: 12px;
+    }
+
+    .profile-modal-header .close-btn {
+        width: 24px;
+        height: 24px;
+        font-size: 12px;
+    }
+
+    .profile-cover .profile-avatar {
+        width: 48px;
+        height: 48px;
+    }
+
+    .profile-cover .profile-name {
+        font-size: 14px;
+    }
+
+    .profile-cover .profile-username {
+        font-size: 10px;
+    }
+
+    .profile-cover .profile-bio {
+        font-size: 10px;
+    }
+
+    .profile-stats .stat .number {
+        font-size: 13px;
+    }
+
+    .profile-stats .stat .label {
+        font-size: 8px;
+    }
+
+    .profile-follow-btn button {
+        font-size: 10px;
+        padding: 4px 16px;
+    }
+
+    .btn-block {
+        font-size: 9px;
+        padding: 4px 12px;
+    }
+
+    .profile-story-thumb {
+        min-height: 35px;
+        border-radius: 4px;
+    }
+
+    .profile-stories-section .section-title {
+        font-size: 9px;
+    }
+
+    .verification-badge {
+        width: 14px;
+        height: 14px;
+        font-size: 7px;
+    }
+
+    .verification-badge.verified::after {
+        font-size: 8px;
     }
 }
