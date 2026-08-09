@@ -1,0 +1,47 @@
+[
+  {
+    "id": "1785792939278_kikjjd",
+    "reportId": "1785792939250",
+    "adminId": "1783122622538",
+    "assignedAt": "2026-08-03T21:35:39.278Z",
+    "status": "expired",
+    "lastActivity": "2026-08-03T21:35:39.279Z",
+    "expiredAt": "2026-08-07T01:56:04.335Z"
+  },
+  {
+    "id": "1785793000833_vsexqi",
+    "reportId": "1785793000793",
+    "adminId": "1783122622538",
+    "assignedAt": "2026-08-03T21:36:40.833Z",
+    "status": "expired",
+    "lastActivity": "2026-08-03T21:36:40.833Z",
+    "expiredAt": "2026-08-07T01:56:04.335Z"
+  },
+  {
+    "id": "1785793168757_n9c07h",
+    "reportId": "1785793168735",
+    "adminId": "1783122622538",
+    "assignedAt": "2026-08-03T21:39:28.757Z",
+    "status": "expired",
+    "lastActivity": "2026-08-03T21:39:28.757Z",
+    "expiredAt": "2026-08-08T23:39:47.910Z"
+  },
+  {
+    "id": "1785804916209_g3ov6w",
+    "reportId": "1785804916202",
+    "adminId": "1783122622538",
+    "assignedAt": "2026-08-04T00:55:16.209Z",
+    "status": "released",
+    "lastActivity": "2026-08-04T00:55:16.209Z",
+    "releasedAt": "2026-08-04T00:55:27.346Z"
+  },
+  {
+    "id": "1785804955280_215ah2",
+    "reportId": "1785804955277",
+    "adminId": "1783122622538",
+    "assignedAt": "2026-08-04T00:55:55.282Z",
+    "status": "released",
+    "lastActivity": "2026-08-04T00:55:55.283Z",
+    "releasedAt": "2026-08-04T00:56:29.466Z"
+  }
+]

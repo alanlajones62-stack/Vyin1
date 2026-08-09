@@ -1,0 +1,30 @@
+[
+  {
+    "userId": "1785472532136",
+    "businessName": "Vyin IA",
+    "businessType": "entertainment",
+    "description": "Quiero abrir mi cuenta plss",
+    "website": null,
+    "phone": null,
+    "address": null,
+    "status": "approved",
+    "requestedAt": "2026-08-03T19:41:34.368Z",
+    "trialEnd": "2026-08-10T19:41:34.369Z",
+    "approvedAt": "2026-08-03T19:41:56.776Z",
+    "approvedBy": "1783122622538"
+  },
+  {
+    "userId": "1784437546794",
+    "businessName": "ORGANIZACION CONTRA EL CANCER",
+    "businessType": "health",
+    "description": "",
+    "website": null,
+    "phone": null,
+    "address": null,
+    "status": "approved",
+    "requestedAt": "2026-08-03T20:03:16.791Z",
+    "trialEnd": "2026-08-10T20:03:16.791Z",
+    "approvedAt": "2026-08-03T20:05:23.174Z",
+    "approvedBy": "1783122622538"
+  }
+]

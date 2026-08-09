@@ -1,0 +1,384 @@
+/* ============================================================
+   STORY CREATOR MODAL - SIN BORDES REDONDOS (IGUAL QUE STORY)
+   ============================================================ */
+
+.creator-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(10, 10, 26, 0.92);
+    backdrop-filter: blur(24px);
+    -webkit-backdrop-filter: blur(24px);
+    z-index: 10002;
+    display: none;
+    flex-direction: column;
+    animation: creatorFadeIn 0.35s ease;
+}
+
+.creator-overlay.active {
+    display: flex;
+}
+
+@keyframes creatorFadeIn {
+    0% { opacity: 0; transform: scale(0.98); }
+    100% { opacity: 1; transform: scale(1); }
+}
+
+/* ============================================================
+   CONTENEDOR PRINCIPAL - SIN BORDES REDONDOS
+   ============================================================ */
+
+.creator-modal {
+    background: #12122a;
+    border-radius: 0;
+    max-width: 100%;
+    width: 100%;
+    max-height: 100vh;
+    height: 100vh;
+    overflow: hidden;
+    position: relative;
+    border: none;
+    box-shadow: none;
+    display: flex;
+    flex-direction: column;
+}
+
+/* ============================================================
+   HEADER - IGUAL QUE EXPLORER
+   ============================================================ */
+
+.creator-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 20px 12px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+    flex-shrink: 0;
+    background: transparent;
+    min-height: auto;
+    max-height: none;
+    z-index: 20;
+}
+
+.creator-header .title {
+    font-weight: 700;
+    font-size: 18px;
+    color: #fff;
+}
+
+.creator-header .close-btn {
+    background: rgba(255, 255, 255, 0.05);
+    border: none;
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    color: rgba(255, 255, 255, 0.4);
+    font-size: 18px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.3s;
+    flex-shrink: 0;
+}
+
+.creator-header .close-btn:active {
+    transform: scale(0.88);
+    background: rgba(255, 255, 255, 0.1);
+}
+
+/* ============================================================
+   PREVIEW - CONTENIDO PRINCIPAL
+   ============================================================ */
+
+.creator-preview {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #0a0a1a;
+    position: relative;
+    overflow: hidden;
+    min-height: 0;
+}
+
+.creator-preview video,
+.creator-preview img {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+}
+
+.creator-preview .preview-placeholder {
+    text-align: center;
+    color: rgba(255, 255, 255, 0.15);
+}
+
+.creator-preview .preview-placeholder i {
+    font-size: 60px;
+    display: block;
+    margin-bottom: 12px;
+    color: rgba(255, 255, 255, 0.05);
+}
+
+.creator-preview .preview-placeholder p {
+    font-size: 16px;
+    color: rgba(255, 255, 255, 0.2);
+}
+
+/* ============================================================
+   BOTONES DE MEDIA - IGUAL QUE EXPLORER
+   ============================================================ */
+
+.creator-media-buttons {
+    display: flex;
+    gap: 12px;
+    padding: 12px 20px;
+    background: rgba(18, 18, 42, 0.9);
+    border-top: 1px solid rgba(255, 255, 255, 0.04);
+    flex-shrink: 0;
+    justify-content: center;
+    flex-wrap: wrap;
+}
+
+.creator-media-buttons button {
+    padding: 10px 20px;
+    border: none;
+    border-radius: 50px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-family: inherit;
+    flex-shrink: 0;
+}
+
+.creator-media-buttons button:active {
+    transform: scale(0.95);
+}
+
+.creator-media-buttons .btn-camera {
+    background: linear-gradient(135deg, #c084fc, #db2777);
+    color: #fff;
+    box-shadow: 0 4px 16px rgba(192, 132, 252, 0.2);
+}
+
+.creator-media-buttons .btn-gallery {
+    background: rgba(255, 255, 255, 0.06);
+    color: rgba(255, 255, 255, 0.7);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.creator-media-buttons .btn-text {
+    background: rgba(255, 255, 255, 0.06);
+    color: rgba(255, 255, 255, 0.7);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+/* ============================================================
+   INPUTS - IGUAL QUE EXPLORER
+   ============================================================ */
+
+.creator-inputs {
+    padding: 12px 20px 20px;
+    background: rgba(18, 18, 42, 0.95);
+    border-top: 1px solid rgba(255, 255, 255, 0.04);
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.creator-inputs textarea {
+    width: 100%;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    border-radius: 12px;
+    padding: 12px 14px;
+    color: #fff;
+    font-size: 14px;
+    font-family: inherit;
+    outline: none;
+    resize: vertical;
+    min-height: 50px;
+    max-height: 100px;
+    transition: border-color 0.3s;
+}
+
+.creator-inputs textarea::placeholder {
+    color: rgba(255, 255, 255, 0.2);
+}
+
+.creator-inputs textarea:focus {
+    border-color: rgba(192, 132, 252, 0.3);
+}
+
+.creator-inputs .creator-actions {
+    display: flex;
+    gap: 10px;
+    justify-content: flex-end;
+}
+
+.creator-inputs .creator-actions button {
+    padding: 10px 24px;
+    border: none;
+    border-radius: 50px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s;
+    font-family: inherit;
+}
+
+.creator-inputs .creator-actions button:active {
+    transform: scale(0.95);
+}
+
+.creator-inputs .creator-actions .btn-publish {
+    background: linear-gradient(135deg, #c084fc, #db2777);
+    color: #fff;
+    box-shadow: 0 4px 16px rgba(192, 132, 252, 0.2);
+}
+
+.creator-inputs .creator-actions .btn-publish:disabled {
+    opacity: 0.3;
+    cursor: not-allowed;
+}
+
+.creator-inputs .creator-actions .btn-cancel {
+    background: rgba(255, 255, 255, 0.06);
+    color: rgba(255, 255, 255, 0.4);
+}
+
+/* ============================================================
+   RESPONSIVE - IGUAL QUE STORY
+   ============================================================ */
+
+@media (max-width: 480px) {
+    .creator-header {
+        padding: 12px 16px 10px;
+    }
+    
+    .creator-header .title {
+        font-size: 16px;
+    }
+    
+    .creator-header .close-btn {
+        width: 30px;
+        height: 30px;
+        font-size: 15px;
+    }
+    
+    .creator-media-buttons {
+        padding: 10px 12px;
+        gap: 8px;
+    }
+    
+    .creator-media-buttons button {
+        padding: 8px 14px;
+        font-size: 12px;
+    }
+    
+    .creator-inputs {
+        padding: 10px 16px 16px;
+    }
+    
+    .creator-inputs textarea {
+        font-size: 13px;
+        padding: 10px 12px;
+        min-height: 40px;
+    }
+    
+    .creator-inputs .creator-actions button {
+        padding: 8px 18px;
+        font-size: 13px;
+    }
+}
+
+@media (max-width: 380px) {
+    .creator-header {
+        padding: 10px 12px 8px;
+    }
+    
+    .creator-header .title {
+        font-size: 14px;
+    }
+    
+    .creator-header .close-btn {
+        width: 26px;
+        height: 26px;
+        font-size: 13px;
+    }
+    
+    .creator-media-buttons {
+        padding: 8px 10px;
+        gap: 6px;
+    }
+    
+    .creator-media-buttons button {
+        padding: 6px 10px;
+        font-size: 11px;
+    }
+    
+    .creator-inputs {
+        padding: 8px 12px 12px;
+    }
+    
+    .creator-inputs textarea {
+        font-size: 12px;
+        padding: 8px 10px;
+        min-height: 36px;
+        max-height: 80px;
+    }
+    
+    .creator-inputs .creator-actions button {
+        padding: 6px 14px;
+        font-size: 12px;
+    }
+}
+
+@media (max-height: 600px) {
+    .creator-header {
+        padding: 8px 14px 6px;
+    }
+    
+    .creator-header .title {
+        font-size: 15px;
+    }
+    
+    .creator-header .close-btn {
+        width: 28px;
+        height: 28px;
+        font-size: 14px;
+    }
+    
+    .creator-media-buttons {
+        padding: 6px 12px;
+    }
+    
+    .creator-media-buttons button {
+        padding: 6px 12px;
+        font-size: 11px;
+    }
+    
+    .creator-inputs {
+        padding: 6px 14px 12px;
+    }
+    
+    .creator-inputs textarea {
+        font-size: 12px;
+        padding: 8px 10px;
+        min-height: 36px;
+        max-height: 60px;
+    }
+    
+    .creator-inputs .creator-actions button {
+        padding: 6px 14px;
+        font-size: 12px;
+    }
+}

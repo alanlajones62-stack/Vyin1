@@ -1,0 +1,211 @@
+/* activity-modal.css - Modal de actividad */
+
+.activity-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(10, 10, 26, 0.92);
+    backdrop-filter: blur(24px);
+    z-index: 2000;
+    display: none;
+    flex-direction: column;
+    animation: activityFadeIn 0.35s ease;
+}
+
+.activity-overlay.active {
+    display: flex;
+}
+
+@keyframes activityFadeIn {
+    0% { opacity: 0; transform: translateY(10px); }
+    100% { opacity: 1; transform: translateY(0); }
+}
+
+.activity-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 20px 12px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+    flex-shrink: 0;
+}
+
+.activity-header h2 {
+    font-size: 20px;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    color: #fff;
+}
+
+.activity-header h2 i {
+    color: #ff6b6b;
+}
+
+.activity-header .close-btn {
+    background: rgba(255, 255, 255, 0.05);
+    border: none;
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    color: rgba(255, 255, 255, 0.4);
+    font-size: 18px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.3s;
+}
+
+.activity-header .close-btn:active {
+    transform: scale(0.88);
+}
+
+.activity-body {
+    flex: 1;
+    overflow-y: auto;
+    padding: 16px 16px 100px;
+    -webkit-overflow-scrolling: touch;
+}
+
+.activity-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 12px 14px;
+    border-radius: 12px;
+    background: rgba(255, 255, 255, 0.02);
+    margin-bottom: 6px;
+    cursor: pointer;
+    transition: all 0.3s;
+    border-left: 3px solid transparent;
+}
+
+.activity-item:active {
+    transform: scale(0.98);
+    background: rgba(255, 255, 255, 0.03);
+}
+
+.activity-item.unread {
+    background: rgba(192, 132, 252, 0.04);
+    border-left-color: #c084fc;
+}
+
+.activity-item .avatar {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    object-fit: cover;
+    flex-shrink: 0;
+    border: 2px solid rgba(255, 255, 255, 0.05);
+}
+
+.activity-item .content {
+    flex: 1;
+    min-width: 0;
+}
+
+.activity-item .content .text {
+    font-size: 14px;
+    color: rgba(255, 255, 255, 0.7);
+    line-height: 1.4;
+}
+
+.activity-item .content .text strong {
+    color: #fff;
+    font-weight: 600;
+}
+
+.activity-item .content .text .highlight {
+    color: #c084fc;
+}
+
+.activity-item .content .time {
+    font-size: 11px;
+    color: rgba(255, 255, 255, 0.15);
+    margin-top: 4px;
+}
+
+.activity-item .content .preview {
+    font-size: 13px;
+    color: rgba(255, 255, 255, 0.2);
+    margin-top: 4px;
+    padding: 6px 10px;
+    background: rgba(255, 255, 255, 0.02);
+    border-radius: 6px;
+    border-left: 2px solid rgba(192, 132, 252, 0.1);
+}
+
+.activity-item .icon {
+    font-size: 20px;
+    flex-shrink: 0;
+    margin-top: 6px;
+}
+
+.activity-empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 80px 20px;
+    color: rgba(255, 255, 255, 0.1);
+    text-align: center;
+}
+
+.activity-empty i {
+    font-size: 56px;
+    margin-bottom: 16px;
+    color: rgba(255, 255, 255, 0.03);
+}
+
+.activity-empty h3 {
+    font-size: 18px;
+    color: rgba(255, 255, 255, 0.2);
+    font-weight: 500;
+}
+
+.activity-empty p {
+    font-size: 13px;
+    color: rgba(255, 255, 255, 0.08);
+}
+
+.activity-actions {
+    display: flex;
+    gap: 8px;
+    padding: 12px 16px;
+    border-top: 1px solid rgba(255, 255, 255, 0.03);
+    flex-shrink: 0;
+    background: rgba(10, 10, 26, 0.8);
+}
+
+.activity-actions button {
+    padding: 8px 16px;
+    border: none;
+    border-radius: 50px;
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.3s;
+    font-family: inherit;
+}
+
+.activity-actions .mark-all-read {
+    background: rgba(192, 132, 252, 0.1);
+    color: #c084fc;
+}
+
+.activity-actions .clear-all {
+    background: rgba(255, 107, 107, 0.08);
+    color: rgba(255, 107, 107, 0.5);
+}
+
+.activity-actions button:active {
+    transform: scale(0.92);
+}
+
+.activity-body::-webkit-scrollbar {
+    width: 0;
+}

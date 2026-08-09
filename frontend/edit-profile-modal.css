@@ -1,0 +1,773 @@
+/* ============================================================
+   EDIT PROFILE MODAL - ESTILO COMPLETO
+   ============================================================ */
+
+/* ===== OVERLAY ===== */
+.edit-profile-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(10, 10, 26, 0.92);
+    backdrop-filter: blur(24px);
+    -webkit-backdrop-filter: blur(24px);
+    z-index: 20000;
+    display: none;
+    flex-direction: column;
+    animation: editProfileFadeIn 0.35s ease;
+}
+
+.edit-profile-overlay.active {
+    display: flex;
+}
+
+@keyframes editProfileFadeIn {
+    0% { opacity: 0; transform: scale(0.98); }
+    100% { opacity: 1; transform: scale(1); }
+}
+
+/* ===== CONTENIDO ===== */
+.edit-profile-content {
+    background: #12122a;
+    border-radius: 0;
+    width: 100%;
+    max-width: 100%;
+    max-height: 100vh;
+    height: 100vh;
+    overflow: hidden;
+    position: relative;
+    border: none;
+    box-shadow: none;
+    display: flex;
+    flex-direction: column;
+}
+
+/* ===== HEADER ===== */
+.edit-profile-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 20px 12px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+    flex-shrink: 0;
+    background: transparent;
+    min-height: auto;
+}
+
+.edit-profile-header .back-btn {
+    background: rgba(255, 255, 255, 0.05);
+    border: none;
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    color: rgba(255, 255, 255, 0.5);
+    font-size: 16px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.3s;
+}
+
+.edit-profile-header .back-btn:active {
+    transform: scale(0.88);
+    background: rgba(255, 255, 255, 0.1);
+}
+
+.edit-profile-header .title {
+    font-weight: 700;
+    font-size: 18px;
+    color: #fff;
+    flex: 1;
+    text-align: center;
+}
+
+.edit-profile-header .save-btn-header {
+    background: linear-gradient(135deg, #c084fc, #db2777);
+    border: none;
+    color: #fff;
+    padding: 8px 18px;
+    border-radius: 50px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s;
+    font-family: inherit;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.edit-profile-header .save-btn-header:active {
+    transform: scale(0.95);
+}
+
+.edit-profile-header .save-btn-header:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+    transform: none;
+}
+
+/* ===== BODY ===== */
+.edit-profile-body {
+    flex: 1;
+    overflow-y: auto;
+    padding: 16px 20px 30px;
+    -webkit-overflow-scrolling: touch;
+}
+
+/* ===== LOADING ===== */
+.edit-loading {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 60px 20px;
+    color: rgba(255, 255, 255, 0.15);
+}
+
+.edit-loading i {
+    font-size: 32px;
+    margin-bottom: 12px;
+}
+
+/* ===== AVATAR SECTION ===== */
+.edit-avatar-section {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 12px 0 20px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+    margin-bottom: 20px;
+}
+
+.edit-avatar-wrapper {
+    position: relative;
+    flex-shrink: 0;
+}
+
+.edit-avatar {
+    width: 72px;
+    height: 72px;
+    border-radius: 50%;
+    object-fit: cover;
+    border: 3px solid rgba(192, 132, 252, 0.25);
+    background: #1a1a2e;
+}
+
+.change-avatar-btn {
+    position: absolute;
+    bottom: -2px;
+    right: -2px;
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #c084fc, #db2777);
+    border: 2px solid #12122a;
+    color: #fff;
+    font-size: 12px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.3s;
+}
+
+.change-avatar-btn:active {
+    transform: scale(0.88);
+}
+
+.edit-avatar-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.edit-avatar-info .edit-name {
+    font-size: 18px;
+    font-weight: 700;
+    color: #fff;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+}
+
+.edit-avatar-info .edit-name .verified-badge {
+    font-size: 16px;
+}
+
+.edit-avatar-info .edit-username {
+    font-size: 14px;
+    color: rgba(255, 255, 255, 0.35);
+}
+
+.edit-avatar-info .edit-role {
+    font-size: 11px;
+    font-weight: 600;
+    color: #c084fc;
+    background: rgba(192, 132, 252, 0.12);
+    padding: 2px 10px;
+    border-radius: 12px;
+    display: inline-block;
+    margin-top: 4px;
+}
+
+/* ===== SECTIONS ===== */
+.edit-section {
+    margin-bottom: 20px;
+    padding-bottom: 20px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+.edit-section:last-child {
+    border-bottom: none;
+    margin-bottom: 0;
+    padding-bottom: 0;
+}
+
+.edit-section-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: rgba(255, 255, 255, 0.4);
+    margin-bottom: 14px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.edit-section-title i {
+    color: #c084fc;
+}
+
+/* ===== INPUT GROUPS ===== */
+.edit-group {
+    margin-bottom: 14px;
+}
+
+.edit-group:last-child {
+    margin-bottom: 0;
+}
+
+.edit-group label {
+    display: block;
+    margin-bottom: 5px;
+    color: rgba(255, 255, 255, 0.6);
+    font-size: 13px;
+    font-weight: 500;
+}
+
+.edit-group label .required {
+    color: #ff6b6b;
+    margin-left: 2px;
+}
+
+.edit-group input,
+.edit-group textarea,
+.edit-group select {
+    width: 100%;
+    padding: 11px 14px;
+    background: rgba(255, 255, 255, 0.06);
+    border: 2px solid rgba(255, 255, 255, 0.08);
+    border-radius: 12px;
+    color: #fff;
+    font-size: 14px;
+    font-family: inherit;
+    transition: all 0.25s;
+}
+
+.edit-group input:focus,
+.edit-group textarea:focus,
+.edit-group select:focus {
+    outline: none;
+    border-color: #c084fc;
+    background: rgba(255, 255, 255, 0.1);
+    box-shadow: 0 0 0 3px rgba(192, 132, 252, 0.1);
+}
+
+.edit-group input::placeholder,
+.edit-group textarea::placeholder {
+    color: rgba(255, 255, 255, 0.25);
+}
+
+.edit-group input:disabled,
+.edit-group select:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.edit-group textarea {
+    resize: vertical;
+    min-height: 60px;
+}
+
+.edit-group select {
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='rgba(255,255,255,0.3)' d='M6 8L1 3h10z'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 14px center;
+    padding-right: 36px;
+}
+
+.edit-group select option {
+    background: #1a1a2e;
+    color: #fff;
+}
+
+.edit-helper {
+    font-size: 12px;
+    color: rgba(255, 255, 255, 0.3);
+    margin-top: 5px;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+}
+
+.edit-helper i {
+    font-size: 11px;
+}
+
+.edit-helper.warning {
+    color: #fbbf24;
+}
+
+.edit-helper.error {
+    color: #ff6b6b;
+}
+
+.edit-helper.success {
+    color: #4ade80;
+}
+
+/* ===== PRIVACY OPTIONS ===== */
+.privacy-options {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.privacy-option {
+    padding: 12px 16px;
+    background: rgba(255, 255, 255, 0.03);
+    border-radius: 12px;
+    cursor: pointer;
+    transition: all 0.25s;
+    border: 2px solid transparent;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.privacy-option:hover {
+    background: rgba(192, 132, 252, 0.06);
+    transform: translateX(4px);
+}
+
+.privacy-option.active {
+    background: rgba(192, 132, 252, 0.1);
+    border-color: #c084fc;
+    box-shadow: 0 0 20px rgba(192, 132, 252, 0.05);
+}
+
+.privacy-option .privacy-icon {
+    font-size: 18px;
+    width: 32px;
+    text-align: center;
+    flex-shrink: 0;
+}
+
+.privacy-option .privacy-info {
+    flex: 1;
+}
+
+.privacy-option .privacy-info .title {
+    font-weight: 600;
+    font-size: 13px;
+    color: rgba(255, 255, 255, 0.8);
+}
+
+.privacy-option .privacy-info .desc {
+    font-size: 11px;
+    color: rgba(255, 255, 255, 0.3);
+    margin-top: 1px;
+}
+
+.privacy-option .privacy-check {
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.05);
+    border: 2px solid rgba(255, 255, 255, 0.1);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.3s;
+    flex-shrink: 0;
+}
+
+.privacy-option.active .privacy-check {
+    background: linear-gradient(135deg, #c084fc, #db2777);
+    border-color: #c084fc;
+}
+
+.privacy-option.active .privacy-check i {
+    color: #fff;
+    font-size: 11px;
+}
+
+/* ===== BUSINESS REQUEST ===== */
+.business-request-btn {
+    width: 100%;
+    padding: 12px;
+    background: rgba(251, 191, 36, 0.12);
+    border: 2px dashed rgba(251, 191, 36, 0.25);
+    border-radius: 12px;
+    color: #fbbf24;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s;
+    font-family: inherit;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+}
+
+.business-request-btn:hover {
+    background: rgba(251, 191, 36, 0.2);
+    border-color: #fbbf24;
+    transform: translateY(-2px);
+}
+
+.business-request-btn:active {
+    transform: scale(0.97);
+}
+
+.business-info-display {
+    background: rgba(255, 255, 255, 0.04);
+    border-radius: 12px;
+    padding: 14px 16px;
+    font-size: 13px;
+    color: rgba(255, 255, 255, 0.6);
+    line-height: 1.8;
+}
+
+.business-info-display strong {
+    color: rgba(255, 255, 255, 0.4);
+}
+
+/* ============================================================
+   BUSINESS REQUEST MODAL
+   ============================================================ */
+
+.business-request-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(10, 10, 26, 0.92);
+    backdrop-filter: blur(24px);
+    -webkit-backdrop-filter: blur(24px);
+    z-index: 30000;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+}
+
+.business-request-overlay.active {
+    display: flex;
+}
+
+.business-request-content {
+    background: #1a1a2e;
+    border-radius: 20px;
+    max-width: 500px;
+    width: 100%;
+    max-height: 90vh;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    border: 1px solid rgba(192, 132, 252, 0.1);
+    animation: businessRequestSlideUp 0.35s ease;
+}
+
+@keyframes businessRequestSlideUp {
+    0% { opacity: 0; transform: translateY(30px) scale(0.97); }
+    100% { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.business-request-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 16px 20px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+    flex-shrink: 0;
+}
+
+.business-request-header .title {
+    font-weight: 700;
+    font-size: 17px;
+    color: #fbbf24;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.business-request-header .close-btn {
+    background: rgba(255, 255, 255, 0.05);
+    border: none;
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    color: rgba(255, 255, 255, 0.3);
+    font-size: 18px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.3s;
+}
+
+.business-request-header .close-btn:active {
+    transform: scale(0.88);
+    background: rgba(255, 255, 255, 0.1);
+}
+
+.business-request-body {
+    flex: 1;
+    overflow-y: auto;
+    padding: 20px;
+}
+
+.business-request-info {
+    background: rgba(251, 191, 36, 0.06);
+    border-radius: 12px;
+    padding: 12px 16px;
+    margin-bottom: 18px;
+    font-size: 13px;
+    color: rgba(255, 255, 255, 0.5);
+    border-left: 3px solid #fbbf24;
+}
+
+.business-request-info p {
+    margin: 0;
+}
+
+.submit-business-request {
+    width: 100%;
+    padding: 14px;
+    background: linear-gradient(135deg, #fbbf24, #f59e0b);
+    border: none;
+    border-radius: 12px;
+    color: #1a1a2e;
+    font-size: 15px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.3s;
+    font-family: inherit;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    margin-top: 8px;
+}
+
+.submit-business-request:hover {
+    transform: scale(1.02);
+    box-shadow: 0 8px 30px rgba(251, 191, 36, 0.3);
+}
+
+.submit-business-request:active {
+    transform: scale(0.97);
+}
+
+.business-request-status {
+    margin-top: 14px;
+    padding: 12px 16px;
+    border-radius: 12px;
+    font-size: 14px;
+    font-weight: 500;
+    text-align: center;
+}
+
+.business-request-status.success {
+    background: rgba(34, 197, 94, 0.12);
+    color: #4ade80;
+    border: 1px solid rgba(34, 197, 94, 0.15);
+}
+
+.business-request-status.error {
+    background: rgba(239, 68, 68, 0.12);
+    color: #ff6b6b;
+    border: 1px solid rgba(239, 68, 68, 0.15);
+}
+
+.business-request-status.loading {
+    background: rgba(192, 132, 252, 0.08);
+    color: #c084fc;
+    border: 1px solid rgba(192, 132, 252, 0.1);
+}
+
+/* ============================================================
+   SCROLLBAR
+   ============================================================ */
+
+.edit-profile-body::-webkit-scrollbar,
+.business-request-body::-webkit-scrollbar {
+    width: 3px;
+}
+
+.edit-profile-body::-webkit-scrollbar-track,
+.business-request-body::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.edit-profile-body::-webkit-scrollbar-thumb,
+.business-request-body::-webkit-scrollbar-thumb {
+    background: rgba(192, 132, 252, 0.2);
+    border-radius: 10px;
+}
+
+.edit-profile-body::-webkit-scrollbar-thumb:hover,
+.business-request-body::-webkit-scrollbar-thumb:hover {
+    background: rgba(192, 132, 252, 0.4);
+}
+
+/* ============================================================
+   RESPONSIVE
+   ============================================================ */
+
+@media (max-width: 480px) {
+    .edit-profile-header {
+        padding: 12px 16px 10px;
+    }
+
+    .edit-profile-header .title {
+        font-size: 16px;
+    }
+
+    .edit-profile-header .back-btn {
+        width: 32px;
+        height: 32px;
+        font-size: 14px;
+    }
+
+    .edit-profile-header .save-btn-header {
+        font-size: 12px;
+        padding: 6px 14px;
+    }
+
+    .edit-profile-body {
+        padding: 12px 16px 20px;
+    }
+
+    .edit-avatar {
+        width: 60px;
+        height: 60px;
+    }
+
+    .change-avatar-btn {
+        width: 24px;
+        height: 24px;
+        font-size: 10px;
+    }
+
+    .edit-avatar-info .edit-name {
+        font-size: 16px;
+    }
+
+    .edit-avatar-info .edit-username {
+        font-size: 12px;
+    }
+
+    .edit-group input,
+    .edit-group textarea,
+    .edit-group select {
+        font-size: 13px;
+        padding: 10px 12px;
+    }
+
+    .business-request-content {
+        max-width: 100%;
+        border-radius: 16px;
+        margin: 10px;
+    }
+
+    .privacy-option {
+        padding: 10px 14px;
+    }
+
+    .privacy-option .privacy-info .title {
+        font-size: 12px;
+    }
+
+    .privacy-option .privacy-info .desc {
+        font-size: 10px;
+    }
+}
+
+@media (max-height: 600px) {
+    .edit-profile-header {
+        padding: 10px 16px 8px;
+    }
+
+    .edit-avatar-section {
+        padding: 8px 0 12px;
+        margin-bottom: 12px;
+    }
+
+    .edit-avatar {
+        width: 50px;
+        height: 50px;
+    }
+
+    .edit-avatar-info .edit-name {
+        font-size: 15px;
+    }
+
+    .edit-section {
+        margin-bottom: 12px;
+        padding-bottom: 12px;
+    }
+
+    .edit-section-title {
+        font-size: 12px;
+        margin-bottom: 10px;
+    }
+
+    .edit-group {
+        margin-bottom: 10px;
+    }
+
+    .edit-group input,
+    .edit-group textarea,
+    .edit-group select {
+        font-size: 12px;
+        padding: 8px 12px;
+    }
+
+    .business-request-body {
+        padding: 14px;
+    }
+}
+
+/* ============================================================
+   ANIMACIONES ADICIONALES
+   ============================================================ */
+
+@keyframes slideUp {
+    0% { opacity: 0; transform: translateY(20px); }
+    100% { opacity: 1; transform: translateY(0); }
+}
+
+.edit-section {
+    animation: slideUp 0.3s ease forwards;
+}
+
+.edit-section:nth-child(2) { animation-delay: 0.05s; }
+.edit-section:nth-child(3) { animation-delay: 0.1s; }
+.edit-section:nth-child(4) { animation-delay: 0.15s; }

@@ -1,0 +1,234 @@
+# ============================================================
+# DEPENDENCIAS
+# ============================================================
+node_modules/
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+
+# ============================================================
+# ARCHIVOS DE ENTORNO (.env) - ¡NUNCA SUBIR!
+# ============================================================
+.env
+.env.local
+.env.*.local
+.env.production
+.env.development
+backend/.env
+frontend/.env
+
+# ============================================================
+# LOGS
+# ============================================================
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+combined.log
+error.log
+logs/
+*.log.*
+backend/combined.log
+backend/error.log
+
+# ============================================================
+# ARCHIVOS CORRUPTOS O DE RESPALDO
+# ============================================================
+*.corrupt.*
+*.backup
+*.bak
+*.tmp
+*.temp
+*.swp
+*.swo
+*~
+backend/data/*.corrupt.*
+backend/data/*.backup
+backend/data/*.bak
+
+# ============================================================
+# ARCHIVOS DEL SISTEMA
+# ============================================================
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+desktop.ini
+*.exe
+*.dll
+
+# ============================================================
+# CARPETAS DE SUBIDAS (imágenes y videos de usuarios)
+# ============================================================
+frontend/uploads/
+backend/uploads/
+uploads/
+frontend/uploads/*
+!frontend/uploads/.gitkeep
+*.jpg
+*.jpeg
+*.png
+*.gif
+*.webp
+*.mp4
+*.webm
+*.avi
+*.mov
+*.mkv
+
+# ============================================================
+# BASE DE DATOS (si usas después)
+# ============================================================
+*.db
+*.sqlite
+*.sqlite3
+*.db-journal
+*.sqlite-shm
+*.sqlite-wal
+backend/data/*.db
+backend/data/*.sqlite
+backend/data/*.sqlite3
+
+# ============================================================
+# CACHÉ Y ARCHIVOS TEMPORALES
+# ============================================================
+.cache/
+.cache-loader/
+.parcel-cache/
+.next/
+.nuxt/
+.vuepress/dist/
+dist/
+build/
+.nyc_output/
+coverage/
+*.cache
+
+# ============================================================
+# IDE Y EDITORES
+# ============================================================
+.vscode/
+.idea/
+*.iml
+.project
+.classpath
+.settings/
+*.swp
+*.swo
+*~
+.~*
+.DS_Store
+.vs/
+.vscode/
+*.code-workspace
+
+# ============================================================
+# PYTHON (para M2M100)
+# ============================================================
+*.pyc
+*.pyo
+__pycache__/
+venv/
+env/
+.venv/
+.pytest_cache/
+.python-version
+*.egg-info/
+*.egg
+dist/
+backend/__pycache__/
+backend/*.pyc
+
+# ============================================================
+# M2M100 (modelos grandes)
+# ============================================================
+*.pth
+*.bin
+*.onnx
+*.pt
+models/
+backend/models/
+
+# ============================================================
+# ARCHIVOS DE PROYECTO ESPECÍFICOS
+# ============================================================
+backend/data/*.db
+backend/data/*.sqlite
+backend/data/*.sqlite3
+backend/data/*.db-journal
+backend/data/*.backup
+backend/data/*.corrupt.*
+backend/data/reports/
+
+# ============================================================
+# ARCHIVOS DE COMPILACIÓN
+# ============================================================
+*.class
+*.jar
+*.war
+*.ear
+
+# ============================================================
+# OTROS
+# ============================================================
+*.pem
+*.key
+*.crt
+*.csr
+*.p12
+*.pfx
+*.lock
+*.pid
+
+# ============================================================
+# ARCHIVOS DE RESPALDO AUTOMÁTICOS
+# ============================================================
+*~
+*.orig
+*.rej
+*.old
+*.new
+*.save
+*.sav
+*.original
+
+# ============================================================
+# CARPETAS DE FRONTEND NO NECESARIAS
+# ============================================================
+frontend/admin/
+frontend/feed/
+frontend/pay/
+frontend/profile/
+frontend/js/
+frontend/uploads/
+
+# ============================================================
+# ARCHIVOS DE FRONTEND NO NECESARIOS
+# ============================================================
+frontend/a.html
+frontend/admin.html
+frontend/chat.html
+frontend/emoji.html
+frontend/feed.html
+frontend/index.html
+frontend/profile.html
+frontend/settings.html
+frontend/test-translate.html
+frontend/vyin.pay.html
+frontend/app.js
+frontend/profile.js
+frontend/splash.js
+frontend/splash.css
+
+# ============================================================
+# 🔥 MODELOS DE IA (se descargan automáticamente)
+# ============================================================
+backend/models/
+*.onnx
+*.bin
+*.pt
+*.pth
+*.model

@@ -1,0 +1,1245 @@
+[
+  {
+    "id": "1785804916202",
+    "userId": "1783122622538",
+    "storyId": "1785804681840",
+    "storyOwnerId": "1785472532136",
+    "category": "inappropriate",
+    "reason": "Sin descripción adicional",
+    "description": "",
+    "status": "resolved",
+    "priority": "normal",
+    "createdAt": "2026-08-04T00:55:16.202Z",
+    "analysis": {
+      "text": null,
+      "image": {
+        "label": "safe",
+        "confidence": 0.99,
+        "percentage": 99,
+        "is_safe": true,
+        "is_nsfw": false,
+        "is_unknown": false,
+        "success": true
+      },
+      "combined": {
+        "score": 0,
+        "autoFlagged": false,
+        "severity": "normal",
+        "iaLabel": "safe"
+      }
+    },
+    "autoAction": null,
+    "metadata": {
+      "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:153.0) Gecko/20100101 Firefox/153.0",
+      "ip": "127.0.0.1",
+      "mediaType": "image"
+    },
+    "storyData": {
+      "caption": "",
+      "mediaType": "image",
+      "mediaUrl": "/uploads/1785804676088_m2e6e6_IMG_1343.png",
+      "createdAt": "2026-08-04T00:51:21.840Z",
+      "textContent": null,
+      "textBgColor": "#1a1a2e"
+    },
+    "reporterData": {
+      "username": "demo",
+      "fullName": "Usuario Demo"
+    },
+    "ownerData": {
+      "username": "alanljas",
+      "fullName": "Alan Lajones"
+    },
+    "assignedTo": "1783122622538",
+    "assignmentId": "1785804916209_g3ov6w",
+    "adminNote": "Historia eliminada por contenido inapropiado",
+    "adminId": "1783122622538",
+    "updatedAt": "2026-08-04T00:55:27.313Z",
+    "adminAction": {
+      "type": "delete_story",
+      "timestamp": "2026-08-04T00:55:27.313Z"
+    }
+  },
+  {
+    "id": "1785793168735",
+    "userId": "1784437546794",
+    "storyId": "1785793136138",
+    "storyOwnerId": "1783122622538",
+    "category": "inappropriate",
+    "reason": "Sin descripción adicional",
+    "description": "",
+    "status": "pending",
+    "priority": "normal",
+    "createdAt": "2026-08-03T21:39:28.735Z",
+    "analysis": {
+      "text": null,
+      "image": {
+        "label": "safe",
+        "confidence": 0.9995,
+        "percentage": 100,
+        "is_safe": true,
+        "is_nsfw": false,
+        "is_unknown": false,
+        "success": true
+      },
+      "combined": {
+        "score": 0,
+        "autoFlagged": false,
+        "severity": "normal",
+        "iaLabel": "safe"
+      }
+    },
+    "autoAction": null,
+    "metadata": {
+      "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36",
+      "ip": "127.0.0.1",
+      "mediaType": "image"
+    },
+    "storyData": {
+      "caption": "",
+      "mediaType": "image",
+      "mediaUrl": "/uploads/1785793128814_rpagg4_05b1b38f_2258_4dca_8dab_a1b5df3d5683.png",
+      "createdAt": "2026-08-03T21:38:56.138Z",
+      "textContent": null,
+      "textBgColor": "#1a1a2e"
+    },
+    "reporterData": {
+      "username": "admin_31g2z9",
+      "fullName": "Admin Test"
+    },
+    "ownerData": {
+      "username": "demo",
+      "fullName": "Usuario Demo"
+    },
+    "assignedTo": "1783122622538",
+    "assignmentId": "1785793168757_n9c07h"
+  },
+  {
+    "id": "1785793000793",
+    "userId": "1783122622538",
+    "storyId": "1785779819899",
+    "storyOwnerId": "1784437546794",
+    "category": "inappropriate",
+    "reason": "Sin descripción adicional",
+    "description": "",
+    "status": "resolved",
+    "priority": "medium",
+    "createdAt": "2026-08-03T21:36:40.793Z",
+    "analysis": {
+      "text": null,
+      "image": {
+        "label": "nsfw",
+        "confidence": 0.9993,
+        "percentage": 100,
+        "is_safe": false,
+        "is_nsfw": true,
+        "is_unknown": false,
+        "success": true
+      },
+      "combined": {
+        "score": 40,
+        "autoFlagged": true,
+        "severity": "high",
+        "iaLabel": "nsfw"
+      }
+    },
+    "autoAction": {
+      "type": "flag_for_review",
+      "reason": "Contenido sospechoso requiere revisión",
+      "confidence": 0.7,
+      "timestamp": "2026-08-03T21:36:40.792Z",
+      "details": {
+        "textLevel": 0,
+        "iaLabel": "nsfw",
+        "iaConfidence": 100
+      }
+    },
+    "metadata": {
+      "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:153.0) Gecko/20100101 Firefox/153.0",
+      "ip": "127.0.0.1",
+      "mediaType": "image"
+    },
+    "storyData": {
+      "caption": "",
+      "mediaType": "image",
+      "mediaUrl": "/uploads/1785779816721_ul65y7_Captura_de_pantalla_2026_03_07_203819.png",
+      "createdAt": "2026-08-03T17:56:59.899Z",
+      "textContent": null,
+      "textBgColor": "#1a1a2e"
+    },
+    "reporterData": {
+      "username": "demo",
+      "fullName": "Usuario Demo"
+    },
+    "ownerData": {
+      "username": "admin_31g2z9",
+      "fullName": "Admin Test"
+    },
+    "assignedTo": "1783122622538",
+    "assignmentId": "1785793000833_vsexqi",
+    "resolvedBy": "VYIN_IA",
+    "resolvedAt": "2026-08-03T21:36:41.019Z",
+    "autoDeleted": true,
+    "deletionInfo": {
+      "success": true,
+      "storyId": "1785779819899",
+      "userId": "1784437546794",
+      "notification": {
+        "id": "1785793000963_j2ij2z",
+        "userId": "1784437546794",
+        "type": "story_deleted_nsfw",
+        "title": "🚫 Historia eliminada por contenido NSFW",
+        "message": "Tu historia ha sido eliminada automáticamente por contenido NSFW (100.0% de confianza).",
+        "reason": "Contenido NSFW detectado automáticamente por VYIN IA",
+        "storyId": "1785779819899",
+        "read": false,
+        "createdAt": "2026-08-03T21:36:40.964Z",
+        "icon": "🚫",
+        "action": "warning",
+        "severity": "high",
+        "from": "VYIN_IA"
+      }
+    }
+  },
+  {
+    "id": "1785792939250",
+    "userId": "1783122622538",
+    "storyId": "1785779822377",
+    "storyOwnerId": "1784437546794",
+    "category": "inappropriate",
+    "reason": "Sin descripción adicional",
+    "description": "",
+    "status": "resolved",
+    "priority": "medium",
+    "createdAt": "2026-08-03T21:35:39.250Z",
+    "analysis": {
+      "text": null,
+      "image": {
+        "label": "nsfw",
+        "confidence": 0.9993,
+        "percentage": 100,
+        "is_safe": false,
+        "is_nsfw": true,
+        "is_unknown": false,
+        "success": true
+      },
+      "combined": {
+        "score": 40,
+        "autoFlagged": true,
+        "severity": "high",
+        "iaLabel": "nsfw"
+      }
+    },
+    "autoAction": {
+      "type": "flag_for_review",
+      "reason": "Contenido sospechoso requiere revisión",
+      "confidence": 0.7,
+      "timestamp": "2026-08-03T21:35:39.250Z",
+      "details": {
+        "textLevel": 0,
+        "iaLabel": "nsfw",
+        "iaConfidence": 100
+      }
+    },
+    "metadata": {
+      "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:153.0) Gecko/20100101 Firefox/153.0",
+      "ip": "127.0.0.1",
+      "mediaType": "image"
+    },
+    "storyData": {
+      "caption": "",
+      "mediaType": "image",
+      "mediaUrl": "/uploads/1785779819306_4vt2ly_Captura_de_pantalla_2026_03_07_203819.png",
+      "createdAt": "2026-08-03T17:57:02.377Z",
+      "textContent": null,
+      "textBgColor": "#1a1a2e"
+    },
+    "reporterData": {
+      "username": "demo",
+      "fullName": "Usuario Demo"
+    },
+    "ownerData": {
+      "username": "admin_31g2z9",
+      "fullName": "Admin Test"
+    },
+    "assignedTo": "1783122622538",
+    "assignmentId": "1785792939278_kikjjd",
+    "resolvedBy": "VYIN_IA",
+    "resolvedAt": "2026-08-03T21:35:39.403Z",
+    "autoDeleted": true,
+    "deletionInfo": {
+      "success": true,
+      "storyId": "1785779822377",
+      "userId": "1784437546794",
+      "notification": {
+        "id": "1785792939321_zfnthr",
+        "userId": "1784437546794",
+        "type": "story_deleted_nsfw",
+        "title": "🚫 Historia eliminada por contenido NSFW",
+        "message": "Tu historia ha sido eliminada automáticamente por contenido NSFW (100.0% de confianza).",
+        "reason": "Contenido NSFW detectado automáticamente por VYIN IA",
+        "storyId": "1785779822377",
+        "read": false,
+        "createdAt": "2026-08-03T21:35:39.321Z",
+        "icon": "🚫",
+        "action": "warning",
+        "severity": "high",
+        "from": "VYIN_IA"
+      }
+    }
+  },
+  {
+    "id": "1785724125636",
+    "userId": "1784437546794",
+    "storyId": "1785710732164",
+    "category": "inappropriate",
+    "reason": "Sin descripción adicional",
+    "description": "",
+    "status": "resolved",
+    "priority": "normal",
+    "createdAt": "2026-08-03T02:28:45.636Z",
+    "analysis": {
+      "text": null,
+      "image": {
+        "label": "safe",
+        "confidence": 0.9995,
+        "percentage": 100,
+        "is_safe": true,
+        "is_nsfw": false,
+        "is_unknown": false,
+        "success": true
+      },
+      "combined": {
+        "score": 0,
+        "autoFlagged": false,
+        "severity": "normal",
+        "iaLabel": "safe"
+      }
+    },
+    "autoAction": null,
+    "metadata": {
+      "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36",
+      "ip": "127.0.0.1",
+      "mediaType": "image"
+    },
+    "storyData": {
+      "caption": "",
+      "mediaType": "image",
+      "mediaUrl": "/uploads/1785710730327_z0lp2p_Captura_de_pantalla_2026_03_06_230949.png",
+      "createdAt": "2026-08-02T22:45:32.164Z",
+      "textContent": null,
+      "textBgColor": "#1a1a2e"
+    },
+    "reporterData": {
+      "username": "admin_31g2z9",
+      "fullName": "Admin Test"
+    },
+    "ownerData": {
+      "username": "demo",
+      "fullName": "Usuario Demo"
+    },
+    "adminNote": "Resuelta por administrador",
+    "adminId": "1783122622538",
+    "updatedAt": "2026-08-03T17:53:30.737Z"
+  },
+  {
+    "id": "1785724106512",
+    "userId": "1784437546794",
+    "storyId": "1785711026829",
+    "category": "inappropriate",
+    "reason": "Sin descripción adicional",
+    "description": "",
+    "status": "pending",
+    "priority": "normal",
+    "createdAt": "2026-08-03T02:28:26.512Z",
+    "analysis": {
+      "text": null,
+      "image": {
+        "label": "safe",
+        "confidence": 0.9993,
+        "percentage": 100,
+        "is_safe": true,
+        "is_nsfw": false,
+        "is_unknown": false,
+        "success": true
+      },
+      "combined": {
+        "score": 0,
+        "autoFlagged": false,
+        "severity": "normal",
+        "iaLabel": "safe"
+      }
+    },
+    "autoAction": null,
+    "metadata": {
+      "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36",
+      "ip": "127.0.0.1",
+      "mediaType": "image"
+    },
+    "storyData": {
+      "caption": "",
+      "mediaType": "image",
+      "mediaUrl": "/uploads/1785711025757_n5s634_Captura_de_pantalla_2026_07_08_181535.png",
+      "createdAt": "2026-08-02T22:50:26.829Z",
+      "textContent": null,
+      "textBgColor": "#1a1a2e"
+    },
+    "reporterData": {
+      "username": "admin_31g2z9",
+      "fullName": "Admin Test"
+    },
+    "ownerData": {
+      "username": "demo",
+      "fullName": "Usuario Demo"
+    }
+  },
+  {
+    "id": "1785623510243",
+    "userId": "1783122622538",
+    "storyId": "1785623482071",
+    "category": "harassment",
+    "reason": "Sin descripción adicional",
+    "description": "",
+    "status": "pending",
+    "priority": "normal",
+    "createdAt": "2026-08-01T22:31:50.243Z",
+    "analysis": {
+      "text": null,
+      "image": {
+        "label": "unknown",
+        "confidence": 0,
+        "percentage": 0,
+        "is_safe": false,
+        "is_nsfw": false,
+        "is_unknown": true,
+        "success": false
+      },
+      "combined": {
+        "score": 0,
+        "autoFlagged": false,
+        "severity": "normal",
+        "iaLabel": "unknown"
+      }
+    },
+    "autoAction": null,
+    "metadata": {
+      "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:153.0) Gecko/20100101 Firefox/153.0",
+      "ip": "127.0.0.1",
+      "mediaType": "image"
+    },
+    "storyData": {
+      "caption": "",
+      "mediaType": "image",
+      "mediaUrl": "/uploads/1785623481016_m2home_image.jpg",
+      "createdAt": "2026-08-01T22:31:22.071Z",
+      "textContent": null,
+      "textBgColor": "#1a1a2e"
+    },
+    "reporterData": {
+      "username": "demo",
+      "fullName": "Usuario Demo"
+    },
+    "ownerData": {
+      "username": "alanljas",
+      "fullName": "Alan Lajones"
+    }
+  },
+  {
+    "id": "1785623502288",
+    "userId": "1783122622538",
+    "storyId": "1785623459181",
+    "category": "harassment",
+    "reason": "Sin descripción adicional",
+    "description": "",
+    "status": "pending",
+    "priority": "normal",
+    "createdAt": "2026-08-01T22:31:42.289Z",
+    "analysis": {
+      "text": null,
+      "image": {
+        "label": "unknown",
+        "confidence": 0,
+        "percentage": 0,
+        "is_safe": false,
+        "is_nsfw": false,
+        "is_unknown": true,
+        "success": false
+      },
+      "combined": {
+        "score": 0,
+        "autoFlagged": false,
+        "severity": "normal",
+        "iaLabel": "unknown"
+      }
+    },
+    "autoAction": null,
+    "metadata": {
+      "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:153.0) Gecko/20100101 Firefox/153.0",
+      "ip": "127.0.0.1",
+      "mediaType": "image"
+    },
+    "storyData": {
+      "caption": "",
+      "mediaType": "image",
+      "mediaUrl": "/uploads/1785623457415_4mw8wm_image.jpg",
+      "createdAt": "2026-08-01T22:30:59.181Z",
+      "textContent": null,
+      "textBgColor": "#1a1a2e"
+    },
+    "reporterData": {
+      "username": "demo",
+      "fullName": "Usuario Demo"
+    },
+    "ownerData": {
+      "username": "alanljas",
+      "fullName": "Alan Lajones"
+    }
+  },
+  {
+    "id": "1785555980760",
+    "userId": "1784437546794",
+    "storyId": "1785555938554",
+    "category": "hate_speech",
+    "reason": "Sin descripción adicional",
+    "description": "",
+    "status": "pending",
+    "priority": "normal",
+    "createdAt": "2026-08-01T03:46:20.761Z",
+    "analysis": {
+      "text": {
+        "score": 2,
+        "level": 0,
+        "flags": {
+          "hasText": true,
+          "hasHateSpeech": false,
+          "hasSevereOffense": false,
+          "hasModerateOffense": false,
+          "hasSpam": false,
+          "hasExcessUrls": false,
+          "hasExcessUppercase": false
+        },
+        "details": [
+          "Caracteres repetidos: 1"
+        ],
+        "matches": []
+      },
+      "image": null,
+      "combined": {
+        "score": 1,
+        "autoFlagged": false,
+        "severity": "normal",
+        "iaLabel": "unknown"
+      }
+    },
+    "autoAction": null,
+    "metadata": {
+      "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36",
+      "ip": "127.0.0.1",
+      "mediaType": "text"
+    },
+    "storyData": {
+      "caption": "putaaaaaaaaa",
+      "mediaType": "text",
+      "mediaUrl": null,
+      "createdAt": "2026-08-01T03:45:38.554Z",
+      "textContent": "putaaaaaaaaa",
+      "textBgColor": "#1a1a2e"
+    },
+    "reporterData": {
+      "username": "admin_31g2z9",
+      "fullName": "Admin Test"
+    },
+    "ownerData": {
+      "username": "demo",
+      "fullName": "Usuario Demo"
+    }
+  },
+  {
+    "id": "1785526832417",
+    "userId": "1783122622538",
+    "storyId": "1785526824279",
+    "category": "inappropriate",
+    "reason": "Sin descripción adicional",
+    "description": "",
+    "status": "resolved",
+    "priority": "normal",
+    "createdAt": "2026-07-31T19:40:32.417Z",
+    "analysis": {
+      "text": null,
+      "image": {
+        "label": "unknown",
+        "confidence": 0,
+        "percentage": 0,
+        "is_safe": false,
+        "is_nsfw": false,
+        "is_unknown": true,
+        "success": false
+      },
+      "combined": {
+        "score": 0,
+        "autoFlagged": false,
+        "severity": "normal",
+        "iaLabel": "unknown"
+      }
+    },
+    "autoAction": null,
+    "metadata": {
+      "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:153.0) Gecko/20100101 Firefox/153.0",
+      "ip": "127.0.0.1",
+      "mediaType": "image"
+    },
+    "storyData": {
+      "caption": "",
+      "mediaType": "image",
+      "mediaUrl": "/uploads/1785526823143_y5svqb_IMG_1314.png",
+      "createdAt": "2026-07-31T19:40:24.279Z",
+      "textContent": null,
+      "textBgColor": "#1a1a2e"
+    },
+    "reporterData": {
+      "username": "demo",
+      "fullName": "Usuario Demo"
+    },
+    "ownerData": {
+      "username": "alanljas",
+      "fullName": "Alan Lajones"
+    },
+    "adminNote": "Historia eliminada por contenido NSFW (detectado automáticamente por IA)",
+    "adminId": "1783122622538",
+    "updatedAt": "2026-07-31T19:42:06.367Z",
+    "adminAction": {
+      "type": "delete_story",
+      "timestamp": "2026-07-31T19:42:06.367Z"
+    }
+  },
+  {
+    "id": "1785461999837",
+    "userId": "1784437546794",
+    "storyId": "1785385011540",
+    "category": "inappropriate",
+    "reason": "Contenido inapropiado",
+    "description": "Denunciado desde la app móvil",
+    "status": "pending",
+    "priority": "normal",
+    "createdAt": "2026-07-31T01:39:59.837Z",
+    "analysis": {
+      "text": {
+        "score": 0,
+        "level": 0,
+        "flags": {
+          "hasText": true,
+          "hasHateSpeech": false,
+          "hasSevereOffense": false,
+          "hasModerateOffense": false,
+          "hasSpam": false,
+          "hasExcessUrls": false,
+          "hasExcessUppercase": false
+        },
+        "details": [],
+        "matches": []
+      },
+      "image": null,
+      "combined": {
+        "score": 0,
+        "autoFlagged": false,
+        "severity": "normal",
+        "iaLabel": "unknown"
+      }
+    },
+    "autoAction": null,
+    "metadata": {
+      "userAgent": "Mozilla/5.0 (Linux; Android 15; Pixel 9) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Mobile Safari/537.36",
+      "ip": "::1",
+      "mediaType": "text"
+    },
+    "storyData": {
+      "caption": "",
+      "mediaType": "text",
+      "mediaUrl": null,
+      "createdAt": "2026-07-30T04:16:51.540Z",
+      "textContent": "hola",
+      "textBgColor": "#1a1a2e"
+    },
+    "reporterData": {
+      "username": "admin_31g2z9",
+      "fullName": "Admin Test"
+    },
+    "ownerData": {
+      "username": "demo",
+      "fullName": "Usuario Demo"
+    }
+  },
+  {
+    "id": "1785460096506",
+    "userId": "1784437546794",
+    "storyId": "1785460075187",
+    "category": "inappropriate",
+    "reason": "Sin descripción adicional",
+    "description": "",
+    "status": "pending",
+    "priority": "normal",
+    "createdAt": "2026-07-31T01:08:16.506Z",
+    "analysis": {
+      "text": {
+        "score": 0,
+        "level": 0,
+        "flags": {
+          "hasText": true,
+          "hasHateSpeech": false,
+          "hasSevereOffense": false,
+          "hasModerateOffense": false,
+          "hasSpam": false,
+          "hasExcessUrls": false,
+          "hasExcessUppercase": false
+        },
+        "details": [],
+        "matches": []
+      },
+      "image": null,
+      "combined": {
+        "score": 0,
+        "autoFlagged": false,
+        "severity": "normal",
+        "iaLabel": "unknown"
+      }
+    },
+    "autoAction": null,
+    "metadata": {
+      "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36",
+      "ip": "::1",
+      "mediaType": "text"
+    },
+    "storyData": {
+      "caption": "#hola",
+      "mediaType": "text",
+      "mediaUrl": null,
+      "createdAt": "2026-07-31T01:07:55.187Z",
+      "textContent": "holaa",
+      "textBgColor": "#1a1a2e"
+    },
+    "reporterData": {
+      "username": "admin_31g2z9",
+      "fullName": "Admin Test"
+    },
+    "ownerData": {
+      "username": "demo",
+      "fullName": "Usuario Demo"
+    }
+  },
+  {
+    "id": "1785436179482",
+    "userId": "1783370679935",
+    "storyId": "1785436171298",
+    "category": "inappropriate",
+    "reason": "Sin descripción adicional",
+    "description": "",
+    "status": "pending",
+    "priority": "normal",
+    "createdAt": "2026-07-30T18:29:39.483Z",
+    "analysis": {
+      "text": null,
+      "image": {
+        "label": "nsfw",
+        "confidence": 0.7211,
+        "percentage": 72.11,
+        "is_safe": false,
+        "is_nsfw": true,
+        "is_unknown": false,
+        "success": true
+      },
+      "combined": {
+        "score": 40,
+        "autoFlagged": false,
+        "severity": "medium",
+        "iaLabel": "nsfw"
+      }
+    },
+    "autoAction": null,
+    "metadata": {
+      "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36 Edg/150.0.0.0",
+      "ip": "::1",
+      "mediaType": "image"
+    },
+    "storyData": {
+      "caption": "",
+      "mediaType": "image",
+      "mediaUrl": "/uploads/1785436170657_qi79ky_nnfcfnfsdffb.jpg",
+      "createdAt": "2026-07-30T18:29:31.298Z",
+      "textContent": null,
+      "textBgColor": "#1a1a2e"
+    },
+    "reporterData": {
+      "username": "Admin_Ecuador",
+      "fullName": "Admin_Ecuador"
+    },
+    "ownerData": {
+      "username": "admin_31g2z9",
+      "fullName": "Admin Test"
+    }
+  },
+  {
+    "id": "1785436061692",
+    "userId": "1783370679935",
+    "storyId": "1785435914254",
+    "category": "violence",
+    "reason": "Sin descripción adicional",
+    "description": "",
+    "status": "pending",
+    "priority": "normal",
+    "createdAt": "2026-07-30T18:27:41.692Z",
+    "analysis": {
+      "text": null,
+      "image": {
+        "label": "safe",
+        "confidence": 0.7847,
+        "percentage": 78.47,
+        "is_safe": true,
+        "is_nsfw": false,
+        "is_unknown": false,
+        "success": true
+      },
+      "combined": {
+        "score": 0,
+        "autoFlagged": false,
+        "severity": "normal",
+        "iaLabel": "safe"
+      }
+    },
+    "autoAction": null,
+    "metadata": {
+      "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36 Edg/150.0.0.0",
+      "ip": "::1",
+      "mediaType": "image"
+    },
+    "storyData": {
+      "caption": "",
+      "mediaType": "image",
+      "mediaUrl": "/uploads/1785435913567_qn983q_ddtdgty66.jpg",
+      "createdAt": "2026-07-30T18:25:14.254Z",
+      "textContent": null,
+      "textBgColor": "#1a1a2e"
+    },
+    "reporterData": {
+      "username": "Admin_Ecuador",
+      "fullName": "Admin_Ecuador"
+    },
+    "ownerData": {
+      "username": "admin_31g2z9",
+      "fullName": "Admin Test"
+    }
+  },
+  {
+    "id": "1785436055802",
+    "userId": "1783370679935",
+    "storyId": "1785435806204",
+    "category": "inappropriate",
+    "reason": "Sin descripción adicional",
+    "description": "",
+    "status": "pending",
+    "priority": "normal",
+    "createdAt": "2026-07-30T18:27:35.803Z",
+    "analysis": {
+      "text": null,
+      "image": {
+        "label": "unknown",
+        "confidence": 0.4161,
+        "percentage": 41.61,
+        "is_safe": false,
+        "is_nsfw": false,
+        "is_unknown": true,
+        "success": true
+      },
+      "combined": {
+        "score": 2,
+        "autoFlagged": false,
+        "severity": "normal",
+        "iaLabel": "unknown"
+      }
+    },
+    "autoAction": null,
+    "metadata": {
+      "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36 Edg/150.0.0.0",
+      "ip": "::1",
+      "mediaType": "image"
+    },
+    "storyData": {
+      "caption": "",
+      "mediaType": "image",
+      "mediaUrl": "/uploads/1785435805512_wsipgk_Captura_de_pantalla_2026_07_09_131942.png",
+      "createdAt": "2026-07-30T18:23:26.204Z",
+      "textContent": null,
+      "textBgColor": "#1a1a2e"
+    },
+    "reporterData": {
+      "username": "Admin_Ecuador",
+      "fullName": "Admin_Ecuador"
+    },
+    "ownerData": {
+      "username": "admin_31g2z9",
+      "fullName": "Admin Test"
+    }
+  },
+  {
+    "id": "1785436038565",
+    "userId": "1783370679935",
+    "storyId": "1785435873698",
+    "category": "inappropriate",
+    "reason": "Sin descripción adicional",
+    "description": "",
+    "status": "pending",
+    "priority": "normal",
+    "createdAt": "2026-07-30T18:27:18.565Z",
+    "analysis": {
+      "text": null,
+      "image": {
+        "label": "unknown",
+        "confidence": 0.4591,
+        "percentage": 45.91,
+        "is_safe": false,
+        "is_nsfw": false,
+        "is_unknown": true,
+        "success": true
+      },
+      "combined": {
+        "score": 2,
+        "autoFlagged": false,
+        "severity": "normal",
+        "iaLabel": "unknown"
+      }
+    },
+    "autoAction": null,
+    "metadata": {
+      "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36 Edg/150.0.0.0",
+      "ip": "::1",
+      "mediaType": "image"
+    },
+    "storyData": {
+      "caption": "",
+      "mediaType": "image",
+      "mediaUrl": "/uploads/1785435872522_hw1cd9_asasdasdsadsaddsa.jpg",
+      "createdAt": "2026-07-30T18:24:33.698Z",
+      "textContent": null,
+      "textBgColor": "#1a1a2e"
+    },
+    "reporterData": {
+      "username": "Admin_Ecuador",
+      "fullName": "Admin_Ecuador"
+    },
+    "ownerData": {
+      "username": "admin_31g2z9",
+      "fullName": "Admin Test"
+    }
+  },
+  {
+    "id": "1785435786219",
+    "userId": "1783122622538",
+    "storyId": "1785435780143",
+    "category": "inappropriate",
+    "reason": "Sin descripción adicional",
+    "description": "",
+    "status": "pending",
+    "priority": "normal",
+    "createdAt": "2026-07-30T18:23:06.220Z",
+    "analysis": {
+      "text": null,
+      "image": {
+        "label": "unknown",
+        "confidence": 0.6626,
+        "percentage": 66.26,
+        "is_safe": false,
+        "is_nsfw": false,
+        "is_unknown": true,
+        "success": true
+      },
+      "combined": {
+        "score": 2,
+        "autoFlagged": false,
+        "severity": "normal",
+        "iaLabel": "unknown"
+      }
+    },
+    "autoAction": null,
+    "metadata": {
+      "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:153.0) Gecko/20100101 Firefox/153.0",
+      "ip": "::ffff:127.0.0.1",
+      "mediaType": "image"
+    },
+    "storyData": {
+      "caption": "",
+      "mediaType": "image",
+      "mediaUrl": "/uploads/1785435779474_0h1rul_Captura_de_pantalla_2026_07_08_181108.png",
+      "createdAt": "2026-07-30T18:23:00.143Z",
+      "textContent": null,
+      "textBgColor": "#1a1a2e"
+    },
+    "reporterData": {
+      "username": "demo",
+      "fullName": "Usuario Demo"
+    },
+    "ownerData": {
+      "username": "admin_31g2z9",
+      "fullName": "Admin Test"
+    }
+  },
+  {
+    "id": "1785435446510",
+    "userId": "1783122622538",
+    "storyId": "1785435438457",
+    "category": "inappropriate",
+    "reason": "Sin descripción adicional",
+    "description": "",
+    "status": "pending",
+    "priority": "normal",
+    "createdAt": "2026-07-30T18:17:26.510Z",
+    "analysis": {
+      "text": null,
+      "image": {
+        "label": "unknown",
+        "confidence": 0.4505,
+        "percentage": 45.05,
+        "is_safe": false,
+        "is_nsfw": false,
+        "is_unknown": true,
+        "success": true
+      },
+      "combined": {
+        "score": 2,
+        "autoFlagged": false,
+        "severity": "normal",
+        "iaLabel": "unknown"
+      }
+    },
+    "autoAction": null,
+    "metadata": {
+      "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:153.0) Gecko/20100101 Firefox/153.0",
+      "ip": "::ffff:127.0.0.1",
+      "mediaType": "image"
+    },
+    "storyData": {
+      "caption": "",
+      "mediaType": "image",
+      "mediaUrl": "/uploads/1785435437722_jjeo60_Captura_de_pantalla_2026_03_06_230949.png",
+      "createdAt": "2026-07-30T18:17:18.457Z",
+      "textContent": null,
+      "textBgColor": "#1a1a2e"
+    },
+    "reporterData": {
+      "username": "demo",
+      "fullName": "Usuario Demo"
+    },
+    "ownerData": {
+      "username": "admin_31g2z9",
+      "fullName": "Admin Test"
+    }
+  },
+  {
+    "id": "1785435345239",
+    "userId": "1783122622538",
+    "storyId": "1785435114247",
+    "category": "inappropriate",
+    "reason": "Sin descripción adicional",
+    "description": "",
+    "status": "pending",
+    "priority": "normal",
+    "createdAt": "2026-07-30T18:15:45.239Z",
+    "analysis": {
+      "text": null,
+      "image": {
+        "label": "unknown",
+        "confidence": 0.5084,
+        "percentage": 50.84,
+        "is_safe": false,
+        "is_nsfw": false,
+        "is_unknown": true,
+        "success": true
+      },
+      "combined": {
+        "score": 2,
+        "autoFlagged": false,
+        "severity": "normal",
+        "iaLabel": "unknown"
+      }
+    },
+    "autoAction": null,
+    "metadata": {
+      "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:153.0) Gecko/20100101 Firefox/153.0",
+      "ip": "::ffff:127.0.0.1",
+      "mediaType": "image"
+    },
+    "storyData": {
+      "caption": "",
+      "mediaType": "image",
+      "mediaUrl": "/uploads/1785435113540_ovj0tp_dsasadsdsasadsda.jpg",
+      "createdAt": "2026-07-30T18:11:54.247Z",
+      "textContent": null,
+      "textBgColor": "#1a1a2e"
+    },
+    "reporterData": {
+      "username": "demo",
+      "fullName": "Usuario Demo"
+    },
+    "ownerData": {
+      "username": "admin_31g2z9",
+      "fullName": "Admin Test"
+    }
+  },
+  {
+    "id": "1785435313461",
+    "userId": "1783122622538",
+    "storyId": "1785435308724",
+    "category": "inappropriate",
+    "reason": "Sin descripción adicional",
+    "description": "",
+    "status": "pending",
+    "priority": "normal",
+    "createdAt": "2026-07-30T18:15:13.461Z",
+    "analysis": {
+      "text": null,
+      "image": {
+        "label": "nsfw",
+        "confidence": 0.7664,
+        "percentage": 76.64,
+        "is_safe": false,
+        "is_nsfw": true,
+        "is_unknown": false,
+        "success": true
+      },
+      "combined": {
+        "score": 40,
+        "autoFlagged": false,
+        "severity": "medium",
+        "iaLabel": "nsfw"
+      }
+    },
+    "autoAction": null,
+    "metadata": {
+      "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:153.0) Gecko/20100101 Firefox/153.0",
+      "ip": "::ffff:127.0.0.1",
+      "mediaType": "image"
+    },
+    "storyData": {
+      "caption": "",
+      "mediaType": "image",
+      "mediaUrl": "/uploads/1785435308057_wl19qy_saddassdaasdasd.jpg",
+      "createdAt": "2026-07-30T18:15:08.724Z",
+      "textContent": null,
+      "textBgColor": "#1a1a2e"
+    },
+    "reporterData": {
+      "username": "demo",
+      "fullName": "Usuario Demo"
+    },
+    "ownerData": {
+      "username": "admin_31g2z9",
+      "fullName": "Admin Test"
+    }
+  },
+  {
+    "id": "1785435251842",
+    "userId": "1783122622538",
+    "storyId": "1785435189234",
+    "category": "inappropriate",
+    "reason": "Sin descripción adicional",
+    "description": "",
+    "status": "pending",
+    "priority": "normal",
+    "createdAt": "2026-07-30T18:14:11.842Z",
+    "analysis": {
+      "text": null,
+      "image": {
+        "label": "unknown",
+        "confidence": 0.7272,
+        "percentage": 72.72,
+        "is_safe": false,
+        "is_nsfw": false,
+        "is_unknown": true,
+        "success": true
+      },
+      "combined": {
+        "score": 2,
+        "autoFlagged": false,
+        "severity": "normal",
+        "iaLabel": "unknown"
+      }
+    },
+    "autoAction": null,
+    "metadata": {
+      "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:153.0) Gecko/20100101 Firefox/153.0",
+      "ip": "::ffff:127.0.0.1",
+      "mediaType": "image"
+    },
+    "storyData": {
+      "caption": "",
+      "mediaType": "image",
+      "mediaUrl": "/uploads/1785435188572_bwo8rk_fsasfaasffssfaasf.jpg",
+      "createdAt": "2026-07-30T18:13:09.234Z",
+      "textContent": null,
+      "textBgColor": "#1a1a2e"
+    },
+    "reporterData": {
+      "username": "demo",
+      "fullName": "Usuario Demo"
+    },
+    "ownerData": {
+      "username": "admin_31g2z9",
+      "fullName": "Admin Test"
+    }
+  },
+  {
+    "id": "1785804955277",
+    "userId": "1783122622538",
+    "storyId": "1785798884996",
+    "storyOwnerId": "1785472532136",
+    "category": "inappropriate",
+    "reason": "Sin descripción adicional",
+    "description": "",
+    "status": "resolved",
+    "priority": "normal",
+    "createdAt": "2026-08-04T00:55:55.277Z",
+    "analysis": {
+      "text": null,
+      "image": {
+        "label": "safe",
+        "confidence": 0.9982,
+        "percentage": 100,
+        "is_safe": true,
+        "is_nsfw": false,
+        "is_unknown": false,
+        "success": true
+      },
+      "combined": {
+        "score": 0,
+        "autoFlagged": false,
+        "severity": "normal",
+        "iaLabel": "safe"
+      }
+    },
+    "autoAction": null,
+    "metadata": {
+      "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:153.0) Gecko/20100101 Firefox/153.0",
+      "ip": "127.0.0.1",
+      "mediaType": "image"
+    },
+    "storyData": {
+      "caption": "",
+      "mediaType": "image",
+      "mediaUrl": "/uploads/1785798877515_j0w4sn_temp_image_0097E0A6_D553_4A6F_8925_413EF8B7EEC0.webp",
+      "createdAt": "2026-08-03T23:14:44.996Z",
+      "textContent": null,
+      "textBgColor": "#1a1a2e"
+    },
+    "reporterData": {
+      "username": "demo",
+      "fullName": "Usuario Demo"
+    },
+    "ownerData": {
+      "username": "alanljas",
+      "fullName": "Alan Lajones"
+    },
+    "assignedTo": "1783122622538",
+    "assignmentId": "1785804955280_215ah2",
+    "adminNote": "Resuelta por administrador",
+    "adminId": "1783122622538",
+    "updatedAt": "2026-08-04T00:56:29.462Z"
+  }
+]

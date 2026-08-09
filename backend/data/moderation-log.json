@@ -1,0 +1,73 @@
+[
+  {
+    "action": "delete_nsfw",
+    "storyId": "1785779822377",
+    "userId": "1784437546794",
+    "adminId": null,
+    "reason": "Contenido NSFW detectado automáticamente por VYIN IA",
+    "confidence": 100,
+    "storyData": {
+      "id": "1785779822377",
+      "userId": "1784437546794",
+      "mediaType": "image",
+      "mediaUrl": "/uploads/1785779819306_4vt2ly_Captura_de_pantalla_2026_03_07_203819.png",
+      "caption": "",
+      "textContent": null,
+      "textBgColor": "#1a1a2e",
+      "createdAt": "2026-08-03T17:57:02.377Z",
+      "expiresAt": "2026-08-04T17:57:02.377Z",
+      "views": [
+        "1783122622538",
+        "1785472532136"
+      ],
+      "likes": [],
+      "comments": [],
+      "score": 0,
+      "iaClassification": null,
+      "flagged": false,
+      "flagReason": null,
+      "flagConfidence": 0,
+      "hidden": false,
+      "hiddenAt": null,
+      "hiddenReason": null,
+      "hiddenByIA": false
+    },
+    "timestamp": "2026-08-03T21:35:39.295Z",
+    "loggedAt": "2026-08-03T21:35:39.303Z"
+  },
+  {
+    "action": "delete_nsfw",
+    "storyId": "1785779819899",
+    "userId": "1784437546794",
+    "adminId": null,
+    "reason": "Contenido NSFW detectado automáticamente por VYIN IA",
+    "confidence": 100,
+    "storyData": {
+      "id": "1785779819899",
+      "userId": "1784437546794",
+      "mediaType": "image",
+      "mediaUrl": "/uploads/1785779816721_ul65y7_Captura_de_pantalla_2026_03_07_203819.png",
+      "caption": "",
+      "textContent": null,
+      "textBgColor": "#1a1a2e",
+      "createdAt": "2026-08-03T17:56:59.899Z",
+      "expiresAt": "2026-08-04T17:56:59.899Z",
+      "views": [
+        "1785472532136"
+      ],
+      "likes": [],
+      "comments": [],
+      "score": 0,
+      "iaClassification": null,
+      "flagged": false,
+      "flagReason": null,
+      "flagConfidence": 0,
+      "hidden": false,
+      "hiddenAt": null,
+      "hiddenReason": null,
+      "hiddenByIA": false
+    },
+    "timestamp": "2026-08-03T21:36:40.916Z",
+    "loggedAt": "2026-08-03T21:36:40.926Z"
+  }
+]

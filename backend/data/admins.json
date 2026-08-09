@@ -1,0 +1,20 @@
+[
+  {
+    "id": "1783122622538",
+    "username": "demo",
+    "email": "demo@vyn.com",
+    "fullName": "Usuario Demo",
+    "role": "admin",
+    "isVerified": true,
+    "accountType": "verified"
+  },
+  {
+    "id": "1783370679935",
+    "username": "Admin_Ecuador",
+    "email": "admin_ecu@gmail.com",
+    "fullName": "Admin_Ecuador",
+    "role": "admin",
+    "isVerified": true,
+    "accountType": "verified"
+  }
+]
