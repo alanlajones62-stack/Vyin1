@@ -1,9 +1,10 @@
 // explore-modal.js - BÚSQUEDA HÍBRIDA CON RESULTADOS PRIORIZADOS
+// Y SUPERPOSICIÓN DE MODALES
 
 import { getToken, getCurrentUser, showToast, getAvatar } from './auth.js';
 import { formatNumber } from './utils.js';
 import { openStoryModal } from './story-modal.js';
-import { openProfileModal } from './profile-modal.js';
+// ✅ NO importar profile-modal.js - usar window en su lugar
 
 const API_URL = window.location.origin;
 
@@ -221,7 +222,6 @@ async function performSmartSearch(query) {
         if (hybridRes.ok) {
             const result = await hybridRes.json();
             stories = (result.data || []).filter(s => {
-                // 🔥 SOLO mostrar historias con relevancia significativa (>30%)
                 const relevance = s.relevanceScore || 0;
                 return relevance > 30;
             });
@@ -275,7 +275,6 @@ function renderSearchResults(query, stories, users, meta) {
     const currentUser = getCurrentUser();
     const currentUserId = currentUser?.id;
 
-    // Filtrar historias del propio usuario
     const filteredStories = stories.filter(s => s.userId !== currentUserId);
 
     let html = `
@@ -365,7 +364,6 @@ function renderSearchResults(query, stories, users, meta) {
                         const subtitleText = story.subtitles || story.caption || story.textContent || '';
                         const subtitlePreview = subtitleText.length > 60 ? subtitleText.substring(0, 60) + '...' : subtitleText;
 
-                        // 🔥 BADGES DE RELEVANCIA (SOLO SI ES ALTA)
                         let relevanceBadge = '';
                         const relevance = story.relevanceScore || 0;
                         if (relevance > 70) {
@@ -374,7 +372,6 @@ function renderSearchResults(query, stories, users, meta) {
                             relevanceBadge = `<span class="relevance-badge" style="position:absolute;top:8px;left:8px;z-index:5;background:rgba(192,132,252,0.15);padding:2px 8px;border-radius:10px;font-size:7px;color:#c084fc;border:1px solid rgba(192,132,252,0.05);">🔍 ${relevance}%</span>`;
                         }
 
-                        // 🔥 FUENTES DE COINCIDENCIA
                         const sources = story.sources || [];
                         const sourceBadges = sources.slice(0, 3).map(source => {
                             let label = source;
@@ -386,7 +383,6 @@ function renderSearchResults(query, stories, users, meta) {
                             return `<span class="source-badge" style="font-size:7px;background:rgba(255,255,255,0.05);padding:1px 6px;border-radius:8px;margin-right:2px;color:rgba(255,255,255,0.3);">${label}</span>`;
                         }).join('');
 
-                        // Badge de idioma
                         const langBadge = story.language && story.language !== 'es' ?
                             `<span class="lang-badge" style="position:absolute;bottom:8px;right:8px;z-index:5;background:rgba(255,255,255,0.05);padding:2px 8px;border-radius:10px;font-size:7px;color:rgba(255,255,255,0.15);">
                                 ${story.language.toUpperCase()}
@@ -755,7 +751,7 @@ async function openHashtagStories(tag) {
 }
 
 // ============================================================
-// ACCIONES GLOBALES
+// 🔥 ACCIONES GLOBALES - SUPERPONER MODALES
 // ============================================================
 
 window.openStoryFromExplore = (storyId) => {
@@ -771,18 +767,34 @@ window.openStoryFromExplore = (storyId) => {
     }
 };
 
+// 🔥 ABRIR PERFIL DESDE EXPLORE - SUPERPONER (NO CERRAR EXPLORE)
 window.openProfileFromExplore = (userId) => {
     if (userId) {
-        closeExploreModal();
-        setTimeout(() => {
-            openProfileModal(userId);
-        }, 300);
+        // ✅ NO cerrar explore, superponer perfil encima
+        if (typeof window.openProfileModal === 'function') {
+            // El perfil se abrirá encima con z-index más alto
+            window.openProfileModal(userId, true); // true = desde explore
+        } else {
+            showToast('Error al abrir perfil', true);
+            // Fallback: cerrar explore y abrir perfil
+            closeExploreModal();
+            setTimeout(() => {
+                import('./profile-modal.js').then(({ openProfileModal }) => {
+                    openProfileModal(userId);
+                }).catch(() => {
+                    if (typeof window.openProfileModal === 'function') {
+                        window.openProfileModal(userId);
+                    }
+                });
+            }, 300);
+        }
     }
 };
 
 window.openHashtagStories = openHashtagStories;
 window.performSmartSearch = performSmartSearch;
 
+// 🔥 SEGUIR USUARIO DESDE EXPLORE
 window.followUserFromExplore = async (userId, btn) => {
     const token = getToken();
     if (!token) {
