@@ -109,21 +109,20 @@ function closeFollowersModal() {
 }
 
 // ============================================================
-// 🔥 FUNCIONES PARA NAVEGACIÓN EN CASCADA
+// 🔥 FUNCIONES PARA NAVEGACIÓN EN CASCADA (SIN EXPORTAR AQUÍ)
 // ============================================================
 
-export function setParentProfile(userId, filter) {
+function setParentProfile(userId, filter) {
     parentProfileId = userId;
     parentFilter = filter;
     console.log(`📌 Perfil padre guardado: ${userId}, filter: ${filter}`);
 }
 
-export function restoreFollowersModal() {
+function restoreFollowersModal() {
     console.log('🔄 Restaurando modal de seguidores');
     if (parentProfileId) {
         const userId = parentProfileId;
         const filter = parentFilter || 'followers';
-        // No limpiar parentProfileId aquí para mantener el contexto
         
         const overlay = document.getElementById('followersModalOverlay');
         if (overlay) {
@@ -499,7 +498,6 @@ window.openProfileFromFollowers = function(userId) {
     
     // Abrir el perfil
     import('./profile-modal.js').then(({ openProfileModal }) => {
-        // La función closeProfileModal de profile-modal manejará el retorno
         openProfileModal(userId);
     }).catch((err) => {
         console.error('Error abriendo perfil:', err);
@@ -826,7 +824,7 @@ function injectFollowersStyles() {
 }
 
 // ============================================================
-// ✅ EXPORTACIONES
+// ✅ EXPORTACIONES - UNA SOLA VEZ
 // ============================================================
 
 export { 
