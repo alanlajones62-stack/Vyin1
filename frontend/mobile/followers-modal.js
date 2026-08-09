@@ -98,7 +98,7 @@ function updateTabs(filter) {
 }
 
 // ============================================================
-// 🔥 CERRAR MODAL DE SEGUIDORES (CORREGIDO)
+// 🔥 CERRAR MODAL DE SEGUIDORES
 // ============================================================
 
 function closeFollowersModal() {
@@ -137,12 +137,12 @@ function closeFollowersModal() {
 
         document.body.style.overflow = '';
 
-        // 🔥 RESTAURAR PERFIL ANTERIOR CON SU CONTEXTO COMPLETO
+        // 🔥 RESTAURAR PERFIL ANTERIOR - SIEMPRE CON EL MODAL
         setTimeout(() => {
             import('./profile-modal.js').then(({ openProfileModal }) => {
                 // Pasamos el contexto de followers guardado
                 const context = previous.context || null;
-                // 🔥 IMPORTANTE: No hay tratamiento especial para perfil propio
+                // 🔥 SIEMPRE usar openProfileModal, NUNCA profile-native
                 openProfileModal(previous.userId, previous.fromFollowers || false, context);
             }).catch(err => {
                 console.error('❌ Error importando profile-modal:', err);
@@ -637,8 +637,8 @@ window.handleFollowersFollow = async function(userId, btn) {
 };
 
 // ============================================================
-// 🔥 ABRIR PERFIL DESDE SEGUIDORES (CORREGIDO CON PILA COMPLETA)
-// 🔥 EL PERFIL PROPIO SE ABRE EN EL MODAL, NO EN PROFILE-NATIVE
+// 🔥🔥🔥 ABRIR PERFIL DESDE SEGUIDORES - CORREGIDO
+// 🔥🔥🔥 NUNCA REDIRIGIR A PROFILE-NATIVE, SIEMPRE USAR EL MODAL
 // ============================================================
 
 window.openProfileFromFollowers = function(userId) {
@@ -651,9 +651,7 @@ window.openProfileFromFollowers = function(userId) {
         userId: currentUserId,
         filter: currentFilter,
         fromFollowers: true,
-        // 🔥 Guardar el contexto actual de perfil si existe
         context: window._followersContextData || null,
-        // 🔥 Guardar el estado actual de followers
         followersContext: {
             userId: currentUserId,
             filter: currentFilter
@@ -679,19 +677,19 @@ window.openProfileFromFollowers = function(userId) {
         overlay.classList.remove('active');
     }
     
-    // 🔥 ABRIR PERFIL CON CONTEXTO COMPLETO
-    // 🔥 IMPORTANTE: No hay ningún chequeo para redirigir a profile-native
-    // El perfil propio se abre en el modal como cualquier otro perfil
-    if (typeof window.openProfileModal === 'function') {
-        window.openProfileModal(userId, true, followersContext);
-    } else {
-        import('./profile-modal.js').then(({ openProfileModal }) => {
-            openProfileModal(userId, true, followersContext);
-        }).catch((err) => {
-            console.error('Error abriendo perfil:', err);
-            showToast('Error al abrir perfil', true);
-        });
-    }
+    // 🔥🔥🔥 CRUCIAL: SIEMPRE ABRIR CON openProfileModal
+    // 🔥🔥🔥 NUNCA, BAJO NINGUNA CIRCUNSTANCIA, REDIRIGIR A profile-native
+    // 🔥🔥🔥 El perfil propio DEBE abrirse en el modal también
+    
+    console.log(`📌 Abriendo perfil ${userId} en el modal (incluso si es el propio usuario)`);
+    
+    import('./profile-modal.js').then(({ openProfileModal }) => {
+        // Siempre usar openProfileModal, sin excepciones
+        openProfileModal(userId, true, followersContext);
+    }).catch((err) => {
+        console.error('❌ Error abriendo perfil:', err);
+        showToast('Error al abrir perfil', true);
+    });
 };
 
 // ============================================================

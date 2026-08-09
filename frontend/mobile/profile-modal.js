@@ -1,5 +1,6 @@
-// profile-modal.js - Modal para ver perfil de usuario (VERSIÓN CORREGIDA CON PILA COMPLETA)
+// profile-modal.js - Modal para ver perfil de usuario (VERSIÓN CORREGIDA)
 // CON NAVEGACIÓN POR PILA Y CONTEXTO DE VISTA
+// 🔥 EL PERFIL PROPIO SE MUESTRA EN EL MODAL, NO EN PROFILE-NATIVE
 
 import {
     getToken, getCurrentUser, showToast,
@@ -19,7 +20,7 @@ let lastRefreshTime = 0;
 let pendingProfileLoads = new Map();
 
 // ============================================================
-// 🔥 PILA DE NAVEGACIÓN COMPLETA (guarda el contexto de toda la navegación)
+// 🔥 PILA DE NAVEGACIÓN COMPLETA
 // ============================================================
 
 let navigationStack = [];
@@ -113,26 +114,6 @@ function clearModalContent() {
     const container = document.getElementById('profileModalBody');
     if (!container) return;
     showSkeletonLoader();
-}
-
-// ============================================================
-// FUNCIÓN PARA REDIRIGIR A PERFIL NATIVO
-// ============================================================
-
-function redirectToNativeProfile(userId) {
-    console.log(`🔄 Redirigiendo al perfil nativo: ${userId}`);
-    
-    if (isProfileModalOpen) {
-        navigationStack = [];
-        closeProfileModalInternal(false);
-    }
-    
-    import('./profile-native.js').then(({ showProfileNative }) => {
-        showProfileNative(userId);
-    }).catch(err => {
-        console.error('❌ Error importando profile-native:', err);
-        showToast('Error al abrir perfil', true);
-    });
 }
 
 // ============================================================
@@ -526,7 +507,7 @@ function updateProfileModalUI(user, stories) {
 }
 
 // ============================================================
-// 🔥 ABRIR MODAL DE PERFIL (VERSIÓN CORREGIDA)
+// 🔥 ABRIR MODAL DE PERFIL (VERSIÓN CORREGIDA - SIN REDIRECCIÓN A PROFILE-NATIVE)
 // ============================================================
 
 function openProfileModal(userId, fromFollowers = false, fromFollowersStack = null) {
@@ -538,10 +519,10 @@ function openProfileModal(userId, fromFollowers = false, fromFollowersStack = nu
     console.log(`👤 Abriendo perfil modal: ${userId}, desde followers: ${fromFollowers}`);
 
     const currentUser = getCurrentUser();
-    if (currentUser?.id === userId) {
-        redirectToNativeProfile(userId);
-        return;
-    }
+    
+    // 🔥 ELIMINADA LA REDIRECCIÓN A PROFILE-NATIVE
+    // Ahora el perfil propio se muestra en el modal como cualquier otro perfil
+    // Esto preserva la navegación por pila correctamente
 
     // Si ya está abierto el mismo perfil, traerlo al frente
     if (isProfileModalOpen && currentProfileUserId === userId) {
@@ -557,7 +538,6 @@ function openProfileModal(userId, fromFollowers = false, fromFollowersStack = nu
             data: currentProfileData,
             fromFollowers: window._fromFollowers || false,
             scrollPosition: document.querySelector('.profile-modal-body')?.scrollTop || 0,
-            // 🔥 Guardar también el contexto de followers si existe
             followersContext: window._followersContextData || null
         });
         console.log(`📌 Perfil ${currentProfileUserId} guardado en pila. Pila: ${navigationStack.length}`);
@@ -825,7 +805,6 @@ function createProfileModalHTML() {
     window.handleProfileFollow = handleFollowUser;
     window.openStoryFromProfileOverlay = openStoryFromProfileOverlay;
     window.openEditProfileFromModal = openEditProfileFromModal;
-    window.redirectToNativeProfile = redirectToNativeProfile;
 }
 
 // ============================================================
@@ -849,7 +828,7 @@ function openEditProfileFromModal() {
 }
 
 // ============================================================
-// 🔥 ABRIR MODAL DE SEGUIDORES DESDE EL PERFIL (CORREGIDO)
+// 🔥 ABRIR MODAL DE SEGUIDORES DESDE EL PERFIL
 // ============================================================
 
 function openFollowersFromProfile(filter) {
@@ -867,7 +846,6 @@ function openFollowersFromProfile(filter) {
         type: 'followers',
         userId: currentProfileUserId,
         filter: filter,
-        // 🔥 Guardar el contexto actual de followers si existe
         context: window._followersContextData || null,
         fromFollowers: window._fromFollowers || false
     });
@@ -1039,7 +1017,6 @@ window.openStoryFromProfileOverlay = openStoryFromProfileOverlay;
 window.openEditProfileFromModal = openEditProfileFromModal;
 window.clearProfileCache = clearProfileCache;
 window.refreshCurrentProfile = refreshCurrentProfile;
-window.redirectToNativeProfile = redirectToNativeProfile;
 window.getProfileCacheStats = () => performanceStats;
 
 // ============================================================
@@ -1055,6 +1032,5 @@ export {
     getVerificationBadge,
     openFollowersFromProfile,
     clearProfileCache,
-    refreshCurrentProfile,
-    redirectToNativeProfile
+    refreshCurrentProfile
 };

@@ -1,5 +1,68 @@
 /* ============================================================
-   PROFILE MODAL - SIN BORDES REDONDOS (IGUAL QUE EXPLORER)
+   PROFILE MODAL - OPTIMIZADO PARA RENDIMIENTO
+   SIN BORDES REDONDOS (IGUAL QUE EXPLORER)
+   ============================================================ */
+
+/* ============================================================
+   SKELETON LOADING ANIMATIONS
+   ============================================================ */
+
+.profile-skeleton {
+    padding: 20px 16px 30px;
+    animation: fadeInSkeleton 0.3s ease;
+}
+
+@keyframes fadeInSkeleton {
+    0% { opacity: 0; }
+    100% { opacity: 1; }
+}
+
+.profile-skeleton .skeleton-avatar {
+    width: 80px;
+    height: 80px;
+    border-radius: 50%;
+    background: linear-gradient(90deg, rgba(255,255,255,0.05) 25%, rgba(255,255,255,0.12) 50%, rgba(255,255,255,0.05) 75%);
+    background-size: 200% 100%;
+    animation: shimmerSkeleton 1.8s ease-in-out infinite;
+    margin: 0 auto;
+}
+
+.profile-skeleton .skeleton-line {
+    height: 12px;
+    border-radius: 6px;
+    background: linear-gradient(90deg, rgba(255,255,255,0.05) 25%, rgba(255,255,255,0.12) 50%, rgba(255,255,255,0.05) 75%);
+    background-size: 200% 100%;
+    animation: shimmerSkeleton 1.8s ease-in-out infinite;
+    margin: 8px 0;
+}
+
+.profile-skeleton .skeleton-line:nth-child(2) {
+    animation-delay: 0.1s;
+}
+
+.profile-skeleton .skeleton-line:nth-child(3) {
+    animation-delay: 0.2s;
+}
+
+.profile-skeleton .skeleton-line:nth-child(4) {
+    animation-delay: 0.3s;
+}
+
+.profile-skeleton .skeleton-line:nth-child(5) {
+    animation-delay: 0.4s;
+}
+
+.profile-skeleton .skeleton-line:nth-child(6) {
+    animation-delay: 0.5s;
+}
+
+@keyframes shimmerSkeleton {
+    0% { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
+}
+
+/* ============================================================
+   OVERLAY DEL MODAL - OPTIMIZADO
    ============================================================ */
 
 .profile-modal-overlay {
@@ -15,6 +78,9 @@
     display: none;
     flex-direction: column;
     animation: profileModalFadeIn 0.35s ease;
+    will-change: opacity;
+    backface-visibility: hidden;
+    -webkit-backface-visibility: hidden;
 }
 
 .profile-modal-overlay.active {
@@ -26,7 +92,10 @@
     100% { opacity: 1; transform: scale(1); }
 }
 
-/* 🔥 MODAL - SIN BORDES REDONDOS, OCUPA TODA LA PANTALLA */
+/* ============================================================
+   MODAL CONTENT - SIN BORDES REDONDOS
+   ============================================================ */
+
 .profile-modal-content {
     background: #12122a;
     border-radius: 0;
@@ -40,9 +109,15 @@
     box-shadow: none;
     display: flex;
     flex-direction: column;
+    will-change: transform;
+    backface-visibility: hidden;
+    -webkit-backface-visibility: hidden;
 }
 
-/* ===== HEADER ===== */
+/* ============================================================
+   HEADER
+   ============================================================ */
+
 .profile-modal-header {
     display: flex;
     align-items: center;
@@ -59,6 +134,14 @@
     font-weight: 700;
     font-size: 18px;
     color: #fff;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.profile-modal-header .title i {
+    color: #c084fc;
+    font-size: 16px;
 }
 
 .profile-modal-header .close-btn {
@@ -76,12 +159,20 @@
     transition: all 0.3s;
 }
 
-.profile-modal-header .close-btn:active {
-    transform: scale(0.88);
+.profile-modal-header .close-btn:hover {
     background: rgba(255, 255, 255, 0.1);
+    color: rgba(255, 255, 255, 0.7);
 }
 
-/* ===== BODY ===== */
+.profile-modal-header .close-btn:active {
+    transform: scale(0.88);
+    background: rgba(255, 255, 255, 0.15);
+}
+
+/* ============================================================
+   BODY - CON SCROLL OPTIMIZADO
+   ============================================================ */
+
 .profile-modal-body {
     flex: 1;
     overflow-y: auto;
@@ -90,10 +181,11 @@
     flex-direction: column;
     min-height: 0;
     -webkit-overflow-scrolling: touch;
+    will-change: scroll-position;
 }
 
 /* ============================================================
-   🔥 BADGES DE VERIFICACIÓN - ESTILO TIKTOK/X
+   BADGES DE VERIFICACIÓN - ESTILO TIKTOK/X
    ============================================================ */
 
 /* Base para todas las insignias circulares */
@@ -199,12 +291,6 @@
     animation: badgePop 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
 }
 
-.verified-badge-overlay svg {
-    width: 16px;
-    height: 16px;
-    fill: #fff;
-}
-
 .verified-badge-overlay .check-icon {
     color: #fff;
     font-size: 14px;
@@ -231,11 +317,10 @@
     box-shadow: 0 2px 12px rgba(192, 132, 252, 0.4);
 }
 
-.verified-badge-overlay.admin .check-icon {
-    font-size: 14px;
-}
+/* ============================================================
+   PERFIL HEADER
+   ============================================================ */
 
-/* ===== PERFIL HEADER ===== */
 .profile-cover {
     position: relative;
     margin-bottom: 12px;
@@ -256,6 +341,8 @@
     object-fit: cover;
     border: 3px solid rgba(192, 132, 252, 0.25);
     background: #1a1a2e;
+    will-change: transform;
+    image-rendering: -webkit-optimize-contrast;
 }
 
 .profile-cover .profile-name {
@@ -288,7 +375,10 @@
     margin-bottom: 4px;
 }
 
-/* ===== BOTÓN SEGUIR ===== */
+/* ============================================================
+   BOTÓN SEGUIR
+   ============================================================ */
+
 .profile-follow-btn {
     display: flex;
     justify-content: center;
@@ -353,7 +443,10 @@
     transform: scale(0.95);
 }
 
-/* ===== ESTADÍSTICAS ===== */
+/* ============================================================
+   ESTADÍSTICAS
+   ============================================================ */
+
 .profile-stats {
     display: flex;
     justify-content: space-around;
@@ -368,6 +461,8 @@
     text-align: center;
     cursor: pointer;
     transition: all 0.2s;
+    user-select: none;
+    -webkit-tap-highlight-color: transparent;
 }
 
 .profile-stats .stat:active {
@@ -389,7 +484,10 @@
     letter-spacing: 0.5px;
 }
 
-/* ===== SECCIÓN DE HISTORIAS ===== */
+/* ============================================================
+   SECCIÓN DE HISTORIAS
+   ============================================================ */
+
 .profile-stories-section {
     flex: 1;
     display: flex;
@@ -410,6 +508,7 @@
 
 .profile-stories-section .section-title i {
     font-size: 15px;
+    color: rgba(192, 132, 252, 0.3);
 }
 
 .profile-stories-grid {
@@ -429,6 +528,7 @@
     position: relative;
     transition: all 0.2s;
     min-height: 70px;
+    will-change: transform;
 }
 
 .profile-story-thumb:active {
@@ -439,6 +539,8 @@
     width: 100%;
     height: 100%;
     object-fit: cover;
+    will-change: transform;
+    image-rendering: -webkit-optimize-contrast;
 }
 
 .profile-story-thumb .thumb-overlay {
@@ -485,21 +587,37 @@
     font-size: 24px;
     display: block;
     margin-bottom: 4px;
+    color: rgba(192, 132, 252, 0.1);
 }
 
-/* ===== LOADING ===== */
+/* ============================================================
+   LOADING
+   ============================================================ */
+
 .profile-loading {
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    padding: 30px;
-    color: rgba(255, 255, 255, 0.15);
+    min-height: 200px;
+    gap: 16px;
+    color: rgba(255, 255, 255, 0.3);
+    animation: pulseLoading 1.5s ease-in-out infinite;
+}
+
+@keyframes pulseLoading {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.6; }
 }
 
 .profile-loading i {
-    font-size: 32px;
-    margin-bottom: 6px;
+    font-size: 28px;
+    color: #c084fc;
+}
+
+.profile-loading span {
+    font-size: 13px;
+    letter-spacing: 0.5px;
 }
 
 /* ============================================================
@@ -521,6 +639,37 @@
     }
 }
 
+@keyframes fadeInSkeleton {
+    0% { opacity: 0; }
+    100% { opacity: 1; }
+}
+
+/* ============================================================
+   SCROLLBAR PERSONALIZADA
+   ============================================================ */
+
+.profile-modal-body::-webkit-scrollbar {
+    width: 3px;
+}
+
+.profile-modal-body::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.profile-modal-body::-webkit-scrollbar-thumb {
+    background: rgba(192, 132, 252, 0.2);
+    border-radius: 10px;
+}
+
+.profile-modal-body::-webkit-scrollbar-thumb:hover {
+    background: rgba(192, 132, 252, 0.4);
+}
+
+.profile-modal-body {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(192, 132, 252, 0.2) transparent;
+}
+
 /* ============================================================
    RESPONSIVE - IGUAL QUE EXPLORER
    ============================================================ */
@@ -532,6 +681,10 @@
 
     .profile-modal-header .title {
         font-size: 16px;
+    }
+
+    .profile-modal-header .title i {
+        font-size: 14px;
     }
 
     .profile-modal-header .close-btn {
@@ -643,6 +796,15 @@
     .profile-stories-grid {
         gap: 4px;
     }
+
+    .profile-skeleton .skeleton-avatar {
+        width: 68px;
+        height: 68px;
+    }
+
+    .profile-skeleton .skeleton-line {
+        height: 10px;
+    }
 }
 
 @media (max-width: 380px) {
@@ -652,6 +814,10 @@
 
     .profile-modal-header .title {
         font-size: 14px;
+    }
+
+    .profile-modal-header .title i {
+        font-size: 12px;
     }
 
     .profile-modal-header .close-btn {
@@ -760,6 +926,15 @@
 
     .profile-stories-grid {
         gap: 3px;
+    }
+
+    .profile-skeleton .skeleton-avatar {
+        width: 56px;
+        height: 56px;
+    }
+
+    .profile-skeleton .skeleton-line {
+        height: 9px;
     }
 }
 
@@ -873,25 +1048,79 @@
     .profile-stories-section .section-title {
         font-size: 11px;
     }
+
+    .profile-skeleton .skeleton-avatar {
+        width: 54px;
+        height: 54px;
+    }
+
+    .profile-skeleton .skeleton-line {
+        height: 9px;
+        margin: 6px 0;
+    }
 }
 
 /* ============================================================
-   SCROLLBAR PERSONALIZADA
+   ESTADÍSTICAS DE RENDIMIENTO (OPCIONAL - DEBUG)
    ============================================================ */
 
-.profile-modal-body::-webkit-scrollbar {
-    width: 3px;
+.profile-performance-stats {
+    position: fixed;
+    bottom: 10px;
+    right: 10px;
+    background: rgba(0,0,0,0.8);
+    padding: 6px 12px;
+    border-radius: 8px;
+    font-size: 10px;
+    color: rgba(255,255,255,0.3);
+    z-index: 99999;
+    pointer-events: none;
+    font-family: monospace;
+    display: none;
 }
 
-.profile-modal-body::-webkit-scrollbar-track {
-    background: transparent;
+.profile-performance-stats.visible {
+    display: block;
 }
 
-.profile-modal-body::-webkit-scrollbar-thumb {
-    background: rgba(192, 132, 252, 0.2);
-    border-radius: 10px;
+/* ============================================================
+   SOPORTE PARA MODO OSCURO Y REDUCIDO DE MOVIMIENTO
+   ============================================================ */
+
+@media (prefers-reduced-motion: reduce) {
+    .profile-modal-overlay {
+        animation: none;
+    }
+    
+    .profile-skeleton .skeleton-avatar,
+    .profile-skeleton .skeleton-line {
+        animation: none;
+        background: rgba(255,255,255,0.05);
+    }
+    
+    .verification-badge {
+        animation: none;
+    }
+    
+    .profile-loading {
+        animation: none;
+    }
 }
 
-.profile-modal-body::-webkit-scrollbar-thumb:hover {
-    background: rgba(192, 132, 252, 0.4);
+@media (prefers-color-scheme: light) {
+    .profile-modal-content {
+        background: #1a1a2e;
+    }
+    
+    .profile-modal-header .title {
+        color: #fff;
+    }
+    
+    .profile-cover .profile-name {
+        color: #fff;
+    }
+    
+    .profile-stats .stat .number {
+        color: #fff;
+    }
 }
