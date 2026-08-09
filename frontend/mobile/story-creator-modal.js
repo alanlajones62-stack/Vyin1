@@ -1,6 +1,6 @@
 // ============================================================
 // story-creator-modal.js - VERSIÓN COMPLETA CORREGIDA
-// (CON ESPACIO VERTICAL MEJORADO)
+// (CON SEPARACIÓN MEJORADA ENTRE DESCRIPCIÓN Y BOTONES)
 // ============================================================
 
 import { getToken, getCurrentUser, showToast } from './auth.js';
@@ -1236,7 +1236,7 @@ window.confirmMedia = function() {
 };
 
 // ============================================================
-// ESTILOS - CON ESPACIO VERTICAL MEJORADO
+// ESTILOS - CON SEPARACIÓN MEJORADA
 // ============================================================
 
 function injectStyles() {
@@ -1454,7 +1454,7 @@ function injectStyles() {
         }
 
         /* ============================================================
-           BOTTOM CONTROLS - POSICIÓN 1 (más abajo)
+           BOTTOM CONTROLS
         ============================================================ */
         .bottom-controls {
             position: absolute;
@@ -1524,11 +1524,11 @@ function injectStyles() {
         }
 
         /* ============================================================
-           INPUT AREA - POSICIÓN 2 (120px desde abajo)
+           INPUT AREA - DESCRIPCIÓN (bottom: 100px)
         ============================================================ */
         .input-area {
             position: absolute;
-            bottom: 120px;
+            bottom: 100px;
             left: 20px;
             right: 20px;
             z-index: 14;
@@ -1575,11 +1575,11 @@ function injectStyles() {
         }
 
         /* ============================================================
-           CAPTURE ACTIONS - POSICIÓN 3 (170px desde abajo)
+           CAPTURE ACTIONS - Rehacer/Usar (bottom: 200px - separado)
         ============================================================ */
         .capture-actions {
             position: absolute;
-            bottom: 170px;
+            bottom: 200px;
             left: 20px;
             right: 20px;
             z-index: 14;
@@ -1631,11 +1631,11 @@ function injectStyles() {
         }
 
         /* ============================================================
-           PREVIEW ACTIONS - POSICIÓN 4 (170px desde abajo)
+           PREVIEW ACTIONS - Editar/Confirmar (bottom: 200px)
         ============================================================ */
         .preview-actions {
             position: absolute;
-            bottom: 170px;
+            bottom: 200px;
             left: 20px;
             right: 20px;
             z-index: 14;
@@ -1677,11 +1677,11 @@ function injectStyles() {
         }
 
         /* ============================================================
-           SUBTITLES STATUS - POSICIÓN 5 (240px desde abajo)
+           SUBTITLES STATUS (bottom: 270px)
         ============================================================ */
         .subtitles-status {
             position: absolute;
-            bottom: 240px;
+            bottom: 270px;
             left: 20px;
             right: 20px;
             z-index: 14;
@@ -1869,18 +1869,18 @@ function injectStyles() {
             .mode-selector .mode-btn i { font-size: 12px; }
             .btn-flip-camera { top: 62px; right: 12px; width: 34px; height: 34px; font-size: 14px; }
             
-            .input-area { bottom: 110px; left: 16px; right: 16px; padding: 4px 0; }
+            .input-area { bottom: 90px; left: 16px; right: 16px; padding: 4px 0; }
             .input-area .input-wrapper input { font-size: 13px; padding: 10px 12px; padding-left: 36px; padding-right: 50px; }
             
-            .capture-actions { bottom: 150px; left: 16px; right: 16px; padding: 10px 16px; gap: 20px; }
+            .capture-actions { bottom: 180px; left: 16px; right: 16px; padding: 10px 16px; gap: 20px; }
             .capture-actions .btn-retake i,
             .capture-actions .btn-use i { width: 36px; height: 36px; font-size: 14px; }
             
-            .preview-actions { bottom: 150px; left: 16px; right: 16px; padding: 10px 16px; gap: 12px; }
+            .preview-actions { bottom: 180px; left: 16px; right: 16px; padding: 10px 16px; gap: 12px; }
             .preview-actions .btn-edit,
             .preview-actions .btn-next-preview { font-size: 12px; padding: 6px 14px; }
             
-            .subtitles-status { bottom: 210px; left: 16px; right: 16px; padding: 8px 14px; gap: 10px; }
+            .subtitles-status { bottom: 250px; left: 16px; right: 16px; padding: 8px 14px; gap: 10px; }
             .subtitles-status .subtitles-text span { font-size: 12px; }
             
             .text-tools { bottom: 120px; padding: 8px 12px; }
@@ -1908,13 +1908,13 @@ function injectStyles() {
             .mode-selector .mode-btn i { font-size: 11px; }
             .btn-flip-camera { top: 56px; right: 10px; width: 30px; height: 30px; font-size: 12px; }
             
-            .input-area { bottom: 90px; padding: 4px 0; }
+            .input-area { bottom: 80px; padding: 4px 0; }
             
-            .capture-actions { bottom: 130px; padding: 8px 16px; }
+            .capture-actions { bottom: 160px; padding: 8px 16px; }
             
-            .preview-actions { bottom: 130px; padding: 8px 16px; }
+            .preview-actions { bottom: 160px; padding: 8px 16px; }
             
-            .subtitles-status { bottom: 190px; padding: 6px 12px; }
+            .subtitles-status { bottom: 220px; padding: 6px 12px; }
             .subtitles-status .subtitles-text span { font-size: 11px; }
             
             .text-editor-container textarea { font-size: 18px; height: 50%; }

@@ -1,0 +1,780 @@
+// ============================================================
+// followers-modal.js - Modal de seguidores/seguidos
+// (CON BARRA DE BÚSQUEDA Y FILTROS)
+// ============================================================
+
+import { getToken, getCurrentUser, showToast, getAvatar, escapeHtml, formatDate } from './auth.js';
+
+const API_URL = window.location.origin;
+
+// ============================================================
+// ESTADO GLOBAL
+// ============================================================
+
+let isFollowersModalOpen = false;
+let currentUserId = null;
+let currentFilter = 'followers'; // 'followers' o 'following'
+let followersList = [];
+let followingList = [];
+let filteredList = [];
+let searchQuery = '';
+let isLoading = false;
+
+// ============================================================
+// ABRIR MODAL DE SEGUIDORES
+// ============================================================
+
+export async function openFollowersModal(userId, filter = 'followers') {
+    if (!userId) {
+        showToast('Usuario no encontrado', true);
+        return;
+    }
+
+    const token = getToken();
+    if (!token) {
+        showToast('Inicia sesión para ver seguidores', true);
+        setTimeout(() => {
+            window.location.href = '/login.html';
+        }, 500);
+        return;
+    }
+
+    currentUserId = userId;
+    currentFilter = filter;
+    searchQuery = '';
+    isFollowersModalOpen = true;
+
+    const overlay = document.getElementById('followersModalOverlay');
+    if (!overlay) {
+        createFollowersModalHTML();
+    }
+
+    const modalOverlay = document.getElementById('followersModalOverlay');
+    if (modalOverlay) {
+        modalOverlay.style.display = 'flex';
+        modalOverlay.classList.add('active');
+    }
+
+    document.body.style.overflow = 'hidden';
+
+    await loadFollowersData(userId);
+}
+
+// ============================================================
+// CERRAR MODAL DE SEGUIDORES
+// ============================================================
+
+export function closeFollowersModal() {
+    isFollowersModalOpen = false;
+    currentUserId = null;
+    followersList = [];
+    followingList = [];
+    filteredList = [];
+    searchQuery = '';
+
+    const overlay = document.getElementById('followersModalOverlay');
+    if (overlay) {
+        overlay.classList.remove('active');
+        overlay.style.display = 'none';
+    }
+
+    document.body.style.overflow = '';
+}
+
+// ============================================================
+// CREAR HTML DEL MODAL
+// ============================================================
+
+function createFollowersModalHTML() {
+    if (document.getElementById('followersModalOverlay')) return;
+
+    const html = `
+        <div id="followersModalOverlay" class="followers-modal-overlay" onclick="window.closeFollowersModal()">
+            <div class="followers-modal-content" onclick="event.stopPropagation()">
+                <div class="followers-modal-header">
+                    <button class="followers-modal-close" onclick="window.closeFollowersModal()">
+                        <i class="fas fa-times"></i>
+                    </button>
+                    <h2 id="followersModalTitle">Seguidores</h2>
+                </div>
+
+                <div class="followers-modal-search">
+                    <i class="fas fa-search"></i>
+                    <input type="text" id="followersSearchInput" placeholder="Buscar usuario..." />
+                    <button class="followers-search-clear" id="followersSearchClear" style="display:none;">
+                        <i class="fas fa-times-circle"></i>
+                    </button>
+                </div>
+
+                <div class="followers-modal-tabs">
+                    <button class="followers-tab active" data-filter="followers" onclick="window.switchFollowersTab('followers')">
+                        <i class="fas fa-users"></i>
+                        <span>Seguidores</span>
+                        <span class="tab-count" id="followersCount">0</span>
+                    </button>
+                    <button class="followers-tab" data-filter="following" onclick="window.switchFollowersTab('following')">
+                        <i class="fas fa-user-friends"></i>
+                        <span>Siguiendo</span>
+                        <span class="tab-count" id="followingCount">0</span>
+                    </button>
+                </div>
+
+                <div class="followers-modal-list" id="followersListContainer">
+                    <div class="followers-loading">
+                        <i class="fas fa-spinner fa-pulse"></i>
+                        <span>Cargando...</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+
+    const div = document.createElement('div');
+    div.innerHTML = html;
+    document.body.appendChild(div.firstElementChild);
+
+    // Configurar eventos
+    const searchInput = document.getElementById('followersSearchInput');
+    searchInput?.addEventListener('input', (e) => {
+        searchQuery = e.target.value.trim().toLowerCase();
+        const clearBtn = document.getElementById('followersSearchClear');
+        if (clearBtn) {
+            clearBtn.style.display = searchQuery.length > 0 ? 'flex' : 'none';
+        }
+        filterAndRenderList();
+    });
+
+    const clearBtn = document.getElementById('followersSearchClear');
+    clearBtn?.addEventListener('click', () => {
+        const searchInput = document.getElementById('followersSearchInput');
+        if (searchInput) {
+            searchInput.value = '';
+            searchQuery = '';
+            clearBtn.style.display = 'none';
+            filterAndRenderList();
+            searchInput.focus();
+        }
+    });
+
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && isFollowersModalOpen) {
+            closeFollowersModal();
+        }
+    });
+
+    // Funciones globales
+    window.closeFollowersModal = closeFollowersModal;
+    window.switchFollowersTab = switchFollowersTab;
+}
+
+// ============================================================
+// CAMBIAR FILTRO (Seguidores/Siguiendo)
+// ============================================================
+
+function switchFollowersTab(filter) {
+    currentFilter = filter;
+    searchQuery = '';
+    
+    const searchInput = document.getElementById('followersSearchInput');
+    if (searchInput) {
+        searchInput.value = '';
+    }
+    const clearBtn = document.getElementById('followersSearchClear');
+    if (clearBtn) {
+        clearBtn.style.display = 'none';
+    }
+
+    document.querySelectorAll('.followers-tab').forEach(tab => {
+        tab.classList.toggle('active', tab.dataset.filter === filter);
+    });
+
+    filterAndRenderList();
+}
+
+// ============================================================
+// CARGAR DATOS DE SEGUIDORES/SEGUIDOS
+// ============================================================
+
+async function loadFollowersData(userId) {
+    const token = getToken();
+    if (!token) return;
+
+    isLoading = true;
+    const container = document.getElementById('followersListContainer');
+    if (container) {
+        container.innerHTML = `
+            <div class="followers-loading">
+                <i class="fas fa-spinner fa-pulse"></i>
+                <span>Cargando...</span>
+            </div>
+        `;
+    }
+
+    try {
+        // Cargar seguidores
+        const followersRes = await fetch(`${API_URL}/api/follows/followers/${userId}`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+
+        if (followersRes.ok) {
+            followersList = await followersRes.json();
+            document.getElementById('followersCount').textContent = followersList.length;
+        }
+
+        // Cargar seguidos
+        const followingRes = await fetch(`${API_URL}/api/follows/following/${userId}`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+
+        if (followingRes.ok) {
+            followingList = await followingRes.json();
+            document.getElementById('followingCount').textContent = followingList.length;
+        }
+
+        // Actualizar título
+        const currentUser = getCurrentUser();
+        const isOwnProfile = currentUser?.id === userId;
+        const title = document.getElementById('followersModalTitle');
+        if (title) {
+            if (isOwnProfile) {
+                title.textContent = currentFilter === 'followers' ? 'Tus seguidores' : 'A quienes sigues';
+            } else {
+                title.textContent = currentFilter === 'followers' ? 'Seguidores' : 'Siguiendo';
+            }
+        }
+
+        filterAndRenderList();
+
+    } catch (error) {
+        console.error('Error cargando seguidores:', error);
+        if (container) {
+            container.innerHTML = `
+                <div class="followers-empty">
+                    <i class="fas fa-exclamation-circle"></i>
+                    <span>Error al cargar la lista</span>
+                </div>
+            `;
+        }
+    } finally {
+        isLoading = false;
+    }
+}
+
+// ============================================================
+// FILTRAR Y RENDERIZAR LISTA
+// ============================================================
+
+function filterAndRenderList() {
+    const list = currentFilter === 'followers' ? followersList : followingList;
+    
+    if (searchQuery) {
+        filteredList = list.filter(user => 
+            user.fullName?.toLowerCase().includes(searchQuery) ||
+            user.username?.toLowerCase().includes(searchQuery)
+        );
+    } else {
+        filteredList = list;
+    }
+
+    renderList(filteredList);
+}
+
+// ============================================================
+// RENDERIZAR LISTA
+// ============================================================
+
+function renderList(users) {
+    const container = document.getElementById('followersListContainer');
+    if (!container) return;
+
+    if (users.length === 0) {
+        const isOwnProfile = getCurrentUser()?.id === currentUserId;
+        const emptyMessage = currentFilter === 'followers' 
+            ? (isOwnProfile ? 'No tienes seguidores aún' : 'Este usuario no tiene seguidores')
+            : (isOwnProfile ? 'No sigues a nadie aún' : 'Este usuario no sigue a nadie');
+        
+        container.innerHTML = `
+            <div class="followers-empty">
+                <i class="fas fa-user-friends"></i>
+                <span>${searchQuery ? 'No se encontraron resultados' : emptyMessage}</span>
+                ${searchQuery ? '<small>Intenta con otra búsqueda</small>' : ''}
+            </div>
+        `;
+        return;
+    }
+
+    const currentUser = getCurrentUser();
+
+    let html = '';
+    users.forEach(user => {
+        const isFollowing = currentUser?.following?.includes(user.id) || false;
+        const isOwn = currentUser?.id === user.id;
+
+        // Badge de verificación
+        let badge = '';
+        if (user.isVerified) {
+            badge = '<i class="fas fa-check-circle verified-badge" title="Verificado"></i>';
+        }
+
+        html += `
+            <div class="followers-item" onclick="window.openProfileFromFollowers('${user.id}')">
+                <img class="followers-avatar" src="${user.avatar || getAvatar(user.fullName)}" alt="${user.fullName}" />
+                <div class="followers-info">
+                    <div class="followers-name">
+                        ${escapeHtml(user.fullName)} ${badge}
+                    </div>
+                    <div class="followers-username">@${escapeHtml(user.username)}</div>
+                </div>
+                ${!isOwn ? `
+                    <button class="followers-follow-btn ${isFollowing ? 'following' : ''}" 
+                            data-user-id="${user.id}" 
+                            onclick="event.stopPropagation(); window.handleFollowersFollow('${user.id}', this)">
+                        ${isFollowing ? '<i class="fas fa-check"></i> Siguiendo' : '<i class="fas fa-plus"></i> Seguir'}
+                    </button>
+                ` : ''}
+            </div>
+        `;
+    });
+
+    container.innerHTML = html;
+}
+
+// ============================================================
+// MANEJAR SEGUIR/DESSEGUIR DESDE EL MODAL
+// ============================================================
+
+window.handleFollowersFollow = async function(userId, btn) {
+    const token = getToken();
+    if (!token) {
+        showToast('Inicia sesión para seguir', true);
+        return;
+    }
+
+    const isFollowing = btn.classList.contains('following');
+    const url = isFollowing ? `${API_URL}/api/follows/unfollow` : `${API_URL}/api/follows/follow`;
+    const method = 'DELETE';
+
+    btn.disabled = true;
+    const originalText = btn.innerHTML;
+    btn.innerHTML = '<i class="fas fa-spinner fa-pulse"></i>';
+
+    try {
+        const res = await fetch(url, {
+            method: method,
+            headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ userId })
+        });
+
+        if (res.ok) {
+            if (isFollowing) {
+                btn.classList.remove('following');
+                btn.innerHTML = '<i class="fas fa-plus"></i> Seguir';
+                // Actualizar listas locales
+                const userIndex = followersList.findIndex(u => u.id === userId);
+                if (userIndex !== -1) {
+                    followersList[userIndex].isFollowing = false;
+                }
+                const followingIndex = followingList.findIndex(u => u.id === userId);
+                if (followingIndex !== -1) {
+                    followingList.splice(followingIndex, 1);
+                }
+                showToast('💔 Dejaste de seguir');
+            } else {
+                btn.classList.add('following');
+                btn.innerHTML = '<i class="fas fa-check"></i> Siguiendo';
+                // Actualizar listas locales
+                const userIndex = followersList.findIndex(u => u.id === userId);
+                if (userIndex !== -1) {
+                    followersList[userIndex].isFollowing = true;
+                }
+                // Añadir a following si no está
+                if (!followingList.find(u => u.id === userId)) {
+                    const user = followersList.find(u => u.id === userId) || followingList.find(u => u.id === userId);
+                    if (user) {
+                        followingList.push({ ...user, isFollowing: true });
+                    }
+                }
+                showToast('✅ Ahora sigues a este usuario');
+            }
+        } else {
+            const data = await res.json();
+            showToast(data.error || 'Error al procesar', true);
+            btn.innerHTML = originalText;
+            btn.disabled = false;
+        }
+    } catch (error) {
+        console.error('Error:', error);
+        showToast('Error al procesar', true);
+        btn.innerHTML = originalText;
+        btn.disabled = false;
+    }
+};
+
+// ============================================================
+// ABRIR PERFIL DESDE EL MODAL DE SEGUIDORES
+// ============================================================
+
+window.openProfileFromFollowers = function(userId) {
+    if (!userId) return;
+    closeFollowersModal();
+    setTimeout(() => {
+        import('./profile-modal.js').then(({ openProfileModal }) => {
+            openProfileModal(userId);
+        }).catch(() => {
+            if (typeof window.openProfileModal === 'function') {
+                window.openProfileModal(userId);
+            } else {
+                showToast('Error al abrir perfil', true);
+            }
+        });
+    }, 100);
+};
+
+// ============================================================
+// INYECTAR ESTILOS
+// ============================================================
+
+function injectFollowersStyles() {
+    if (document.getElementById('followersModalStyles')) return;
+
+    const styles = document.createElement('style');
+    styles.id = 'followersModalStyles';
+    styles.textContent = `
+        /* ============================================================
+           OVERLAY
+        ============================================================ */
+        .followers-modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100dvh;
+            background: rgba(0,0,0,0.8);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            z-index: 10003;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+            animation: followersFadeIn 0.3s ease;
+        }
+        .followers-modal-overlay.active { display: flex; }
+
+        @keyframes followersFadeIn {
+            from { opacity: 0; transform: scale(0.96); }
+            to { opacity: 1; transform: scale(1); }
+        }
+
+        /* ============================================================
+           CONTENIDO
+        ============================================================ */
+        .followers-modal-content {
+            background: #12122a;
+            border-radius: 16px;
+            max-width: 480px;
+            width: 100%;
+            max-height: 80vh;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            border: 1px solid rgba(255,255,255,0.04);
+            box-shadow: 0 24px 80px rgba(0,0,0,0.6);
+        }
+
+        /* ============================================================
+           HEADER
+        ============================================================ */
+        .followers-modal-header {
+            display: flex;
+            align-items: center;
+            padding: 16px 20px;
+            border-bottom: 1px solid rgba(255,255,255,0.04);
+            flex-shrink: 0;
+            gap: 12px;
+        }
+        .followers-modal-header h2 {
+            color: #fff;
+            font-size: 18px;
+            font-weight: 600;
+            margin: 0;
+            flex: 1;
+        }
+        .followers-modal-close {
+            background: rgba(255,255,255,0.05);
+            border: none;
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            color: rgba(255,255,255,0.4);
+            font-size: 16px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.3s;
+            flex-shrink: 0;
+        }
+        .followers-modal-close:active { transform: scale(0.9); }
+
+        /* ============================================================
+           SEARCH
+        ============================================================ */
+        .followers-modal-search {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 10px 20px;
+            border-bottom: 1px solid rgba(255,255,255,0.04);
+            flex-shrink: 0;
+            position: relative;
+        }
+        .followers-modal-search i {
+            color: rgba(255,255,255,0.2);
+            font-size: 14px;
+        }
+        .followers-modal-search input {
+            flex: 1;
+            background: rgba(255,255,255,0.04);
+            border: 1px solid rgba(255,255,255,0.06);
+            border-radius: 50px;
+            padding: 8px 14px;
+            color: #fff;
+            font-size: 13px;
+            outline: none;
+            font-family: inherit;
+            transition: all 0.3s;
+        }
+        .followers-modal-search input::placeholder {
+            color: rgba(255,255,255,0.2);
+        }
+        .followers-modal-search input:focus {
+            border-color: rgba(192,132,252,0.2);
+            background: rgba(255,255,255,0.06);
+        }
+        .followers-search-clear {
+            background: none;
+            border: none;
+            color: rgba(255,255,255,0.2);
+            cursor: pointer;
+            font-size: 16px;
+            padding: 4px;
+            display: none;
+            transition: all 0.2s;
+        }
+        .followers-search-clear:hover {
+            color: rgba(255,255,255,0.4);
+        }
+
+        /* ============================================================
+           TABS
+        ============================================================ */
+        .followers-modal-tabs {
+            display: flex;
+            padding: 8px 20px;
+            gap: 4px;
+            border-bottom: 1px solid rgba(255,255,255,0.04);
+            flex-shrink: 0;
+            background: rgba(255,255,255,0.02);
+        }
+        .followers-tab {
+            background: none;
+            border: none;
+            color: rgba(255,255,255,0.3);
+            padding: 8px 14px;
+            border-radius: 50px;
+            font-size: 12px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.3s;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-family: inherit;
+        }
+        .followers-tab i { font-size: 13px; }
+        .followers-tab .tab-count {
+            background: rgba(255,255,255,0.06);
+            padding: 0 6px;
+            border-radius: 10px;
+            font-size: 10px;
+            min-width: 18px;
+            text-align: center;
+        }
+        .followers-tab.active {
+            background: rgba(192,132,252,0.12);
+            color: #c084fc;
+        }
+        .followers-tab.active .tab-count {
+            background: rgba(192,132,252,0.2);
+            color: #c084fc;
+        }
+        .followers-tab:active { transform: scale(0.95); }
+
+        /* ============================================================
+           LISTA
+        ============================================================ */
+        .followers-modal-list {
+            flex: 1;
+            overflow-y: auto;
+            padding: 8px 4px;
+        }
+        .followers-modal-list::-webkit-scrollbar {
+            width: 3px;
+        }
+        .followers-modal-list::-webkit-scrollbar-thumb {
+            background: rgba(192,132,252,0.15);
+            border-radius: 10px;
+        }
+
+        .followers-loading {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 40px 20px;
+            color: rgba(255,255,255,0.15);
+            gap: 8px;
+        }
+        .followers-loading i { font-size: 24px; }
+        .followers-loading span { font-size: 13px; }
+
+        .followers-empty {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 40px 20px;
+            color: rgba(255,255,255,0.15);
+            gap: 8px;
+            text-align: center;
+        }
+        .followers-empty i { font-size: 32px; color: rgba(255,255,255,0.05); }
+        .followers-empty span { font-size: 14px; }
+        .followers-empty small { font-size: 12px; color: rgba(255,255,255,0.08); }
+
+        /* ============================================================
+           ITEM DE USUARIO
+        ============================================================ */
+        .followers-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 10px 16px;
+            border-radius: 12px;
+            cursor: pointer;
+            transition: all 0.2s;
+            border: 1px solid transparent;
+        }
+        .followers-item:hover {
+            background: rgba(255,255,255,0.03);
+            border-color: rgba(255,255,255,0.04);
+        }
+        .followers-item:active {
+            transform: scale(0.99);
+        }
+
+        .followers-avatar {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            object-fit: cover;
+            flex-shrink: 0;
+            border: 1px solid rgba(255,255,255,0.05);
+        }
+
+        .followers-info {
+            flex: 1;
+            min-width: 0;
+        }
+        .followers-name {
+            font-weight: 600;
+            font-size: 14px;
+            color: #fff;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+        .followers-name .verified-badge {
+            color: #c084fc;
+            font-size: 12px;
+        }
+        .followers-username {
+            font-size: 12px;
+            color: rgba(255,255,255,0.3);
+        }
+
+        .followers-follow-btn {
+            padding: 6px 14px;
+            border-radius: 50px;
+            border: none;
+            font-size: 11px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+            font-family: inherit;
+            flex-shrink: 0;
+            background: rgba(255,255,255,0.06);
+            color: rgba(255,255,255,0.7);
+        }
+        .followers-follow-btn:hover {
+            background: rgba(255,255,255,0.1);
+        }
+        .followers-follow-btn.following {
+            background: rgba(192,132,252,0.12);
+            color: #c084fc;
+        }
+        .followers-follow-btn.following:hover {
+            background: rgba(255,68,68,0.1);
+            color: #ff6b6b;
+        }
+        .followers-follow-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        .followers-follow-btn i {
+            font-size: 10px;
+            margin-right: 4px;
+        }
+
+        /* ============================================================
+           RESPONSIVE
+        ============================================================ */
+        @media (max-width: 520px) {
+            .followers-modal-overlay { padding: 12px; }
+            .followers-modal-content { max-height: 85vh; border-radius: 12px; }
+            .followers-modal-header { padding: 12px 16px; }
+            .followers-modal-header h2 { font-size: 16px; }
+            .followers-modal-search { padding: 8px 16px; }
+            .followers-modal-tabs { padding: 6px 16px; }
+            .followers-tab { font-size: 11px; padding: 6px 10px; }
+            .followers-item { padding: 8px 12px; }
+            .followers-avatar { width: 36px; height: 36px; }
+            .followers-name { font-size: 13px; }
+            .followers-follow-btn { font-size: 10px; padding: 4px 12px; }
+        }
+
+        @media (max-height: 600px) {
+            .followers-modal-content { max-height: 90vh; }
+            .followers-modal-header { padding: 10px 14px; }
+            .followers-modal-header h2 { font-size: 15px; }
+            .followers-modal-search { padding: 6px 14px; }
+            .followers-modal-tabs { padding: 4px 14px; }
+            .followers-item { padding: 6px 10px; }
+            .followers-avatar { width: 32px; height: 32px; }
+        }
+    `;
+    document.head.appendChild(styles);
+}
+
+// Inyectar estilos
+injectFollowersStyles();
+
+// ============================================================
+// EXPORTACIONES
+// ============================================================
+
+export { openFollowersModal, closeFollowersModal };
