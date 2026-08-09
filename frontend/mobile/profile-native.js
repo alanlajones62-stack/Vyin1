@@ -1,4 +1,5 @@
 // profile-native.js - Perfil nativo del usuario (SECCIÓN NATIVA)
+// OPTIMIZADO: Sin estado de carga, con precarga y actualización en tiempo real
 // ============================================================
 
 import {
@@ -48,7 +49,54 @@ function clearProfileCache(userId) {
 }
 
 // ============================================================
-// MOSTRAR PERFIL NATIVO
+// 🔥 PRECARGAR PERFIL DEL USUARIO ACTUAL
+// ============================================================
+
+function preloadCurrentUserProfile() {
+    const currentUser = getCurrentUser();
+    if (!currentUser || !currentUser.id) return;
+    
+    const userId = currentUser.id;
+    
+    if (profileCache.has(userId)) {
+        console.log(`✅ Perfil de ${currentUser.fullName} ya en caché`);
+        return;
+    }
+    
+    console.log(`🔄 Pre-cargando perfil de ${currentUser.fullName}...`);
+    
+    const token = getToken();
+    if (!token) return;
+    
+    fetch(`${API_URL}/api/users/profile/${userId}`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+    })
+    .then(res => {
+        if (res.ok) return res.json();
+        throw new Error('Error cargando perfil');
+    })
+    .then(user => {
+        profileCache.set(userId, user);
+        console.log(`✅ Perfil de ${user.fullName} pre-cargado`);
+        return fetch(`${API_URL}/api/stories/user/${userId}`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+    })
+    .then(res => {
+        if (res && res.ok) return res.json();
+        return [];
+    })
+    .then(stories => {
+        storiesCache.set(userId, stories);
+        console.log(`✅ ${stories.length} historias pre-cargadas`);
+    })
+    .catch(err => {
+        console.warn('⚠️ Error pre-cargando perfil:', err.message);
+    });
+}
+
+// ============================================================
+// MOSTRAR PERFIL NATIVO (CON CACHÉ PRIMERO)
 // ============================================================
 
 function showProfileNative(userId) {
@@ -82,10 +130,22 @@ function showProfileNative(userId) {
     const navProfile = document.getElementById('navProfile');
     if (navProfile) navProfile.classList.add('active');
 
-    // Cargar datos
-    loadProfileDataNative(userId);
+    // 🔥 Verificar caché primero
+    if (profileCache.has(userId) && storiesCache.has(userId)) {
+        console.log(`📦 Usando caché para perfil nativo de ${userId}`);
+        const user = profileCache.get(userId);
+        const stories = storiesCache.get(userId);
+        updateProfileNativeUI(user, stories);
+        currentProfileData = user;
+        
+        // Actualizar en segundo plano
+        refreshProfileInBackgroundNative(userId);
+    } else {
+        // Cargar datos frescos
+        loadProfileDataNative(userId);
+    }
 
-    // Iniciar refresco en segundo plano
+    // Iniciar refresco en segundo plano (cada 10 segundos para el perfil nativo)
     if (refreshInterval) {
         clearInterval(refreshInterval);
         refreshInterval = null;
@@ -98,7 +158,7 @@ function showProfileNative(userId) {
             clearInterval(refreshInterval);
             refreshInterval = null;
         }
-    }, 15000);
+    }, 10000); // 10 segundos
 }
 
 // ============================================================
@@ -127,18 +187,6 @@ function hideProfileNative() {
     document.querySelectorAll('.bottom-nav button').forEach(b => b.classList.remove('active'));
     const navFeed = document.getElementById('navFeed');
     if (navFeed) navFeed.classList.add('active');
-
-    // Limpiar contenido
-    const container = document.getElementById('profileNativeContent');
-    if (container) {
-        container.innerHTML = `
-            <div class="empty-state" id="profileLoadingState">
-                <i class="fas fa-spinner fa-pulse"></i>
-                <h3>Cargando perfil</h3>
-                <p>Espera un momento...</p>
-            </div>
-        `;
-    }
 }
 
 // ============================================================
@@ -198,7 +246,7 @@ async function loadProfileDataNative(userId) {
 }
 
 // ============================================================
-// REFRESCAR PERFIL EN SEGUNDO PLANO
+// 🔥 REFRESCAR PERFIL EN SEGUNDO PLANO (ACTUALIZACIÓN EN TIEMPO REAL)
 // ============================================================
 
 async function refreshProfileInBackgroundNative(userId) {
@@ -218,15 +266,19 @@ async function refreshProfileInBackgroundNative(userId) {
             const storiesRes = await fetch(`${API_URL}/api/stories/user/${userId}`, {
                 headers: { 'Authorization': `Bearer ${token}` }
             });
+            
+            let stories = [];
             if (storiesRes.ok) {
-                const stories = await storiesRes.json();
+                stories = await storiesRes.json();
                 storiesCache.set(userId, stories);
-                if (isProfileSectionVisible && currentProfileUserId === userId) {
-                    updateStoriesOnlyNative(stories);
-                }
             }
 
-            console.log(`🔄 Perfil nativo ${userId} actualizado en segundo plano`);
+            if (isProfileSectionVisible && currentProfileUserId === userId) {
+                // Actualizar solo la UI si cambió algo
+                updateProfileNativeUI(user, stories);
+            }
+
+            console.log(`🔄 Perfil nativo ${userId} actualizado en tiempo real`);
         }
     } catch (e) {
         // Silencioso
@@ -234,7 +286,7 @@ async function refreshProfileInBackgroundNative(userId) {
 }
 
 // ============================================================
-// ACTUALIZAR SOLO HISTORIAS
+// ACTUALIZAR SOLO HISTORIAS (SIN RECARGAR TODO)
 // ============================================================
 
 function updateStoriesOnlyNative(stories) {
@@ -572,7 +624,6 @@ window.openStoryFromProfileNative = function(storyId, profileUserId) {
 
     const userId = profileUserId || currentProfileUserId;
 
-    // Obtener historias del caché
     let stories = [];
     if (userId && storiesCache.has(userId)) {
         stories = storiesCache.get(userId);
@@ -599,5 +650,6 @@ export {
     refreshProfileInBackgroundNative,
     updateProfileNativeUI,
     getVerificationBadgeNative,
-    clearProfileCache
+    clearProfileCache,
+    preloadCurrentUserProfile
 };

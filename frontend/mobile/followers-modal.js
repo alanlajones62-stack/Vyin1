@@ -47,7 +47,7 @@ async function openFollowersModal(userId, filter = 'followers', fromProfile = fa
     // 🔥 Guardar contexto
     isFromProfile = fromProfile;
     currentUserId = userId;
-    currentFilter = filter || 'followers'; // 🔥 Asegurar que siempre tenga un valor
+    currentFilter = filter || 'followers';
     searchQuery = '';
     followersList = [];
     followingList = [];
@@ -55,21 +55,45 @@ async function openFollowersModal(userId, filter = 'followers', fromProfile = fa
     isFollowersModalOpen = true;
     isLoading = false;
 
-    const overlay = document.getElementById('followersModalOverlay');
+    // 🔥 Crear o obtener overlay
+    let overlay = document.getElementById('followersModalOverlay');
     if (!overlay) {
         createFollowersModalHTML();
+        overlay = document.getElementById('followersModalOverlay');
     }
 
-    const modalOverlay = document.getElementById('followersModalOverlay');
-    if (modalOverlay) {
-        modalOverlay.style.display = 'flex';
-        modalOverlay.classList.add('active');
-        modalOverlay.style.zIndex = fromProfile ? '10005' : '10004';
+    if (overlay) {
+        overlay.style.display = 'flex';
+        overlay.classList.add('active');
+        overlay.style.zIndex = fromProfile ? '10005' : '10004';
     }
 
     document.body.style.overflow = 'hidden';
 
+    // 🔥 ACTUALIZAR TABS DESPUÉS DE CREAR EL HTML
+    updateTabs(currentFilter);
+
     await loadFollowersData(userId);
+}
+
+// ============================================================
+// 🔥 FUNCIÓN PARA ACTUALIZAR TABS
+// ============================================================
+
+function updateTabs(filter) {
+    console.log(`🔄 Actualizando tabs a: ${filter}`);
+    
+    document.querySelectorAll('.followers-tab').forEach(tab => {
+        const tabFilter = tab.dataset.filter;
+        if (tabFilter === filter) {
+            tab.classList.add('active');
+        } else {
+            tab.classList.remove('active');
+        }
+    });
+
+    // Actualizar título
+    updateModalTitle();
 }
 
 // ============================================================
@@ -79,7 +103,6 @@ async function openFollowersModal(userId, filter = 'followers', fromProfile = fa
 function closeFollowersModal() {
     console.log('🔒 Cerrando modal de seguidores');
     
-    // 🔥 LIMPIAR CONTENIDO
     const container = document.getElementById('followersListContainer');
     if (container) {
         container.innerHTML = `
@@ -90,9 +113,7 @@ function closeFollowersModal() {
         `;
     }
 
-    // 🔥 LIMPIAR ESTADO
     isFollowersModalOpen = false;
-    const wasFromProfile = isFromProfile;
     isFromProfile = false;
     currentUserId = null;
     followersList = [];
@@ -123,13 +144,11 @@ function restoreFollowersModal() {
     const context = followersContext;
     console.log(`🔄 Restaurando modal de seguidores: userId=${context.userId}, filter=${context.filter}`);
 
-    // 🔥 Restaurar estado
     currentUserId = context.userId;
     currentFilter = context.filter || 'followers';
     isFromProfile = true;
     isFollowersModalOpen = true;
 
-    // Mostrar overlay
     const overlay = document.getElementById('followersModalOverlay');
     if (overlay) {
         overlay.style.display = 'flex';
@@ -137,7 +156,6 @@ function restoreFollowersModal() {
         overlay.style.zIndex = '10004';
     }
 
-    // Limpiar búsqueda
     searchQuery = '';
     const searchInput = document.getElementById('followersSearchInput');
     if (searchInput) {
@@ -148,18 +166,11 @@ function restoreFollowersModal() {
         clearBtn.style.display = 'none';
     }
 
-    // 🔥 ACTUALIZAR TABS CORRECTAMENTE
-    document.querySelectorAll('.followers-tab').forEach(tab => {
-        const tabFilter = tab.dataset.filter;
-        tab.classList.toggle('active', tabFilter === context.filter);
-    });
-
-    // 🔥 Actualizar título
-    updateModalTitle();
+    // 🔥 ACTUALIZAR TABS
+    updateTabs(context.filter);
 
     document.body.style.overflow = 'hidden';
 
-    // Recargar datos
     loadFollowersData(context.userId);
 }
 
@@ -191,12 +202,12 @@ function createFollowersModalHTML() {
                 </div>
 
                 <div class="followers-modal-tabs">
-                    <button class="followers-tab ${currentFilter === 'followers' ? 'active' : ''}" data-filter="followers" onclick="window.switchFollowersTab('followers')">
+                    <button class="followers-tab" data-filter="followers" onclick="window.switchFollowersTab('followers')">
                         <i class="fas fa-users"></i>
                         <span>Seguidores</span>
                         <span class="tab-count" id="followersCount">0</span>
                     </button>
-                    <button class="followers-tab ${currentFilter === 'following' ? 'active' : ''}" data-filter="following" onclick="window.switchFollowersTab('following')">
+                    <button class="followers-tab" data-filter="following" onclick="window.switchFollowersTab('following')">
                         <i class="fas fa-user-friends"></i>
                         <span>Siguiendo</span>
                         <span class="tab-count" id="followingCount">0</span>
@@ -257,7 +268,6 @@ function createFollowersModalHTML() {
     window.openProfileFromFollowers = openProfileFromFollowers;
     window.restoreFollowersModal = restoreFollowersModal;
 
-    // Inyectar estilos
     injectFollowersStyles();
 }
 
@@ -268,11 +278,9 @@ function createFollowersModalHTML() {
 function switchFollowersTab(filter) {
     console.log(`🔄 Cambiando a filtro: ${filter}`);
     
-    // 🔥 ACTUALIZAR FILTRO
     currentFilter = filter;
     searchQuery = '';
     
-    // Limpiar búsqueda
     const searchInput = document.getElementById('followersSearchInput');
     if (searchInput) {
         searchInput.value = '';
@@ -282,20 +290,9 @@ function switchFollowersTab(filter) {
         clearBtn.style.display = 'none';
     }
 
-    // 🔥 ACTUALIZAR TABS - SOLO UNO ACTIVO
-    document.querySelectorAll('.followers-tab').forEach(tab => {
-        const tabFilter = tab.dataset.filter;
-        if (tabFilter === filter) {
-            tab.classList.add('active');
-        } else {
-            tab.classList.remove('active');
-        }
-    });
+    // 🔥 ACTUALIZAR TABS
+    updateTabs(filter);
 
-    // 🔥 Actualizar título
-    updateModalTitle();
-
-    // 🔥 Renderizar con el filtro correcto
     filterAndRenderList();
 }
 
@@ -390,7 +387,6 @@ async function loadFollowersData(userId) {
 // ============================================================
 
 function filterAndRenderList() {
-    // 🔥 Usar currentFilter para decidir qué lista mostrar
     const list = currentFilter === 'followers' ? followersList : followingList;
     
     console.log(`📋 Filtrando lista: ${currentFilter}, total: ${list.length}`);
@@ -530,7 +526,6 @@ window.openProfileFromFollowers = function(userId) {
     
     console.log(`👤 Abriendo perfil de ${userId} desde seguidores`);
     
-    // 🔥 Guardar contexto para volver a seguidores
     followersContext = {
         userId: currentUserId,
         filter: currentFilter,
@@ -539,18 +534,15 @@ window.openProfileFromFollowers = function(userId) {
     
     console.log(`📌 Contexto guardado:`, followersContext);
     
-    // 🔥 Guardar en window para que profile-modal lo vea
     window._followersContextData = followersContext;
     window._fromFollowers = true;
     
-    // 🔥 Ocultar modal de seguidores (NO cerrar)
     const overlay = document.getElementById('followersModalOverlay');
     if (overlay) {
         overlay.style.display = 'none';
         overlay.classList.remove('active');
     }
     
-    // 🔥 Abrir perfil
     if (typeof window.openProfileModal === 'function') {
         window.openProfileModal(userId, true);
     } else {
