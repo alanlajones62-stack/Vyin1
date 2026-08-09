@@ -1,4 +1,4 @@
-// app.js - VERSIÓN MODIFICADA CON PERFIL NATIVO
+// app.js - VERSIÓN CORREGIDA (sin afectar el modal de perfil)
 // ============================================================
 
 import {
@@ -283,7 +283,7 @@ function updateStoryCounters(storyId, data) {
 }
 
 // ============================================================
-// 🔥 FUNCIÓN PARA RESTAURAR NAVEGACIÓN A INICIO
+// 🔥 FUNCIÓN PARA RESTAURAR NAVEGACIÓN A INICIO (SOLO PARA APP)
 // ============================================================
 
 function restoreNavToHome() {
@@ -295,6 +295,14 @@ function restoreNavToHome() {
     const section = document.getElementById('sectionProfile');
     if (section && !section.classList.contains('hidden')) {
         hideProfileNative();
+    }
+    
+    // 🔥 Cerrar modal de perfil si está abierto
+    if (typeof window.closeProfileModal === 'function') {
+        // No cerrar si venimos de seguidores
+        if (!window._fromFollowers) {
+            window.closeProfileModal();
+        }
     }
 }
 
@@ -1713,7 +1721,6 @@ window.goToProfileUser = (userId) => {
     
     const currentUser = getCurrentUser();
     
-    // 🔥 Si es el propio usuario, mostrar perfil nativo
     if (currentUser?.id === userId) {
         closeExploreModal();
         closeActivityModal();
@@ -1722,12 +1729,10 @@ window.goToProfileUser = (userId) => {
         closeEditProfileModal();
         closeProfileModal();
         
-        // Mostrar perfil nativo
         showProfileNative(userId);
         return;
     }
     
-    // Si es otro usuario, usar modal
     closeExploreModal();
     closeActivityModal();
     closeStoryModal();
@@ -1772,7 +1777,6 @@ function setupEvents() {
             closeEditProfileModal();
             closeProfileModal();
             
-            // 🔥 Mostrar perfil nativo
             showProfileNative(user.id);
         } else {
             showToast('Inicia sesión', true);
@@ -1795,7 +1799,6 @@ function setupEvents() {
             document.querySelectorAll('.bottom-nav button').forEach(b => b.classList.remove('active'));
             document.getElementById('navProfile').classList.add('active');
             
-            // 🔥 Mostrar perfil nativo
             showProfileNative(user.id);
         } else {
             showToast('Inicia sesión', true);
@@ -1873,7 +1876,6 @@ function setupEvents() {
         closeEditProfileModal();
         closeProfileModal();
         
-        // 🔥 Ocultar perfil nativo si está visible
         const section = document.getElementById('sectionProfile');
         if (section && !section.classList.contains('hidden')) {
             hideProfileNative();
@@ -1901,7 +1903,6 @@ function setupEvents() {
         closeEditProfileModal();
         closeProfileModal();
         
-        // 🔥 Ocultar perfil nativo si está visible
         const section = document.getElementById('sectionProfile');
         if (section && !section.classList.contains('hidden')) {
             hideProfileNative();
@@ -1931,7 +1932,6 @@ function setupEvents() {
         closeEditProfileModal();
         closeProfileModal();
         
-        // 🔥 Ocultar perfil nativo si está visible
         const section = document.getElementById('sectionProfile');
         if (section && !section.classList.contains('hidden')) {
             hideProfileNative();
