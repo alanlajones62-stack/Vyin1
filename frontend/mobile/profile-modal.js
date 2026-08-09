@@ -196,9 +196,32 @@ function createProfileModalHTML() {
         }
     });
 
-    // Funciones globales para seguidores
+    // 🔥 FUNCIONES GLOBALES - EXPUESTAS A window
+    window.closeProfileModal = closeProfileModal;
     window.openFollowersFromProfile = openFollowersFromProfile;
     window.handleProfileFollow = handleProfileFollow;
+    window.openStoryFromProfileOverlay = openStoryFromProfileOverlay;
+    window.openEditProfileFromModal = openEditProfileFromModal;
+}
+
+// ============================================================
+// 🔥 ABRIR EDITAR PERFIL DESDE EL MODAL
+// ============================================================
+
+function openEditProfileFromModal() {
+    if (!currentProfileData) return;
+    closeProfileModal();
+    setTimeout(() => {
+        import('./edit-profile-modal.js').then(({ openEditProfileModal }) => {
+            openEditProfileModal(currentProfileData);
+        }).catch(() => {
+            if (typeof window.openEditProfileModal === 'function') {
+                window.openEditProfileModal(currentProfileData);
+            } else {
+                showToast('Error al abrir edición de perfil', true);
+            }
+        });
+    }, 100);
 }
 
 // ============================================================
@@ -513,12 +536,14 @@ function updateProfileModalUI(user, stories) {
     let followClass = 'btn-follow';
     let followDisabled = false;
     let followIcon = '<i class="fas fa-user-plus"></i>';
+    let followOnClick = `window.handleProfileFollow()`;
 
     if (isOwnProfile) {
         followText = 'Editar perfil';
         followClass = 'btn-edit-profile';
         followDisabled = false;
         followIcon = '<i class="fas fa-pen"></i>';
+        followOnClick = `window.openEditProfileFromModal()`;
     } else if (isFollowing) {
         followText = 'Siguiendo';
         followClass = 'btn-follow following';
@@ -553,7 +578,7 @@ function updateProfileModalUI(user, stories) {
         </div>
 
         <div class="profile-follow-btn">
-            <button class="${followClass}" id="profileFollowBtn" ${followDisabled ? 'disabled' : ''}>
+            <button class="${followClass}" id="profileFollowBtn" ${followDisabled ? 'disabled' : ''} onclick="${followOnClick}">
                 ${followIcon}
                 ${followText}
             </button>
@@ -582,34 +607,6 @@ function updateProfileModalUI(user, stories) {
             ${storiesHtml}
         </div>
     `;
-
-    const followBtn = document.getElementById('profileFollowBtn');
-    if (followBtn) {
-        if (isOwnProfile) {
-            followBtn.addEventListener('click', function(e) {
-                e.preventDefault();
-                e.stopPropagation();
-                console.log('🔧 Click en Editar perfil - desde profile-modal');
-                
-                isEditMode = true;
-                const userData = currentProfileData || getCurrentUser();
-                console.log('📦 userData para editar:', userData);
-                
-                if (typeof window.openEditProfileModal === 'function') {
-                    console.log('✅ window.openEditProfileModal es función, ejecutando...');
-                    window.openEditProfileModal(userData);
-                } else {
-                    console.error('❌ window.openEditProfileModal NO es función');
-                    console.log('🔍 window.openEditProfileModal:', window.openEditProfileModal);
-                    showToast('Error al abrir edición de perfil', true);
-                }
-            });
-        } else {
-            followBtn.addEventListener('click', async () => {
-                await handleFollowUser(user.id, followBtn);
-            });
-        }
-    }
 }
 
 // ============================================================
@@ -674,7 +671,7 @@ async function handleFollowUser(userId, btn) {
 // 🔥 FUNCIÓN ESPECIAL: ABRIR HISTORIA SOBRE EL PERFIL (SUPERPUESTA)
 // ============================================================
 
-window.openStoryFromProfileOverlay = function(storyId, storiesJson, profileUserId) {
+function openStoryFromProfileOverlay(storyId, storiesJson, profileUserId) {
     try {
         let stories = window._profileStories || [];
         
@@ -712,15 +709,18 @@ window.openStoryFromProfileOverlay = function(storyId, storiesJson, profileUserI
         closeProfileModal();
         setTimeout(() => window.openStoryModal(storyId), 100);
     }
-};
+}
 
 // ============================================================
-// FUNCIONES GLOBALES (window)
+// FUNCIONES GLOBALES (window) - EXPUESTAS
 // ============================================================
 
 window.openProfileModal = openProfileModal;
 window.closeProfileModal = closeProfileModal;
 window.openFollowersFromProfile = openFollowersFromProfile;
+window.handleProfileFollow = handleProfileFollow;
+window.openStoryFromProfileOverlay = openStoryFromProfileOverlay;
+window.openEditProfileFromModal = openEditProfileFromModal;
 
 window.openStoryFromProfile = function(storyId) {
     closeProfileModal();
@@ -758,5 +758,7 @@ export {
     loadProfileData, 
     handleFollowUser,
     preloadCurrentUserProfile,
-    getVerificationBadge
+    getVerificationBadge,
+    openFollowersFromProfile,
+    handleProfileFollow
 };
