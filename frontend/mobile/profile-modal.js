@@ -1,7 +1,5 @@
-// profile-modal.js - Modal para ver perfil de usuario (VERSIÓN COMPLETA CON BLOQUEO Y PRIVACIDAD)
-// CON NAVEGACIÓN POR PILA Y CONTEXTO DE VISTA
-// 🔥 EL PERFIL PROPIO SE MUESTRA EN EL MODAL, NO EN PROFILE-NATIVE
-// 🔥 BLOQUEOS: El bloqueador ve el perfil con botón "Desbloquear", el bloqueado ve "Usuario no encontrado"
+// profile-modal.js - Modal para ver perfil de usuario (VERSIÓN CORREGIDA)
+// CON SISTEMA DE BLOQUEO Y PRIVACIDAD COMPLETO
 
 import {
     getToken, getCurrentUser, showToast,
@@ -21,27 +19,19 @@ let lastRefreshTime = 0;
 let pendingProfileLoads = new Map();
 
 // ============================================================
-// 🔥 PILA DE NAVEGACIÓN COMPLETA
+// PILA DE NAVEGACIÓN
 // ============================================================
 
 let navigationStack = [];
 
 // ============================================================
-// 🔥 CACHÉ DE PERFILES CON TTL
+// CACHÉ DE PERFILES
 // ============================================================
 
 const profileCache = new Map();
 const storiesCache = new Map();
 const MAX_CACHE_SIZE = 50;
 const CACHE_TTL = 5 * 60 * 1000; // 5 minutos
-
-// ESTADÍSTICAS DE RENDIMIENTO
-let performanceStats = {
-    cacheHits: 0,
-    cacheMisses: 0,
-    avgLoadTime: 0,
-    totalLoads: 0
-};
 
 // ============================================================
 // FUNCIONES DE CACHÉ
@@ -128,7 +118,6 @@ function loadProfileWithCache(userId) {
         const cached = profileCache.get(userId);
         if (now - cached.timestamp < CACHE_TTL) {
             console.log(`📦 Perfil ${userId} desde caché (${Math.round((now - cached.timestamp)/1000)}s)`);
-            performanceStats.cacheHits++;
             const user = cached.data;
             const stories = storiesCache.get(userId)?.data || [];
             currentProfileData = user;
@@ -140,65 +129,7 @@ function loadProfileWithCache(userId) {
             storiesCache.delete(userId);
         }
     }
-    performanceStats.cacheMisses++;
     return false;
-}
-
-// ============================================================
-// PRE-CARGA DE PERFILES EN SEGUNDO PLANO
-// ============================================================
-
-function preloadProfileInBackground(userId, priority = false) {
-    if (!userId || profileCache.has(userId) || pendingProfileLoads.has(userId)) return;
-    
-    if (pendingProfileLoads.size > 5) {
-        if (!priority) return;
-        const oldest = Array.from(pendingProfileLoads.keys())[0];
-        pendingProfileLoads.delete(oldest);
-    }
-    
-    pendingProfileLoads.set(userId, true);
-    
-    setTimeout(async () => {
-        try {
-            const token = getToken();
-            if (!token) {
-                pendingProfileLoads.delete(userId);
-                return;
-            }
-
-            const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 3000);
-
-            const res = await fetch(`${API_URL}/api/users/profile/${userId}?includeStories=true&minimal=true`, {
-                headers: { 'Authorization': `Bearer ${token}` },
-                signal: controller.signal
-            });
-
-            clearTimeout(timeoutId);
-
-            if (res.ok) {
-                const data = await res.json();
-                const user = data.user || data;
-                const stories = data.stories || [];
-                
-                profileCache.set(userId, {
-                    data: user,
-                    timestamp: Date.now()
-                });
-                storiesCache.set(userId, {
-                    data: stories,
-                    timestamp: Date.now()
-                });
-                cleanCache();
-                console.log(`✅ Perfil ${userId} pre-cargado en segundo plano`);
-            }
-        } catch (e) {
-            // Silencioso
-        } finally {
-            pendingProfileLoads.delete(userId);
-        }
-    }, priority ? 100 : 500);
 }
 
 // ============================================================
@@ -232,16 +163,25 @@ async function loadProfileData(userId, silent = false) {
 
         clearTimeout(timeoutId);
 
+        // 🔥 MANEJAR DIFERENTES CÓDIGOS DE RESPUESTA
         if (!res.ok) {
             if (res.status === 404) {
                 showToast('Usuario no encontrado', true);
+                closeProfileModal();
+                return;
             } else if (res.status === 403) {
-                showToast('Este perfil es privado', true);
+                const errorData = await res.json().catch(() => ({}));
+                const privacy = errorData.privacy || 'private';
+                
+                // 🔥 PERFIL TOTALMENTE PRIVADO - NADIE PUEDE VERLO
+                // Solo el dueño lo puede ver
+                showPrivateProfileUI(userId, true);
+                return;
             } else {
                 showToast('Error al cargar el perfil', true);
+                closeProfileModal();
+                return;
             }
-            closeProfileModal();
-            return;
         }
 
         const data = await res.json();
@@ -250,6 +190,7 @@ async function loadProfileData(userId, silent = false) {
 
         currentProfileData = user;
 
+        // Guardar en caché
         profileCache.set(userId, {
             data: user,
             timestamp: Date.now()
@@ -264,14 +205,7 @@ async function loadProfileData(userId, silent = false) {
         updateProfileModalUI(user, stories);
 
         const loadTime = performance.now() - startTime;
-        performanceStats.totalLoads++;
-        performanceStats.avgLoadTime = (performanceStats.avgLoadTime * (performanceStats.totalLoads - 1) + loadTime) / performanceStats.totalLoads;
-        
-        if (loadTime > 500) {
-            console.warn(`⚠️ Perfil cargado en ${Math.round(loadTime)}ms (${user.fullName})`);
-        } else {
-            console.log(`✅ Perfil cargado en ${Math.round(loadTime)}ms`);
-        }
+        console.log(`✅ Perfil cargado en ${Math.round(loadTime)}ms`);
 
     } catch (error) {
         if (error.name === 'AbortError') {
@@ -285,6 +219,103 @@ async function loadProfileData(userId, silent = false) {
         closeProfileModal();
     }
 }
+
+// ============================================================
+// 🔥 MOSTRAR UI PARA PERFIL PRIVADO
+// ============================================================
+
+function showPrivateProfileUI(userId, isStrictPrivate = false) {
+    const container = document.getElementById('profileModalBody');
+    if (!container) return;
+
+    const currentUser = getCurrentUser();
+    const isOwnProfile = currentUser?.id === userId;
+
+    // 🔥 SI ES EL DUEÑO DEL PERFIL, PUEDE VERLO COMPLETO
+    if (isOwnProfile) {
+        // Recargar el perfil normalmente (el backend devuelve todos los datos para el dueño)
+        loadProfileData(userId);
+        return;
+    }
+
+    // 🔥 PERFIL TOTALMENTE PRIVADO - NADIE PUEDE VERLO
+    // Ni seguidores, ni no seguidores, ni nadie
+    if (isStrictPrivate) {
+        container.innerHTML = `
+            <div class="profile-private-container">
+                <div class="private-lock-icon">
+                    <i class="fas fa-lock"></i>
+                </div>
+                <h3>Este perfil es privado</h3>
+                <p>Este perfil no está disponible para otros usuarios.</p>
+            </div>
+        `;
+        return;
+    }
+
+    // 🔥 PERFIL "SOLO SEGUIDORES" - Mostrar opción de seguir
+    // Solo si el usuario NO es seguidor
+    container.innerHTML = `
+        <div class="profile-private-container">
+            <div class="private-lock-icon">
+                <i class="fas fa-user-friends"></i>
+            </div>
+            <h3>Cuenta privada</h3>
+            <p>Sigue a esta cuenta para ver sus fotos, historias y videos.</p>
+            <div class="private-actions">
+                ${currentUser && currentUser.id !== userId ? `
+                    <button class="btn-private-follow" onclick="window.handleFollowPrivate('${userId}')">
+                        <i class="fas fa-user-plus"></i> Enviar solicitud
+                    </button>
+                ` : `
+                    <p style="color:rgba(255,255,255,0.2);font-size:13px;">Inicia sesión para seguir</p>
+                `}
+            </div>
+        </div>
+    `;
+}
+
+// ============================================================
+// 🔥 MANEJAR SOLICITUD DE SEGUIMIENTO PARA PERFIL PRIVADO
+// ============================================================
+
+window.handleFollowPrivate = async function(userId) {
+    const token = getToken();
+    if (!token) {
+        showToast('Inicia sesión para enviar solicitud', true);
+        return;
+    }
+
+    const currentUser = getCurrentUser();
+    if (currentUser?.id === userId) {
+        showToast('No puedes seguirte a ti mismo', true);
+        return;
+    }
+
+    try {
+        const res = await fetch(`${API_URL}/api/follows/request`, {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ userId })
+        });
+
+        const data = await res.json();
+        
+        if (res.ok) {
+            showToast('✅ Solicitud de seguimiento enviada');
+            clearProfileCache(userId);
+            loadProfileData(userId);
+        } else {
+            showToast(data.error || 'Error al enviar solicitud', true);
+        }
+    } catch (error) {
+        console.error('Error sending follow request:', error);
+        showToast('Error al enviar solicitud', true);
+    }
+};
 
 // ============================================================
 // ACTUALIZAR PERFIL EN SEGUNDO PLANO
@@ -382,15 +413,24 @@ window.handleBlockUser = async function(userId) {
     }
 
     try {
-        // Verificar si ya está bloqueado
+        // 🔥 VERIFICAR EL ESTADO ACTUAL DEL BLOQUEO
         const checkRes = await fetch(`${API_URL}/api/blocked/check/${userId}`, {
             headers: { 'Authorization': `Bearer ${token}` }
         });
         
         let isBlocked = false;
+        let isBlockedBy = false;
+        
         if (checkRes.ok) {
             const data = await checkRes.json();
             isBlocked = data.isBlocked || false;
+            isBlockedBy = data.isBlockedBy || false;
+        }
+
+        // Si el usuario objetivo nos bloqueó a nosotros, no podemos hacer nada
+        if (isBlockedBy) {
+            showToast('No puedes interactuar con este usuario', true);
+            return;
         }
 
         if (isBlocked) {
@@ -402,9 +442,8 @@ window.handleBlockUser = async function(userId) {
 
             if (res.ok) {
                 showToast('✅ Usuario desbloqueado');
-                // Recargar perfil para actualizar UI
                 clearProfileCache(userId);
-                loadProfileData(userId);
+                await loadProfileData(userId);
             } else {
                 const data = await res.json();
                 showToast(data.error || 'Error al desbloquear', true);
@@ -422,11 +461,9 @@ window.handleBlockUser = async function(userId) {
 
             if (res.ok) {
                 showToast('🔒 Usuario bloqueado');
-                // El bloqueador sigue viendo el perfil, solo cambia el botón
-                // Pero cerramos el modal para que el bloqueado no pueda interactuar
                 closeProfileModal();
-                // Actualizar caché
                 clearProfileCache(userId);
+                setTimeout(() => openProfileModal(userId), 300);
             } else {
                 const data = await res.json();
                 showToast(data.error || 'Error al bloquear', true);
@@ -450,15 +487,13 @@ function updateProfileModalUI(user, stories) {
     const isFollowing = user.isFollowing || false;
     const hasPendingRequest = user.hasPendingRequest || false;
     const isOwnProfile = currentUser?.id === user.id;
+    const privacy = user.privacy || 'public';
 
     // 🔥 VERIFICAR BLOQUEOS
-    // isBlockedBy: true si el DUEÑO del perfil bloqueó al usuario actual
-    // isBlocked: true si el usuario actual bloqueó al DUEÑO del perfil
     const isBlockedByOwner = user.isBlockedBy || false;
     const isBlocked = user.isBlocked || false;
 
     // 🔥 CASO 1: El dueño del perfil bloqueó al usuario actual
-    // → Mostrar "Usuario no encontrado"
     if (isBlockedByOwner) {
         container.innerHTML = `
             <div class="profile-not-found">
@@ -469,6 +504,24 @@ function updateProfileModalUI(user, stories) {
         `;
         return;
     }
+
+    // 🔥 CASO 2: PERFIL TOTALMENTE PRIVADO (privacy === 'private')
+    // → NADIE puede verlo excepto el dueño
+    if (!isOwnProfile && privacy === 'private') {
+        showPrivateProfileUI(user.id, true);
+        return;
+    }
+
+    // 🔥 CASO 3: PERFIL "SOLO SEGUIDORES" (privacy === 'followers')
+    // → Solo seguidores y el dueño pueden verlo
+    if (!isOwnProfile && privacy === 'followers' && !isFollowing) {
+        showPrivateProfileUI(user.id, false);
+        return;
+    }
+
+    // 🔥 CASO 4: El usuario actual bloqueó al dueño del perfil
+    // → El bloqueador puede ver el perfil, pero con indicador
+    // → Mostrar perfil normal con botón "Desbloquear"
 
     const followersCount = user.followersCount || 0;
     const followingCount = user.followingCount || 0;
@@ -525,38 +578,12 @@ function updateProfileModalUI(user, stories) {
         `;
     }
 
+    // 🔥 BOTÓN DE SEGUIR
     let followText = 'Seguir';
     let followClass = 'btn-follow';
     let followDisabled = false;
     let followIcon = '<i class="fas fa-user-plus"></i>';
-    let followOnClick = `window.handleProfileFollow()`;
-
-    // 🔥 CASO 2: El usuario actual bloqueó al dueño del perfil
-    // → Mostrar botón "Desbloquear" (el bloqueador ve el perfil)
-    let blockButton = '';
-    let blockText = 'Bloquear';
-    let blockIcon = '<i class="fas fa-ban"></i>';
-    let blockClass = 'btn-block';
-    
-    if (!isOwnProfile) {
-        // Si el usuario actual bloqueó al dueño del perfil → mostrar "Desbloquear"
-        if (isBlocked) {
-            blockText = 'Desbloquear';
-            blockIcon = '<i class="fas fa-unlock"></i>';
-            blockClass = 'btn-block blocked';
-        } else {
-            blockText = 'Bloquear';
-            blockIcon = '<i class="fas fa-ban"></i>';
-            blockClass = 'btn-block';
-        }
-        
-        blockButton = `
-            <button class="${blockClass}" onclick="window.handleBlockUser('${user.id}')">
-                ${blockIcon}
-                ${blockText}
-            </button>
-        `;
-    }
+    let followOnClick = `window.handleProfileFollow('${user.id}')`;
 
     if (isOwnProfile) {
         followText = 'Editar perfil';
@@ -572,6 +599,28 @@ function updateProfileModalUI(user, stories) {
         followText = 'Solicitud enviada';
         followClass = 'btn-follow';
         followIcon = '<i class="fas fa-clock"></i>';
+        followDisabled = true;
+    }
+
+    // 🔥 BOTÓN DE BLOQUEO
+    let blockButton = '';
+    
+    if (!isOwnProfile && !isBlockedByOwner) {
+        if (isBlocked) {
+            blockButton = `
+                <button class="btn-block blocked" onclick="window.handleBlockUser('${user.id}')">
+                    <i class="fas fa-unlock"></i>
+                    Desbloquear
+                </button>
+            `;
+        } else {
+            blockButton = `
+                <button class="btn-block" onclick="window.handleBlockUser('${user.id}')">
+                    <i class="fas fa-ban"></i>
+                    Bloquear
+                </button>
+            `;
+        }
     }
 
     const avatarUrl = user.avatar || getAvatar(user.fullName);
@@ -580,22 +629,18 @@ function updateProfileModalUI(user, stories) {
     const bio = user.bio ? escapeHtml(user.bio) : '';
     const countryName = user.countryName ? escapeHtml(user.countryName) : '';
 
-    // 🔥 Si el usuario está bloqueado por el actual, mostrar el perfil pero con estilo "bloqueado"
-    const isBlockedByCurrent = isBlocked;
-
     container.innerHTML = `
-        <div class="profile-cover ${isBlockedByCurrent ? 'profile-blocked' : ''}">
+        <div class="profile-cover">
             <div class="profile-avatar-wrapper">
                 <img class="profile-avatar" src="${avatarUrl}" 
                      alt="${fullName}" 
                      loading="eager"
                      onerror="this.src='${getAvatar(user.fullName || 'U')}'" />
-                ${isBlockedByCurrent ? `<div class="blocked-overlay"><i class="fas fa-ban"></i></div>` : ''}
             </div>
             <div class="profile-name">
                 ${fullName}
                 ${badgeHtml}
-                ${isBlockedByCurrent ? `<span class="blocked-badge">🔒 Bloqueado</span>` : ''}
+                ${isBlocked ? `<span class="blocked-badge">🔒 Bloqueado</span>` : ''}
             </div>
             <div class="profile-username">@${username}</div>
             ${bio ? `<div class="profile-bio">${bio}</div>` : ''}
@@ -612,7 +657,7 @@ function updateProfileModalUI(user, stories) {
             ${blockButton}
         </div>
 
-        <div class="profile-stats ${isBlockedByCurrent ? 'profile-stats-blocked' : ''}">
+        <div class="profile-stats">
             <div class="stat" onclick="window.openFollowersFromProfile('followers')" style="cursor:pointer;">
                 <span class="number">${formatNumber(followersCount)}</span>
                 <span class="label">Seguidores</span>
@@ -627,7 +672,7 @@ function updateProfileModalUI(user, stories) {
             </div>
         </div>
 
-        <div class="profile-stories-section ${isBlockedByCurrent ? 'profile-stories-blocked' : ''}">
+        <div class="profile-stories-section">
             <div class="section-title">
                 <i class="fas fa-images"></i> Historias
                 <span style="font-size:9px;color:rgba(255,255,255,0.15);margin-left:auto;">${stories?.length || 0}</span>
@@ -638,7 +683,7 @@ function updateProfileModalUI(user, stories) {
 }
 
 // ============================================================
-// 🔥 ABRIR MODAL DE PERFIL (VERSIÓN CORREGIDA - SIN REDIRECCIÓN A PROFILE-NATIVE)
+// 🔥 ABRIR MODAL DE PERFIL
 // ============================================================
 
 function openProfileModal(userId, fromFollowers = false, fromFollowersStack = null) {
@@ -650,10 +695,6 @@ function openProfileModal(userId, fromFollowers = false, fromFollowersStack = nu
     console.log(`👤 Abriendo perfil modal: ${userId}, desde followers: ${fromFollowers}`);
 
     const currentUser = getCurrentUser();
-    
-    // 🔥 ELIMINADA LA REDIRECCIÓN A PROFILE-NATIVE
-    // Ahora el perfil propio se muestra en el modal como cualquier otro perfil
-    // Esto preserva la navegación por pila correctamente
 
     // Si ya está abierto el mismo perfil, traerlo al frente
     if (isProfileModalOpen && currentProfileUserId === userId) {
@@ -661,7 +702,7 @@ function openProfileModal(userId, fromFollowers = false, fromFollowersStack = nu
         return;
     }
 
-    // 🔥 GUARDAR EL CONTEXTO ACTUAL EN LA PILA ANTES DE CAMBIAR
+    // GUARDAR EL CONTEXTO ACTUAL EN LA PILA
     if (isProfileModalOpen) {
         navigationStack.push({
             type: 'profile',
@@ -674,7 +715,6 @@ function openProfileModal(userId, fromFollowers = false, fromFollowersStack = nu
         console.log(`📌 Perfil ${currentProfileUserId} guardado en pila. Pila: ${navigationStack.length}`);
     }
 
-    // 🔥 Si viene de followers y hay contexto, guardarlo
     if (fromFollowers && fromFollowersStack) {
         window._followersContextData = fromFollowersStack;
         window._fromFollowers = true;
@@ -711,7 +751,7 @@ function openProfileModal(userId, fromFollowers = false, fromFollowersStack = nu
 }
 
 // ============================================================
-// PROGRAMAR REFRESH ESPACIADO
+// PROGRAMAR REFRESH
 // ============================================================
 
 function scheduleProfileRefresh(userId) {
@@ -748,7 +788,7 @@ function bringProfileToFront() {
 }
 
 // ============================================================
-// CERRAR MODAL DE PERFIL - INTERNO
+// CERRAR MODAL DE PERFIL
 // ============================================================
 
 function closeProfileModalInternal(restoreFromStack = true) {
@@ -772,10 +812,6 @@ function closeProfileModalInternal(restoreFromStack = true) {
     document.body.style.overflow = '';
 }
 
-// ============================================================
-// 🔥 CERRAR MODAL DE PERFIL - PÚBLICO (CON RESTAURACIÓN DE PILA CORREGIDA)
-// ============================================================
-
 function closeProfileModal() {
     console.log('🔒 Cerrando modal de perfil (público)');
     console.log(`📊 Pila actual: ${navigationStack.length} elementos`);
@@ -787,15 +823,12 @@ function closeProfileModal() {
         isEditMode = false;
     }
 
-    // 🔥 VERIFICAR SI HAY ELEMENTOS EN LA PILA
     if (navigationStack.length > 0) {
         const previous = navigationStack.pop();
         console.log(`🔄 Restaurando: ${previous.type} - ${previous.userId || 'N/A'}`);
         
-        // Cerrar el perfil actual
         closeProfileModalInternal(false);
         
-        // 🔥 RESTAURAR SEGÚN EL TIPO
         setTimeout(() => {
             if (previous.type === 'profile') {
                 restorePreviousProfile(previous);
@@ -806,17 +839,15 @@ function closeProfileModal() {
         return;
     }
 
-    // Si no hay pila, cerrar normalmente
     closeProfileModalInternal(false);
 }
 
 // ============================================================
-// 🔥 RESTAURAR PERFIL ANTERIOR
+// RESTAURAR PERFIL ANTERIOR
 // ============================================================
 
 function restorePreviousProfile(previous) {
     console.log(`🔄 Restaurando perfil: ${previous.userId}`);
-    console.log(`   Contexto de followers: ${previous.followersContext ? 'SÍ' : 'NO'}`);
     
     currentProfileUserId = previous.userId;
     currentProfileData = previous.data;
@@ -826,10 +857,8 @@ function restorePreviousProfile(previous) {
         window._fromFollowers = true;
     }
     
-    // 🔥 RESTAURAR CONTEXTO DE FOLLOWERS SI EXISTE
     if (previous.followersContext) {
         window._followersContextData = previous.followersContext;
-        console.log(`📌 Contexto de followers restaurado: userId=${previous.followersContext.userId}`);
     } else {
         window._followersContextData = null;
         window._fromFollowers = false;
@@ -865,14 +894,12 @@ function restorePreviousProfile(previous) {
 }
 
 // ============================================================
-// 🔥 RESTAURAR LISTA DE SEGUIDORES ANTERIOR
+// RESTAURAR LISTA DE SEGUIDORES
 // ============================================================
 
 function restorePreviousFollowers(previous) {
     console.log(`🔄 Restaurando lista de seguidores: userId=${previous.userId}, filter=${previous.filter}`);
-    console.log(`   Contexto: ${previous.context ? 'SÍ' : 'NO'}`);
     
-    // Si hay contexto de followers, restaurarlo
     if (previous.context) {
         import('./followers-modal.js').then(({ restoreFollowersModal }) => {
             window._followersContextData = previous.context;
@@ -881,11 +908,9 @@ function restorePreviousFollowers(previous) {
             }
         }).catch(err => {
             console.error('❌ Error restaurando followers:', err);
-            // Fallback: abrir followers normal
             openFollowersModal(previous.userId, previous.filter || 'followers', true);
         });
     } else {
-        // Abrir followers normalmente
         import('./followers-modal.js').then(({ openFollowersModal }) => {
             openFollowersModal(previous.userId, previous.filter || 'followers', true);
         }).catch(err => {
@@ -937,6 +962,7 @@ function createProfileModalHTML() {
     window.openStoryFromProfileOverlay = openStoryFromProfileOverlay;
     window.openEditProfileFromModal = openEditProfileFromModal;
     window.handleBlockUser = window.handleBlockUser;
+    window.handleFollowPrivate = window.handleFollowPrivate;
 }
 
 // ============================================================
@@ -960,7 +986,7 @@ function openEditProfileFromModal() {
 }
 
 // ============================================================
-// 🔥 ABRIR MODAL DE SEGUIDORES DESDE EL PERFIL
+// ABRIR MODAL DE SEGUIDORES DESDE EL PERFIL
 // ============================================================
 
 function openFollowersFromProfile(filter) {
@@ -973,7 +999,6 @@ function openFollowersFromProfile(filter) {
     
     const userId = currentProfileUserId;
     
-    // 🔥 GUARDAR EL PERFIL ACTUAL EN LA PILA CON CONTEXTO DE FOLLOWERS
     navigationStack.push({
         type: 'followers',
         userId: currentProfileUserId,
@@ -982,19 +1007,14 @@ function openFollowersFromProfile(filter) {
         fromFollowers: window._fromFollowers || false
     });
     
-    console.log(`📌 Contexto de followers guardado en pila: ${navigationStack.length} elementos`);
-    
-    // Guardar contexto para followers
     window._followersContextData = {
         userId: currentProfileUserId,
         filter: filter,
         returnToProfile: true
     };
     
-    // Cerrar perfil
     closeProfileModalInternal(false);
     
-    // Abrir followers
     setTimeout(() => {
         import('./followers-modal.js').then(({ openFollowersModal }) => {
             window._profileContext = {
@@ -1013,18 +1033,22 @@ function openFollowersFromProfile(filter) {
 // MANEJAR SEGUIR USUARIO
 // ============================================================
 
-async function handleFollowUser(userId, btn) {
+async function handleFollowUser(userId) {
     const token = getToken();
     if (!token) {
         showToast('Inicia sesión para seguir', true);
         return;
     }
 
+    const btn = document.getElementById('profileFollowBtn');
+    if (!btn) return;
+
     const isFollowing = btn.classList.contains('following');
     const method = isFollowing ? 'DELETE' : 'POST';
+    const endpoint = isFollowing ? 'unfollow' : 'follow';
 
     try {
-        const res = await fetch(`${API_URL}/api/follows/${isFollowing ? 'unfollow' : 'follow'}`, {
+        const res = await fetch(`${API_URL}/api/follows/${endpoint}`, {
             method: method,
             headers: {
                 'Authorization': `Bearer ${token}`,
@@ -1034,30 +1058,27 @@ async function handleFollowUser(userId, btn) {
         });
 
         const data = await res.json();
+        
         if (res.ok) {
             if (data.status === 'following' || data.following) {
                 btn.classList.add('following');
                 btn.innerHTML = '<i class="fas fa-check"></i> Siguiendo';
                 showToast(`✅ Siguiendo a ${currentProfileData?.fullName}`);
+                clearProfileCache(userId);
+                loadProfileData(userId);
             } else if (data.status === 'pending_sent') {
                 btn.classList.remove('following');
                 btn.innerHTML = '<i class="fas fa-clock"></i> Solicitud enviada';
+                btn.disabled = true;
                 showToast(`📨 Solicitud enviada a ${currentProfileData?.fullName}`);
             } else {
                 btn.classList.remove('following');
                 btn.innerHTML = '<i class="fas fa-user-plus"></i> Seguir';
+                btn.disabled = false;
                 showToast('❌ Dejaste de seguir');
+                clearProfileCache(userId);
+                loadProfileData(userId);
             }
-            
-            const followersEl = document.querySelector('.profile-stats .stat:first-child .number');
-            if (followersEl) {
-                const current = parseInt(followersEl.textContent.replace(/[^0-9]/g, '')) || 0;
-                const newCount = data.followersCount || data.followersCount !== undefined ? data.followersCount : current + (data.following ? 1 : -1);
-                followersEl.textContent = formatNumber(newCount);
-            }
-            
-            clearProfileCache(userId);
-            refreshProfileInBackground(userId);
         } else {
             showToast(data.error || 'Error al seguir', true);
         }
@@ -1112,32 +1133,6 @@ function openStoryFromProfileOverlay(storyId, storiesJson, profileUserId) {
 }
 
 // ============================================================
-// PRE-CARGAR PERFIL DEL USUARIO ACTUAL
-// ============================================================
-
-function preloadCurrentUserProfile() {
-    const currentUser = getCurrentUser();
-    if (!currentUser || !currentUser.id) return;
-    
-    const userId = currentUser.id;
-    
-    if (profileCache.has(userId)) return;
-    
-    console.log(`🔄 Pre-cargando perfil de ${currentUser.fullName}...`);
-    preloadProfileInBackground(userId, true);
-}
-
-// ============================================================
-// FUNCIÓN PARA ACTUALIZAR PERFIL DESDE OTROS MODALES
-// ============================================================
-
-function refreshCurrentProfile() {
-    if (currentProfileUserId) {
-        refreshProfileInBackground(currentProfileUserId);
-    }
-}
-
-// ============================================================
 // FUNCIONES GLOBALES (window)
 // ============================================================
 
@@ -1148,8 +1143,8 @@ window.handleProfileFollow = handleFollowUser;
 window.openStoryFromProfileOverlay = openStoryFromProfileOverlay;
 window.openEditProfileFromModal = openEditProfileFromModal;
 window.clearProfileCache = clearProfileCache;
-window.refreshCurrentProfile = refreshCurrentProfile;
-window.getProfileCacheStats = () => performanceStats;
+window.handleBlockUser = window.handleBlockUser;
+window.handleFollowPrivate = window.handleFollowPrivate;
 
 // ============================================================
 // EXPORTAR
@@ -1160,9 +1155,6 @@ export {
     closeProfileModal, 
     loadProfileData, 
     handleFollowUser,
-    preloadCurrentUserProfile,
-    getVerificationBadge,
     openFollowersFromProfile,
-    clearProfileCache,
-    refreshCurrentProfile
+    clearProfileCache
 };

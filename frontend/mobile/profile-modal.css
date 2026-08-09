@@ -793,6 +793,125 @@
 }
 
 /* ============================================================
+   PERFIL PRIVADO / NO DISPONIBLE
+   ============================================================ */
+
+.profile-private-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 300px;
+    padding: 40px 20px;
+    text-align: center;
+}
+
+.profile-private-container .private-lock-icon {
+    width: 80px;
+    height: 80px;
+    border-radius: 50%;
+    background: rgba(192, 132, 252, 0.08);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 20px;
+    border: 2px solid rgba(192, 132, 252, 0.12);
+}
+
+.profile-private-container .private-lock-icon i {
+    font-size: 32px;
+    color: rgba(192, 132, 252, 0.35);
+}
+
+.profile-private-container h3 {
+    font-size: 20px;
+    color: rgba(255, 255, 255, 0.5);
+    font-weight: 600;
+    margin-bottom: 8px;
+}
+
+.profile-private-container p {
+    font-size: 14px;
+    color: rgba(255, 255, 255, 0.2);
+    max-width: 280px;
+    margin-bottom: 0;
+    line-height: 1.5;
+}
+
+.profile-private-container .private-actions {
+    width: 100%;
+    max-width: 220px;
+    margin-top: 20px;
+}
+
+.btn-private-follow {
+    width: 100%;
+    padding: 12px 24px;
+    border: none;
+    border-radius: 50px;
+    background: linear-gradient(135deg, #c084fc, #db2777);
+    color: #fff;
+    font-size: 15px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s;
+    font-family: inherit;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    box-shadow: 0 4px 16px rgba(192, 132, 252, 0.2);
+}
+
+.btn-private-follow:hover {
+    transform: scale(1.02);
+    box-shadow: 0 6px 24px rgba(192, 132, 252, 0.3);
+}
+
+.btn-private-follow:active {
+    transform: scale(0.95);
+}
+
+.btn-private-follow:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    transform: none;
+}
+
+/* ============================================================
+   PERFIL COMPLETAMENTE PRIVADO - NO DISPONIBLE
+   ============================================================ */
+
+.profile-unavailable {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 300px;
+    color: rgba(255, 255, 255, 0.3);
+    text-align: center;
+    padding: 40px 20px;
+}
+
+.profile-unavailable i {
+    font-size: 48px;
+    color: rgba(255, 255, 255, 0.05);
+    margin-bottom: 16px;
+}
+
+.profile-unavailable h3 {
+    font-size: 20px;
+    color: rgba(255, 255, 255, 0.15);
+    font-weight: 400;
+    margin-bottom: 4px;
+}
+
+.profile-unavailable p {
+    font-size: 13px;
+    color: rgba(255, 255, 255, 0.06);
+}
+
+/* ============================================================
    RESPONSIVE - IGUAL QUE EXPLORER
    ============================================================ */
 
@@ -940,6 +1059,29 @@
     .profile-not-found h3 {
         font-size: 17px;
     }
+
+    /* Private profile responsive */
+    .profile-private-container .private-lock-icon {
+        width: 64px;
+        height: 64px;
+    }
+
+    .profile-private-container .private-lock-icon i {
+        font-size: 26px;
+    }
+
+    .profile-private-container h3 {
+        font-size: 17px;
+    }
+
+    .profile-private-container p {
+        font-size: 13px;
+    }
+
+    .btn-private-follow {
+        font-size: 13px;
+        padding: 10px 20px;
+    }
 }
 
 @media (max-width: 380px) {
@@ -1076,6 +1218,29 @@
     .profile-skeleton .skeleton-line {
         height: 9px;
     }
+
+    /* Private profile responsive small */
+    .profile-private-container .private-lock-icon {
+        width: 52px;
+        height: 52px;
+    }
+
+    .profile-private-container .private-lock-icon i {
+        font-size: 20px;
+    }
+
+    .profile-private-container h3 {
+        font-size: 15px;
+    }
+
+    .profile-private-container p {
+        font-size: 12px;
+    }
+
+    .btn-private-follow {
+        font-size: 12px;
+        padding: 8px 16px;
+    }
 }
 
 @media (max-height: 600px) {
@@ -1203,6 +1368,36 @@
         height: 9px;
         margin: 6px 0;
     }
+
+    /* Private profile responsive height */
+    .profile-private-container {
+        min-height: 200px;
+        padding: 20px 16px;
+    }
+
+    .profile-private-container .private-lock-icon {
+        width: 52px;
+        height: 52px;
+        margin-bottom: 12px;
+    }
+
+    .profile-private-container .private-lock-icon i {
+        font-size: 20px;
+    }
+
+    .profile-private-container h3 {
+        font-size: 16px;
+        margin-bottom: 4px;
+    }
+
+    .profile-private-container p {
+        font-size: 12px;
+    }
+
+    .btn-private-follow {
+        font-size: 12px;
+        padding: 8px 16px;
+    }
 }
 
 /* ============================================================
@@ -1328,6 +1523,25 @@
     .verification-badge.verified::after {
         font-size: 16px;
     }
+
+    /* Private profile tablet */
+    .profile-private-container .private-lock-icon {
+        width: 90px;
+        height: 90px;
+    }
+
+    .profile-private-container .private-lock-icon i {
+        font-size: 36px;
+    }
+
+    .profile-private-container h3 {
+        font-size: 24px;
+    }
+
+    .btn-private-follow {
+        font-size: 16px;
+        padding: 14px 32px;
+    }
 }
 
 /* ============================================================
@@ -1393,6 +1607,25 @@
 
     .verification-badge.verified::after {
         font-size: 16px;
+    }
+
+    /* Private profile desktop */
+    .profile-private-container .private-lock-icon {
+        width: 100px;
+        height: 100px;
+    }
+
+    .profile-private-container .private-lock-icon i {
+        font-size: 40px;
+    }
+
+    .profile-private-container h3 {
+        font-size: 26px;
+    }
+
+    .btn-private-follow {
+        font-size: 16px;
+        padding: 14px 36px;
     }
 }
 
@@ -1463,5 +1696,28 @@
 
     .verification-badge.verified::after {
         font-size: 8px;
+    }
+
+    /* Private profile extra small */
+    .profile-private-container .private-lock-icon {
+        width: 44px;
+        height: 44px;
+    }
+
+    .profile-private-container .private-lock-icon i {
+        font-size: 16px;
+    }
+
+    .profile-private-container h3 {
+        font-size: 13px;
+    }
+
+    .profile-private-container p {
+        font-size: 10px;
+    }
+
+    .btn-private-follow {
+        font-size: 10px;
+        padding: 6px 12px;
     }
 }
