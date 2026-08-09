@@ -1,5 +1,6 @@
 // ============================================================
-// story-creator-modal.js - VERSIÓN CORREGIDA (SIN MONITOREO)
+// story-creator-modal.js - VERSIÓN COMPLETA CORREGIDA
+// (VISIBILIDAD, ORGANIZACIÓN, EFECTO ESPEJO)
 // ============================================================
 
 import { getToken, getCurrentUser, showToast } from './auth.js';
@@ -14,7 +15,7 @@ let isCreatorOpen = false;
 let mediaFile = null;
 let mediaType = null;
 let previewUrl = null;
-let cameraStream = null; // SOLO VIDEO
+let cameraStream = null;
 let cameraVideo = null;
 let facingMode = 'user';
 let isRecording = false;
@@ -27,7 +28,7 @@ let selectedTextBg = '#1a1a2e';
 let captureMode = 'video';
 let isPublishing = false;
 let currentStep = 'camera';
-let audioStreamForRecording = null; // AUDIO SOLO PARA GRABAR
+let audioStreamForRecording = null;
 
 // ============================================================
 // PALETA DE COLORES
@@ -93,7 +94,6 @@ export function closeCreator() {
     if (mediaRecorder?.state === 'recording') mediaRecorder.stop();
     if (timerInterval) clearInterval(timerInterval);
 
-    // 🔥 Limpiar audio de grabación
     if (audioStreamForRecording) {
         audioStreamForRecording.getTracks().forEach(track => track.stop());
         audioStreamForRecording = null;
@@ -149,7 +149,7 @@ function resetCreatorState() {
 }
 
 // ============================================================
-// CREAR HTML
+// CREAR HTML - CON ORGANIZACIÓN MEJORADA
 // ============================================================
 
 function createCreatorHTML() {
@@ -158,6 +158,7 @@ function createCreatorHTML() {
     const html = `
         <div id="creatorOverlay" class="creator-overlay">
             
+            <!-- PREVIEW -->
             <div class="creator-preview" id="creatorPreview">
                 <div class="camera-placeholder">
                     <i class="fas fa-camera"></i>
@@ -165,6 +166,7 @@ function createCreatorHTML() {
                 </div>
             </div>
 
+            <!-- TOP CONTROLS -->
             <div class="top-controls" id="topControls">
                 <button class="btn-close" onclick="window.closeCreator()">
                     <i class="fas fa-chevron-down"></i>
@@ -175,6 +177,7 @@ function createCreatorHTML() {
                 </button>
             </div>
 
+            <!-- MODE SELECTOR -->
             <div class="mode-selector" id="modeSelector">
                 <button class="mode-btn active" data-mode="video">
                     <i class="fas fa-video"></i>
@@ -186,15 +189,20 @@ function createCreatorHTML() {
                 </button>
             </div>
 
+            <!-- FLIP CAMERA -->
             <button class="btn-flip-camera" id="flipCameraBtn" title="Girar cámara">
                 <i class="fas fa-sync-alt"></i>
             </button>
 
+            <!-- RECORDING INDICATOR -->
             <div class="recording-indicator" id="recordingIndicator">
                 <div class="recording-dot"></div>
                 <span id="recordTimer">00:00</span>
             </div>
 
+            <!-- ============================================================
+                 CAPTURE ACTIONS - REHACER / USAR
+            ============================================================ -->
             <div class="capture-actions" id="captureActions">
                 <button class="btn-retake" onclick="window.retakeMedia()">
                     <i class="fas fa-undo"></i>
@@ -206,6 +214,9 @@ function createCreatorHTML() {
                 </button>
             </div>
 
+            <!-- ============================================================
+                 PREVIEW ACTIONS - EDITAR / CONFIRMAR
+            ============================================================ -->
             <div class="preview-actions" id="previewActions">
                 <button class="btn-edit" onclick="window.editMedia()">
                     <i class="fas fa-pen"></i>
@@ -217,11 +228,13 @@ function createCreatorHTML() {
                 </button>
             </div>
 
+            <!-- SUBTITLES STATUS -->
             <div class="subtitles-status" id="subtitlesStatus">
                 <i class="fas fa-closed-captioning"></i>
                 <span id="subtitlesText">Generando subtítulos...</span>
             </div>
 
+            <!-- TEXT TOOLS -->
             <div class="text-tools" id="textTools">
                 <div class="text-tools-scroll">
                     ${COLOR_PALETTE.map(color => `
@@ -231,6 +244,7 @@ function createCreatorHTML() {
                 </div>
             </div>
 
+            <!-- TEXT EDITOR -->
             <div class="text-editor-container" id="textEditorContainer">
                 <textarea id="textContent" placeholder="Escribe algo..." maxlength="1000"></textarea>
                 <div class="text-editor-tools">
@@ -243,14 +257,20 @@ function createCreatorHTML() {
                 </div>
             </div>
 
+            <!-- ============================================================
+                 INPUT AREA - DESCRIPCIÓN (MEJORADA VISIBILIDAD)
+            ============================================================ -->
             <div class="input-area" id="inputArea">
                 <div class="input-wrapper">
                     <i class="fas fa-pencil-alt"></i>
-                    <input type="text" id="creatorCaption" placeholder="Añade un título..." maxlength="220" />
+                    <input type="text" id="creatorCaption" placeholder="Escribe una descripción..." maxlength="220" />
                     <span class="char-counter" id="charCounter">0/220</span>
                 </div>
             </div>
 
+            <!-- ============================================================
+                 BOTTOM CONTROLS - CÁMARA / GALERÍA / TEXTO
+            ============================================================ -->
             <div class="bottom-controls" id="bottomControls">
                 <button class="btn-gallery" onclick="window.openGallery()">
                     <i class="fas fa-image"></i>
@@ -351,7 +371,7 @@ function setupCreatorEvents() {
 }
 
 // ============================================================
-// 🔥 CÁMARA - SOLO VIDEO (SIN AUDIO)
+// CÁMARA - SOLO VIDEO (SIN AUDIO)
 // ============================================================
 
 async function startCamera() {
@@ -369,11 +389,11 @@ async function startCamera() {
         video.style.width = '100%';
         video.style.height = '100%';
         video.style.objectFit = 'contain';
+        // 🔥 Efecto espejo para la cámara frontal
         video.style.transform = facingMode === 'user' ? 'scaleX(-1)' : 'scaleX(1)';
         preview.appendChild(video);
         cameraVideo = video;
 
-        // 🔥 SOLO VIDEO - SIN AUDIO
         const constraints = {
             video: { 
                 facingMode: facingMode,
@@ -443,7 +463,7 @@ async function flipCamera() {
 }
 
 // ============================================================
-// CAPTURAR FOTO
+// 🔥 CAPTURAR FOTO - CON EFECTO ESPEJO CORRECTO
 // ============================================================
 
 function capturePhoto() {
@@ -455,6 +475,7 @@ function capturePhoto() {
     canvas.height = video.videoHeight || 720;
     const ctx = canvas.getContext('2d');
     
+    // 🔥 Si es cámara frontal, invertir la imagen para mantener el efecto espejo
     if (facingMode === 'user') {
         ctx.translate(canvas.width, 0);
         ctx.scale(-1, 1);
@@ -477,6 +498,7 @@ function capturePhoto() {
 
             if (preview) {
                 preview.innerHTML = `<img src="${previewUrl}" style="width:100%;height:100%;object-fit:contain;" />`;
+                // 🔥 La imagen ya está invertida, no aplicar transform extra
                 const img = preview.querySelector('img');
                 if (img) img.style.transform = 'scaleX(1)';
             }
@@ -488,7 +510,7 @@ function capturePhoto() {
 }
 
 // ============================================================
-// 🔥 GRABAR VIDEO - CON AUDIO SOLO EN EL RECORDER
+// GRABAR VIDEO - CON EFECTO ESPEJO CORRECTO
 // ============================================================
 
 function startRecording() {
@@ -521,22 +543,15 @@ function startRecording() {
     const modeSelector = safeGetElement('modeSelector');
     if (modeSelector) modeSelector.style.display = 'none';
 
-    // ============================================================
-    // 🔥 CREAR STREAM COMBINADO: VIDEO (existente) + AUDIO (nuevo)
-    // ============================================================
-    
     async function startRecordingWithAudio() {
         try {
-            // Video track existente
             const videoTrack = cameraStream.getVideoTracks()[0];
             if (!videoTrack) {
                 throw new Error('No hay video track');
             }
 
-            // 🔥 Crear stream de video
             const combinedStream = new MediaStream([videoTrack]);
 
-            // 🔥 SOLO AQUÍ pedir audio (cuando se graba)
             try {
                 const audioStream = await navigator.mediaDevices.getUserMedia({
                     audio: {
@@ -549,15 +564,12 @@ function startRecording() {
                 const audioTrack = audioStream.getAudioTracks()[0];
                 if (audioTrack) {
                     combinedStream.addTrack(audioTrack);
-                    audioStreamForRecording = audioStream; // Guardar para limpiar
-                    console.log('🎤 Audio activado para grabación');
+                    audioStreamForRecording = audioStream;
                 }
             } catch (audioError) {
                 console.warn('⚠️ Sin audio:', audioError);
-                // Continuar sin audio
             }
 
-            // 🔥 Configurar MediaRecorder
             const options = {
                 mimeType: 'video/webm;codecs=vp9,opus',
                 videoBitsPerSecond: 2500000,
@@ -575,14 +587,12 @@ function startRecording() {
             };
 
             mediaRecorder.onstop = () => {
-                // 🔥 Limpiar audio después de grabar
                 if (audioStreamForRecording) {
                     audioStreamForRecording.getTracks().forEach(track => track.stop());
                     audioStreamForRecording = null;
-                    console.log('🎤 Audio liberado');
                 }
 
-                if (recordedChunks.length === 0) {
+                if (recordedChunks.length === 0 || recordedChunks.reduce((acc, chunk) => acc + chunk.size, 0) === 0) {
                     showToast('Error: no se grabó nada', true);
                     isRecording = false;
                     if (captureBtn) captureBtn.classList.remove('recording');
@@ -595,19 +605,9 @@ function startRecording() {
                 }
 
                 const blob = new Blob(recordedChunks, { type: 'video/webm' });
-                if (blob.size === 0) {
-                    showToast('Error: archivo vacío', true);
-                    isRecording = false;
-                    if (captureBtn) captureBtn.classList.remove('recording');
-                    if (indicator) {
-                        indicator.style.display = 'none';
-                        indicator.classList.remove('active');
-                    }
-                    clearInterval(timerInterval);
-                    return;
-                }
-
                 const file = new File([blob], `video_${Date.now()}.webm`, { type: 'video/webm' });
+                
+                // 🔥 El video se graba con el efecto espejo ya aplicado por el CSS
                 handleVideoFile(file);
                 isRecording = false;
                 if (captureBtn) captureBtn.classList.remove('recording');
@@ -654,13 +654,23 @@ function stopRecording() {
 }
 
 // ============================================================
-// MOSTRAR ACCIONES DE PREVIEW
+// MOSTRAR ACCIONES DE PREVIEW (MEJORADO)
 // ============================================================
 
 function showPreviewActions() {
+    // Mostrar acciones de captura (Rehacer / Usar)
     const captureActions = safeGetElement('captureActions');
-    if (captureActions) captureActions.style.display = 'flex';
+    if (captureActions) {
+        captureActions.style.display = 'flex';
+        captureActions.style.opacity = '1';
+        captureActions.style.background = 'rgba(0,0,0,0.4)';
+        captureActions.style.backdropFilter = 'blur(10px)';
+        captureActions.style.padding = '12px 20px';
+        captureActions.style.borderRadius = '16px';
+        captureActions.style.margin = '0 20px';
+    }
     
+    // Ocultar controles de cámara
     const modeSelector = safeGetElement('modeSelector');
     if (modeSelector) modeSelector.style.display = 'none';
     
@@ -669,6 +679,18 @@ function showPreviewActions() {
     
     const topControls = safeGetElement('topControls');
     if (topControls) topControls.style.display = 'flex';
+
+    // Mostrar input de descripción
+    const inputArea = safeGetElement('inputArea');
+    if (inputArea) {
+        inputArea.style.display = 'block';
+        inputArea.style.opacity = '1';
+        inputArea.style.background = 'rgba(0,0,0,0.5)';
+        inputArea.style.backdropFilter = 'blur(10px)';
+        inputArea.style.borderRadius = '16px';
+        inputArea.style.margin = '0 20px 20px';
+        inputArea.style.padding = '8px 0';
+    }
 
     const publishBtn = safeGetElement('publishBtn');
     if (publishBtn) {
@@ -693,7 +715,15 @@ window.retakeMedia = function() {
     
     ['captureActions', 'previewActions', 'inputArea', 'subtitlesStatus', 'textTools', 'textEditorContainer'].forEach(id => {
         const el = safeGetElement(id);
-        if (el) el.style.display = 'none';
+        if (el) {
+            el.style.display = 'none';
+            el.style.opacity = '';
+            el.style.background = '';
+            el.style.backdropFilter = '';
+            el.style.margin = '';
+            el.style.padding = '';
+            el.style.borderRadius = '';
+        }
     });
 
     const publishBtn = safeGetElement('publishBtn');
@@ -721,11 +751,23 @@ window.retakeMedia = function() {
 };
 
 window.useMedia = function() {
+    // Ocultar capture actions
     const captureActions = safeGetElement('captureActions');
-    if (captureActions) captureActions.style.display = 'none';
+    if (captureActions) {
+        captureActions.style.display = 'none';
+    }
     
+    // Mostrar input de descripción
     const inputArea = safeGetElement('inputArea');
-    if (inputArea) inputArea.style.display = 'block';
+    if (inputArea) {
+        inputArea.style.display = 'block';
+        inputArea.style.opacity = '1';
+        inputArea.style.background = 'rgba(0,0,0,0.5)';
+        inputArea.style.backdropFilter = 'blur(10px)';
+        inputArea.style.borderRadius = '16px';
+        inputArea.style.margin = '0 20px 20px';
+        inputArea.style.padding = '8px 0';
+    }
     
     const publishBtn = safeGetElement('publishBtn');
     if (publishBtn) publishBtn.disabled = false;
@@ -779,7 +821,15 @@ window.createTextStory = function() {
     
     ['captureActions', 'inputArea', 'subtitlesStatus', 'previewActions'].forEach(id => {
         const el = safeGetElement(id);
-        if (el) el.style.display = 'none';
+        if (el) {
+            el.style.display = 'none';
+            el.style.opacity = '';
+            el.style.background = '';
+            el.style.backdropFilter = '';
+            el.style.margin = '';
+            el.style.padding = '';
+            el.style.borderRadius = '';
+        }
     });
     
     mediaType = 'text';
@@ -815,7 +865,15 @@ window.confirmText = function() {
     if (editor) editor.style.display = 'none';
     
     const inputArea = safeGetElement('inputArea');
-    if (inputArea) inputArea.style.display = 'block';
+    if (inputArea) {
+        inputArea.style.display = 'block';
+        inputArea.style.opacity = '1';
+        inputArea.style.background = 'rgba(0,0,0,0.5)';
+        inputArea.style.backdropFilter = 'blur(10px)';
+        inputArea.style.borderRadius = '16px';
+        inputArea.style.margin = '0 20px 20px';
+        inputArea.style.padding = '8px 0';
+    }
     
     const publishBtn = safeGetElement('publishBtn');
     if (publishBtn) publishBtn.disabled = false;
@@ -824,7 +882,15 @@ window.confirmText = function() {
     if (textTools) textTools.style.display = 'none';
     
     const captureActions = safeGetElement('captureActions');
-    if (captureActions) captureActions.style.display = 'flex';
+    if (captureActions) {
+        captureActions.style.display = 'flex';
+        captureActions.style.opacity = '1';
+        captureActions.style.background = 'rgba(0,0,0,0.4)';
+        captureActions.style.backdropFilter = 'blur(10px)';
+        captureActions.style.padding = '12px 20px';
+        captureActions.style.borderRadius = '16px';
+        captureActions.style.margin = '0 20px';
+    }
     
     showToast('✅ Texto listo');
 };
@@ -840,10 +906,26 @@ window.backToCamera = function() {
     if (textTools) textTools.style.display = 'none';
     
     const inputArea = safeGetElement('inputArea');
-    if (inputArea) inputArea.style.display = 'none';
+    if (inputArea) {
+        inputArea.style.display = 'none';
+        inputArea.style.opacity = '';
+        inputArea.style.background = '';
+        inputArea.style.backdropFilter = '';
+        inputArea.style.margin = '';
+        inputArea.style.padding = '';
+        inputArea.style.borderRadius = '';
+    }
     
     const captureActions = safeGetElement('captureActions');
-    if (captureActions) captureActions.style.display = 'none';
+    if (captureActions) {
+        captureActions.style.display = 'none';
+        captureActions.style.opacity = '';
+        captureActions.style.background = '';
+        captureActions.style.backdropFilter = '';
+        captureActions.style.margin = '';
+        captureActions.style.padding = '';
+        captureActions.style.borderRadius = '';
+    }
     
     const publishBtn = safeGetElement('publishBtn');
     if (publishBtn) publishBtn.disabled = true;
@@ -901,7 +983,7 @@ window.openGallery = function() {
 };
 
 // ============================================================
-// MANEJAR VIDEO
+// MANEJAR VIDEO (CON EFECTO ESPEJO)
 // ============================================================
 
 async function handleVideoFile(file) {
@@ -932,7 +1014,15 @@ async function handleVideoFile(file) {
         await processVideoWithSubtitles(file);
     } else {
         const inputArea = safeGetElement('inputArea');
-        if (inputArea) inputArea.style.display = 'block';
+        if (inputArea) {
+            inputArea.style.display = 'block';
+            inputArea.style.opacity = '1';
+            inputArea.style.background = 'rgba(0,0,0,0.5)';
+            inputArea.style.backdropFilter = 'blur(10px)';
+            inputArea.style.borderRadius = '16px';
+            inputArea.style.margin = '0 20px 20px';
+            inputArea.style.padding = '8px 0';
+        }
         const publishBtn = safeGetElement('publishBtn');
         if (publishBtn) publishBtn.disabled = false;
         processedVideoData = null;
@@ -983,7 +1073,15 @@ async function processVideoWithSubtitles(file) {
             }
             
             const inputArea = safeGetElement('inputArea');
-            if (inputArea) inputArea.style.display = 'block';
+            if (inputArea) {
+                inputArea.style.display = 'block';
+                inputArea.style.opacity = '1';
+                inputArea.style.background = 'rgba(0,0,0,0.5)';
+                inputArea.style.backdropFilter = 'blur(10px)';
+                inputArea.style.borderRadius = '16px';
+                inputArea.style.margin = '0 20px 20px';
+                inputArea.style.padding = '8px 0';
+            }
             
             const statusEl = safeGetElement('subtitlesStatus');
             const textEl = safeGetElement('subtitlesText');
@@ -1198,7 +1296,15 @@ window.editMedia = function() {
 };
 window.confirmMedia = function() {
     const inputArea = safeGetElement('inputArea');
-    if (inputArea) inputArea.style.display = 'block';
+    if (inputArea) {
+        inputArea.style.display = 'block';
+        inputArea.style.opacity = '1';
+        inputArea.style.background = 'rgba(0,0,0,0.5)';
+        inputArea.style.backdropFilter = 'blur(10px)';
+        inputArea.style.borderRadius = '16px';
+        inputArea.style.margin = '0 20px 20px';
+        inputArea.style.padding = '8px 0';
+    }
     const previewActions = safeGetElement('previewActions');
     if (previewActions) previewActions.style.display = 'none';
     const publishBtn = safeGetElement('publishBtn');
@@ -1206,7 +1312,7 @@ window.confirmMedia = function() {
 };
 
 // ============================================================
-// ESTILOS
+// ESTILOS - CON VISIBILIDAD MEJORADA
 // ============================================================
 
 function injectStyles() {
@@ -1294,10 +1400,10 @@ function injectStyles() {
             justify-content: space-between;
             align-items: center;
             padding: 12px 20px;
-            background: linear-gradient(180deg, rgba(0,0,0,0.6) 0%, transparent 100%);
+            background: linear-gradient(180deg, rgba(0,0,0,0.8) 0%, transparent 100%);
         }
         .top-controls .btn-close {
-            background: rgba(255,255,255,0.08);
+            background: rgba(255,255,255,0.12);
             border: none;
             border-radius: 50%;
             width: 36px;
@@ -1338,16 +1444,16 @@ function injectStyles() {
             z-index: 20;
             display: flex;
             gap: 4px;
-            background: rgba(255,255,255,0.08);
+            background: rgba(0,0,0,0.6);
             border-radius: 50px;
             padding: 4px;
             backdrop-filter: blur(20px);
-            border: 1px solid rgba(255,255,255,0.05);
+            border: 1px solid rgba(255,255,255,0.08);
         }
         .mode-selector .mode-btn {
             background: none;
             border: none;
-            color: rgba(255,255,255,0.4);
+            color: rgba(255,255,255,0.5);
             font-size: 12px;
             padding: 6px 16px;
             border-radius: 50px;
@@ -1370,7 +1476,7 @@ function injectStyles() {
             top: 68px;
             right: 20px;
             z-index: 21;
-            background: rgba(255,255,255,0.08);
+            background: rgba(255,255,255,0.12);
             border: none;
             border-radius: 50%;
             width: 40px;
@@ -1383,11 +1489,11 @@ function injectStyles() {
             display: flex;
             align-items: center;
             justify-content: center;
-            border: 1px solid rgba(255,255,255,0.05);
+            border: 1px solid rgba(255,255,255,0.08);
         }
         .btn-flip-camera:active { 
             transform: scale(0.9); 
-            background: rgba(255,255,255,0.15);
+            background: rgba(255,255,255,0.2);
         }
 
         .recording-indicator {
@@ -1399,7 +1505,7 @@ function injectStyles() {
             display: none;
             align-items: center;
             gap: 10px;
-            background: rgba(0,0,0,0.5);
+            background: rgba(0,0,0,0.7);
             padding: 6px 16px;
             border-radius: 50px;
             backdrop-filter: blur(10px);
@@ -1433,7 +1539,7 @@ function injectStyles() {
             align-items: center;
             justify-content: space-around;
             padding: 16px 20px 34px;
-            background: linear-gradient(0deg, rgba(0,0,0,0.7) 0%, transparent 100%);
+            background: linear-gradient(0deg, rgba(0,0,0,0.8) 0%, transparent 100%);
         }
         .bottom-controls .btn-gallery,
         .bottom-controls .btn-text {
@@ -1446,7 +1552,7 @@ function injectStyles() {
             align-items: center;
             gap: 4px;
             font-size: 10px;
-            opacity: 0.6;
+            opacity: 0.7;
             transition: all 0.2s;
         }
         .bottom-controls .btn-gallery i,
@@ -1464,11 +1570,11 @@ function injectStyles() {
             width: 72px;
             height: 72px;
             border-radius: 50%;
-            background: rgba(255,255,255,0.08);
+            background: rgba(255,255,255,0.1);
             display: flex;
             align-items: center;
             justify-content: center;
-            border: 2px solid rgba(255,255,255,0.15);
+            border: 2px solid rgba(255,255,255,0.2);
             transition: all 0.3s;
         }
         .bottom-controls .btn-capture .capture-inner {
@@ -1490,44 +1596,51 @@ function injectStyles() {
             background: #ff0000;
         }
 
+        /* ============================================================
+           CAPTURE ACTIONS - VISIBILIDAD MEJORADA
+        ============================================================ */
         .capture-actions {
             position: absolute;
-            bottom: 140px;
-            left: 0;
-            right: 0;
+            bottom: 160px;
+            left: 20px;
+            right: 20px;
             z-index: 14;
             display: none;
             justify-content: center;
-            gap: 50px;
-            padding: 0 20px;
+            gap: 40px;
+            background: rgba(0,0,0,0.6) !important;
+            backdrop-filter: blur(20px) !important;
+            border-radius: 16px !important;
+            padding: 14px 20px !important;
+            border: 1px solid rgba(255,255,255,0.06);
         }
         .capture-actions .btn-retake,
         .capture-actions .btn-use {
             display: flex;
             flex-direction: column;
             align-items: center;
-            gap: 6px;
+            gap: 4px;
             background: none;
             border: none;
             color: #fff;
             font-size: 11px;
             cursor: pointer;
             transition: all 0.2s;
-            opacity: 0.7;
+            opacity: 0.9;
+            flex: 1;
         }
         .capture-actions .btn-retake i,
         .capture-actions .btn-use i {
-            width: 48px;
-            height: 48px;
+            width: 44px;
+            height: 44px;
             border-radius: 50%;
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: 18px;
+            font-size: 16px;
         }
         .capture-actions .btn-retake i {
-            background: rgba(255,255,255,0.08);
-            backdrop-filter: blur(10px);
+            background: rgba(255,255,255,0.1);
         }
         .capture-actions .btn-use i {
             background: #fff;
@@ -1539,59 +1652,25 @@ function injectStyles() {
             opacity: 1;
         }
 
-        .preview-actions {
-            position: absolute;
-            bottom: 140px;
-            left: 0;
-            right: 0;
-            z-index: 14;
-            display: none;
-            justify-content: center;
-            gap: 20px;
-            padding: 0 20px;
-        }
-        .preview-actions .btn-edit,
-        .preview-actions .btn-next-preview {
-            padding: 10px 24px;
-            border: none;
-            border-radius: 50px;
-            font-size: 14px;
-            font-weight: 600;
-            cursor: pointer;
-            transition: all 0.2s;
-            display: flex;
-            align-items: center;
-            gap: 8px;
-        }
-        .preview-actions .btn-edit {
-            background: rgba(255,255,255,0.08);
-            color: #fff;
-            backdrop-filter: blur(10px);
-        }
-        .preview-actions .btn-next-preview {
-            background: #fff;
-            color: #000;
-        }
-        .preview-actions .btn-edit:active,
-        .preview-actions .btn-next-preview:active {
-            transform: scale(0.95);
-        }
-
+        /* ============================================================
+           INPUT AREA - VISIBILIDAD MEJORADA
+        ============================================================ */
         .input-area {
             position: absolute;
             bottom: 100px;
-            left: 0;
-            right: 0;
+            left: 20px;
+            right: 20px;
             z-index: 14;
-            padding: 0 20px;
             display: none;
+            background: rgba(0,0,0,0.6) !important;
+            backdrop-filter: blur(20px) !important;
+            border-radius: 16px !important;
+            padding: 8px 0 !important;
+            border: 1px solid rgba(255,255,255,0.06);
         }
         .input-area .input-wrapper {
             position: relative;
-            background: rgba(255,255,255,0.06);
-            border-radius: 12px;
-            backdrop-filter: blur(20px);
-            border: 1px solid rgba(255,255,255,0.05);
+            background: transparent;
         }
         .input-area .input-wrapper i {
             position: absolute;
@@ -1613,7 +1692,7 @@ function injectStyles() {
             outline: none;
         }
         .input-area .input-wrapper input::placeholder {
-            color: rgba(255,255,255,0.3);
+            color: rgba(255,255,255,0.4);
         }
         .input-area .char-counter {
             position: absolute;
@@ -1621,7 +1700,7 @@ function injectStyles() {
             top: 50%;
             transform: translateY(-50%);
             font-size: 10px;
-            color: rgba(255,255,255,0.2);
+            color: rgba(255,255,255,0.3);
         }
 
         .subtitles-status {
@@ -1633,7 +1712,7 @@ function injectStyles() {
             display: none;
             align-items: center;
             gap: 10px;
-            background: rgba(0,0,0,0.6);
+            background: rgba(0,0,0,0.7);
             backdrop-filter: blur(20px);
             border-radius: 12px;
             padding: 10px 16px;
@@ -1657,7 +1736,7 @@ function injectStyles() {
             z-index: 14;
             display: none;
             padding: 12px 20px;
-            background: linear-gradient(0deg, rgba(0,0,0,0.5) 0%, transparent 100%);
+            background: linear-gradient(0deg, rgba(0,0,0,0.6) 0%, transparent 100%);
         }
         .text-tools-scroll {
             display: flex;
@@ -1673,7 +1752,7 @@ function injectStyles() {
             min-width: 36px;
             height: 36px;
             border-radius: 50%;
-            border: 2px solid rgba(255,255,255,0.05);
+            border: 2px solid rgba(255,255,255,0.1);
             cursor: pointer;
             transition: all 0.2s;
             flex-shrink: 0;
@@ -1744,7 +1823,7 @@ function injectStyles() {
             gap: 8px;
         }
         .text-editor-tools .btn-back-camera {
-            background: rgba(255,255,255,0.08);
+            background: rgba(255,255,255,0.1);
             color: #fff;
             backdrop-filter: blur(10px);
         }
@@ -1754,6 +1833,49 @@ function injectStyles() {
         }
         .text-editor-tools .btn-back-camera:active,
         .text-editor-tools .btn-confirm-text:active {
+            transform: scale(0.95);
+        }
+
+        .preview-actions {
+            position: absolute;
+            bottom: 160px;
+            left: 20px;
+            right: 20px;
+            z-index: 14;
+            display: none;
+            justify-content: center;
+            gap: 16px;
+            background: rgba(0,0,0,0.6);
+            backdrop-filter: blur(20px);
+            border-radius: 16px;
+            padding: 12px 20px;
+            border: 1px solid rgba(255,255,255,0.06);
+        }
+        .preview-actions .btn-edit,
+        .preview-actions .btn-next-preview {
+            padding: 8px 20px;
+            border: none;
+            border-radius: 50px;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex: 1;
+            justify-content: center;
+        }
+        .preview-actions .btn-edit {
+            background: rgba(255,255,255,0.1);
+            color: #fff;
+        }
+        .preview-actions .btn-next-preview {
+            background: #fff;
+            color: #000;
+        }
+        .preview-actions .btn-edit:active,
+        .preview-actions .btn-next-preview:active {
             transform: scale(0.95);
         }
 
@@ -1769,13 +1891,13 @@ function injectStyles() {
             .mode-selector .mode-btn { font-size: 11px; padding: 5px 12px; }
             .mode-selector .mode-btn i { font-size: 12px; }
             .btn-flip-camera { top: 62px; right: 12px; width: 34px; height: 34px; font-size: 14px; }
-            .capture-actions { bottom: 130px; gap: 30px; }
+            .capture-actions { bottom: 140px; left: 16px; right: 16px; padding: 10px 16px; gap: 20px; }
             .capture-actions .btn-retake i,
-            .capture-actions .btn-use i { width: 40px; height: 40px; font-size: 15px; }
-            .preview-actions { bottom: 130px; gap: 12px; }
+            .capture-actions .btn-use i { width: 36px; height: 36px; font-size: 14px; }
+            .preview-actions { bottom: 140px; left: 16px; right: 16px; padding: 10px 16px; gap: 12px; }
             .preview-actions .btn-edit,
-            .preview-actions .btn-next-preview { font-size: 12px; padding: 8px 16px; }
-            .input-area { bottom: 100px; padding: 0 16px; }
+            .preview-actions .btn-next-preview { font-size: 12px; padding: 6px 14px; }
+            .input-area { bottom: 90px; left: 16px; right: 16px; padding: 6px 0 !important; }
             .input-area .input-wrapper input { font-size: 13px; padding: 10px 12px; padding-left: 36px; padding-right: 50px; }
             .text-tools { bottom: 120px; padding: 8px 12px; }
             .text-tools .btn-bg { min-width: 30px; height: 30px; }
@@ -1800,10 +1922,10 @@ function injectStyles() {
             .mode-selector .mode-btn i { font-size: 11px; }
             .btn-flip-camera { top: 56px; right: 10px; width: 30px; height: 30px; font-size: 12px; }
             .text-editor-container textarea { font-size: 18px; height: 50%; }
-            .capture-actions { bottom: 110px; }
-            .preview-actions { bottom: 110px; }
-            .input-area { bottom: 80px; }
-            .subtitles-status { bottom: 130px; }
+            .capture-actions { bottom: 120px; padding: 8px 16px; }
+            .preview-actions { bottom: 120px; padding: 8px 16px; }
+            .input-area { bottom: 80px; padding: 4px 0 !important; }
+            .subtitles-status { bottom: 140px; }
             .text-tools { bottom: 110px; }
             .text-editor-tools { bottom: 30px; }
             .recording-indicator { top: 52px; }
