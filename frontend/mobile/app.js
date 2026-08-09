@@ -1,4 +1,4 @@
-// app.js - VERSIÓN CORREGIDA (sin afectar el modal de perfil)
+// app.js - VERSIÓN CORREGIDA COMPLETA
 // ============================================================
 
 import {
@@ -20,7 +20,7 @@ import { openCreator, closeCreator } from './story-creator-modal.js';
 import { openExploreModal, closeExploreModal } from './explore-modal.js';
 import { openActivityModal, closeActivityModal, updateBadge } from './activity-modal.js';
 
-// 🔥 IMPORTAR PERFIL NATIVO
+// 🔥 IMPORTAR PERFIL NATIVO (SOLO PARA NAVEGACIÓN INFERIOR Y HEADER)
 import { showProfileNative, hideProfileNative } from './profile-native.js';
 
 const API_URL = window.location.origin;
@@ -1682,7 +1682,7 @@ async function refreshFeed() {
 }
 
 // ============================================================
-// FUNCIONES GLOBALES
+// 🔥🔥🔥 FUNCIONES GLOBALES - CORREGIDAS
 // ============================================================
 
 window.showToast = showToast;
@@ -1708,7 +1708,7 @@ window.closeExploreModal = closeExploreModal;
 window.openActivityModal = openActivityModal;
 window.closeActivityModal = closeActivityModal;
 
-// 🔥 PERFIL NATIVO
+// 🔥 PERFIL NATIVO (SOLO PARA NAVEGACIÓN INFERIOR Y HEADER)
 window.showProfileNative = showProfileNative;
 window.hideProfileNative = hideProfileNative;
 
@@ -1716,29 +1716,42 @@ window.loadPendingStories = () => {
     refreshFeed();
 };
 
+// ============================================================
+// 🔥🔥🔥 goToProfileUser - CORREGIDO (SIEMPRE USA EL MODAL)
+// ============================================================
+
 window.goToProfileUser = (userId) => {
-    if (!userId) return;
-    
-    const currentUser = getCurrentUser();
-    
-    if (currentUser?.id === userId) {
-        closeExploreModal();
-        closeActivityModal();
-        closeStoryModal();
-        closeCreator();
-        closeEditProfileModal();
-        closeProfileModal();
-        
-        showProfileNative(userId);
+    if (!userId) {
+        console.warn('⚠️ goToProfileUser: userId no proporcionado');
         return;
     }
     
+    const currentUser = getCurrentUser();
+    
+    console.log(`👤 goToProfileUser: ${userId}, usuario actual: ${currentUser?.id}`);
+    
+    // 🔥 CERRAR TODOS LOS MODALES
     closeExploreModal();
     closeActivityModal();
     closeStoryModal();
     closeCreator();
     closeEditProfileModal();
-    openProfileModal(userId);
+    
+    // 🔥 SIEMPRE ABRIR CON openProfileModal
+    // 🔥 El perfil propio se muestra en el modal como cualquier otro
+    // 🔥 Esto preserva la navegación por pila correctamente
+    
+    if (typeof openProfileModal === 'function') {
+        openProfileModal(userId);
+    } else {
+        // Fallback: importar dinámicamente
+        import('./profile-modal.js').then(({ openProfileModal: openModal }) => {
+            openModal(userId);
+        }).catch(err => {
+            console.error('❌ Error abriendo perfil:', err);
+            showToast('Error al abrir perfil', true);
+        });
+    }
 };
 
 // ============================================================
@@ -1767,6 +1780,10 @@ function setupEvents() {
         }
     });
 
+    // ============================================================
+    // 🔥 userBadge - SOLO PROFILE-NATIVE (NAVEGACIÓN PRINCIPAL)
+    // ============================================================
+    
     document.getElementById('userBadge')?.addEventListener('click', () => {
         const user = getCurrentUser();
         if (user?.id) {
@@ -1777,6 +1794,7 @@ function setupEvents() {
             closeEditProfileModal();
             closeProfileModal();
             
+            // 🔥 Este SÍ usa profile-native (es el acceso directo desde el header)
             showProfileNative(user.id);
         } else {
             showToast('Inicia sesión', true);
@@ -1786,6 +1804,10 @@ function setupEvents() {
         }
     });
 
+    // ============================================================
+    // 🔥 navProfile - SOLO PROFILE-NATIVE (NAVEGACIÓN PRINCIPAL)
+    // ============================================================
+    
     document.getElementById('navProfile')?.addEventListener('click', () => {
         const user = getCurrentUser();
         if (user?.id) {
@@ -1799,6 +1821,8 @@ function setupEvents() {
             document.querySelectorAll('.bottom-nav button').forEach(b => b.classList.remove('active'));
             document.getElementById('navProfile').classList.add('active');
             
+            // 🔥 Este SÍ debe usar profile-native porque es la navegación principal
+            // Es la única excepción: el usuario quiere ver su perfil en la sección nativa
             showProfileNative(user.id);
         } else {
             showToast('Inicia sesión', true);
@@ -1858,7 +1882,10 @@ function setupEvents() {
         applyFilter('recent');
     });
 
+    // ============================================================
     // BOTTOM NAV
+    // ============================================================
+    
     document.getElementById('navFeed')?.addEventListener('click', () => {
         const token = getToken();
         if (!token) {
