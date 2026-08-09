@@ -1,6 +1,6 @@
 // ============================================================
 // story-creator-modal.js - VERSIÓN COMPLETA CORREGIDA
-// (CON SUBTÍTULOS BIEN POSICIONADOS)
+// (CON ESPACIO VERTICAL MEJORADO)
 // ============================================================
 
 import { getToken, getCurrentUser, showToast } from './auth.js';
@@ -224,9 +224,7 @@ function createCreatorHTML() {
                 </button>
             </div>
 
-            <!-- ============================================================
-                 SUBTITLES STATUS - BIEN POSICIONADO Y VISIBLE
-            ============================================================ -->
+            <!-- SUBTITLES STATUS -->
             <div class="subtitles-status" id="subtitlesStatus">
                 <div class="subtitles-icon">
                     <i class="fas fa-closed-captioning"></i>
@@ -1238,7 +1236,7 @@ window.confirmMedia = function() {
 };
 
 // ============================================================
-// ESTILOS - CON SUBTÍTULOS BIEN POSICIONADOS
+// ESTILOS - CON ESPACIO VERTICAL MEJORADO
 // ============================================================
 
 function injectStyles() {
@@ -1455,6 +1453,9 @@ function injectStyles() {
             50% { opacity: 0.3; transform: scale(0.8); }
         }
 
+        /* ============================================================
+           BOTTOM CONTROLS - POSICIÓN 1 (más abajo)
+        ============================================================ */
         .bottom-controls {
             position: absolute;
             bottom: 0;
@@ -1523,11 +1524,62 @@ function injectStyles() {
         }
 
         /* ============================================================
-           CAPTURE ACTIONS
+           INPUT AREA - POSICIÓN 2 (120px desde abajo)
+        ============================================================ */
+        .input-area {
+            position: absolute;
+            bottom: 120px;
+            left: 20px;
+            right: 20px;
+            z-index: 14;
+            display: none;
+            background: rgba(0,0,0,0.6);
+            backdrop-filter: blur(20px);
+            border-radius: 16px;
+            padding: 6px 0;
+            border: 1px solid rgba(255,255,255,0.06);
+        }
+        .input-area .input-wrapper {
+            position: relative;
+            background: transparent;
+        }
+        .input-area .input-wrapper i {
+            position: absolute;
+            left: 14px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: rgba(255,255,255,0.3);
+            font-size: 14px;
+        }
+        .input-area .input-wrapper input {
+            width: 100%;
+            background: transparent;
+            border: none;
+            padding: 12px 14px;
+            padding-left: 40px;
+            padding-right: 60px;
+            color: #fff;
+            font-size: 14px;
+            outline: none;
+        }
+        .input-area .input-wrapper input::placeholder {
+            color: rgba(255,255,255,0.4);
+        }
+        .input-area .char-counter {
+            position: absolute;
+            right: 14px;
+            top: 50%;
+            transform: translateY(-50%);
+            font-size: 10px;
+            color: rgba(255,255,255,0.3);
+        }
+
+        /* ============================================================
+           CAPTURE ACTIONS - POSICIÓN 3 (170px desde abajo)
         ============================================================ */
         .capture-actions {
             position: absolute;
-            bottom: 140px;
+            bottom: 170px;
             left: 20px;
             right: 20px;
             z-index: 14;
@@ -1579,11 +1631,57 @@ function injectStyles() {
         }
 
         /* ============================================================
-           SUBTITLES STATUS - BIEN POSICIONADO
+           PREVIEW ACTIONS - POSICIÓN 4 (170px desde abajo)
+        ============================================================ */
+        .preview-actions {
+            position: absolute;
+            bottom: 170px;
+            left: 20px;
+            right: 20px;
+            z-index: 14;
+            display: none;
+            justify-content: center;
+            gap: 16px;
+            background: rgba(0,0,0,0.6);
+            backdrop-filter: blur(20px);
+            border-radius: 16px;
+            padding: 12px 20px;
+            border: 1px solid rgba(255,255,255,0.06);
+        }
+        .preview-actions .btn-edit,
+        .preview-actions .btn-next-preview {
+            padding: 8px 20px;
+            border: none;
+            border-radius: 50px;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex: 1;
+            justify-content: center;
+        }
+        .preview-actions .btn-edit {
+            background: rgba(255,255,255,0.1);
+            color: #fff;
+        }
+        .preview-actions .btn-next-preview {
+            background: #fff;
+            color: #000;
+        }
+        .preview-actions .btn-edit:active,
+        .preview-actions .btn-next-preview:active {
+            transform: scale(0.95);
+        }
+
+        /* ============================================================
+           SUBTITLES STATUS - POSICIÓN 5 (240px desde abajo)
         ============================================================ */
         .subtitles-status {
             position: absolute;
-            bottom: 220px;
+            bottom: 240px;
             left: 20px;
             right: 20px;
             z-index: 14;
@@ -1645,57 +1743,6 @@ function injectStyles() {
         }
         .subtitles-status .subtitles-close:active {
             transform: scale(0.9);
-        }
-
-        /* ============================================================
-           INPUT AREA
-        ============================================================ */
-        .input-area {
-            position: absolute;
-            bottom: 100px;
-            left: 20px;
-            right: 20px;
-            z-index: 14;
-            display: none;
-            background: rgba(0,0,0,0.6);
-            backdrop-filter: blur(20px);
-            border-radius: 16px;
-            padding: 6px 0;
-            border: 1px solid rgba(255,255,255,0.06);
-        }
-        .input-area .input-wrapper {
-            position: relative;
-            background: transparent;
-        }
-        .input-area .input-wrapper i {
-            position: absolute;
-            left: 14px;
-            top: 50%;
-            transform: translateY(-50%);
-            color: rgba(255,255,255,0.3);
-            font-size: 14px;
-        }
-        .input-area .input-wrapper input {
-            width: 100%;
-            background: transparent;
-            border: none;
-            padding: 12px 14px;
-            padding-left: 40px;
-            padding-right: 60px;
-            color: #fff;
-            font-size: 14px;
-            outline: none;
-        }
-        .input-area .input-wrapper input::placeholder {
-            color: rgba(255,255,255,0.4);
-        }
-        .input-area .char-counter {
-            position: absolute;
-            right: 14px;
-            top: 50%;
-            transform: translateY(-50%);
-            font-size: 10px;
-            color: rgba(255,255,255,0.3);
         }
 
         .text-tools {
@@ -1806,49 +1853,9 @@ function injectStyles() {
             transform: scale(0.95);
         }
 
-        .preview-actions {
-            position: absolute;
-            bottom: 140px;
-            left: 20px;
-            right: 20px;
-            z-index: 14;
-            display: none;
-            justify-content: center;
-            gap: 16px;
-            background: rgba(0,0,0,0.6);
-            backdrop-filter: blur(20px);
-            border-radius: 16px;
-            padding: 12px 20px;
-            border: 1px solid rgba(255,255,255,0.06);
-        }
-        .preview-actions .btn-edit,
-        .preview-actions .btn-next-preview {
-            padding: 8px 20px;
-            border: none;
-            border-radius: 50px;
-            font-size: 13px;
-            font-weight: 600;
-            cursor: pointer;
-            transition: all 0.2s;
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            flex: 1;
-            justify-content: center;
-        }
-        .preview-actions .btn-edit {
-            background: rgba(255,255,255,0.1);
-            color: #fff;
-        }
-        .preview-actions .btn-next-preview {
-            background: #fff;
-            color: #000;
-        }
-        .preview-actions .btn-edit:active,
-        .preview-actions .btn-next-preview:active {
-            transform: scale(0.95);
-        }
-
+        /* ============================================================
+           RESPONSIVE - MÓVIL
+        ============================================================ */
         @media (max-width: 480px) {
             .bottom-controls { padding: 12px 16px 28px; }
             .bottom-controls .btn-capture .capture-outer { width: 64px; height: 64px; }
@@ -1861,16 +1868,21 @@ function injectStyles() {
             .mode-selector .mode-btn { font-size: 11px; padding: 5px 12px; }
             .mode-selector .mode-btn i { font-size: 12px; }
             .btn-flip-camera { top: 62px; right: 12px; width: 34px; height: 34px; font-size: 14px; }
-            .capture-actions { bottom: 120px; left: 16px; right: 16px; padding: 10px 16px; gap: 20px; }
+            
+            .input-area { bottom: 110px; left: 16px; right: 16px; padding: 4px 0; }
+            .input-area .input-wrapper input { font-size: 13px; padding: 10px 12px; padding-left: 36px; padding-right: 50px; }
+            
+            .capture-actions { bottom: 150px; left: 16px; right: 16px; padding: 10px 16px; gap: 20px; }
             .capture-actions .btn-retake i,
             .capture-actions .btn-use i { width: 36px; height: 36px; font-size: 14px; }
-            .subtitles-status { bottom: 190px; left: 16px; right: 16px; padding: 8px 14px; gap: 10px; }
-            .subtitles-status .subtitles-text span { font-size: 12px; }
-            .preview-actions { bottom: 120px; left: 16px; right: 16px; padding: 10px 16px; gap: 12px; }
+            
+            .preview-actions { bottom: 150px; left: 16px; right: 16px; padding: 10px 16px; gap: 12px; }
             .preview-actions .btn-edit,
             .preview-actions .btn-next-preview { font-size: 12px; padding: 6px 14px; }
-            .input-area { bottom: 90px; left: 16px; right: 16px; padding: 4px 0; }
-            .input-area .input-wrapper input { font-size: 13px; padding: 10px 12px; padding-left: 36px; padding-right: 50px; }
+            
+            .subtitles-status { bottom: 210px; left: 16px; right: 16px; padding: 8px 14px; gap: 10px; }
+            .subtitles-status .subtitles-text span { font-size: 12px; }
+            
             .text-tools { bottom: 120px; padding: 8px 12px; }
             .text-tools .btn-bg { min-width: 30px; height: 30px; }
             .text-editor-container textarea { font-size: 20px; padding: 10px; }
@@ -1882,6 +1894,9 @@ function injectStyles() {
             .creator-preview .text-preview { font-size: 22px; padding: 30px; }
         }
 
+        /* ============================================================
+           RESPONSIVE - PANTALLA BAJA
+        ============================================================ */
         @media (max-height: 600px) {
             .top-controls { padding: 8px 16px; }
             .bottom-controls { padding: 10px 16px 20px; }
@@ -1892,11 +1907,16 @@ function injectStyles() {
             .mode-selector .mode-btn { font-size: 10px; padding: 4px 10px; }
             .mode-selector .mode-btn i { font-size: 11px; }
             .btn-flip-camera { top: 56px; right: 10px; width: 30px; height: 30px; font-size: 12px; }
-            .capture-actions { bottom: 100px; padding: 8px 16px; }
-            .subtitles-status { bottom: 170px; padding: 6px 12px; }
+            
+            .input-area { bottom: 90px; padding: 4px 0; }
+            
+            .capture-actions { bottom: 130px; padding: 8px 16px; }
+            
+            .preview-actions { bottom: 130px; padding: 8px 16px; }
+            
+            .subtitles-status { bottom: 190px; padding: 6px 12px; }
             .subtitles-status .subtitles-text span { font-size: 11px; }
-            .preview-actions { bottom: 100px; padding: 8px 16px; }
-            .input-area { bottom: 80px; padding: 4px 0; }
+            
             .text-editor-container textarea { font-size: 18px; height: 50%; }
             .text-tools { bottom: 110px; }
             .text-editor-tools { bottom: 30px; }
