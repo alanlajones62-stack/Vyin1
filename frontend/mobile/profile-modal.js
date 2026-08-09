@@ -199,7 +199,7 @@ function createProfileModalHTML() {
     // 🔥 FUNCIONES GLOBALES - EXPUESTAS A window
     window.closeProfileModal = closeProfileModal;
     window.openFollowersFromProfile = openFollowersFromProfile;
-    window.handleProfileFollow = handleProfileFollow;
+    window.handleProfileFollow = handleFollowUser;  // ✅ Usar handleFollowUser
     window.openStoryFromProfileOverlay = openStoryFromProfileOverlay;
     window.openEditProfileFromModal = openEditProfileFromModal;
 }
@@ -718,7 +718,7 @@ function openStoryFromProfileOverlay(storyId, storiesJson, profileUserId) {
 window.openProfileModal = openProfileModal;
 window.closeProfileModal = closeProfileModal;
 window.openFollowersFromProfile = openFollowersFromProfile;
-window.handleProfileFollow = handleProfileFollow;
+window.handleProfileFollow = handleFollowUser;
 window.openStoryFromProfileOverlay = openStoryFromProfileOverlay;
 window.openEditProfileFromModal = openEditProfileFromModal;
 
@@ -759,6 +759,5 @@ export {
     handleFollowUser,
     preloadCurrentUserProfile,
     getVerificationBadge,
-    openFollowersFromProfile,
-    handleProfileFollow
+    openFollowersFromProfile
 };
