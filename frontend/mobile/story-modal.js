@@ -1,6 +1,6 @@
 // ============================================================
 // story-modal.js - Modal para ver historias con navegación 
-// (VERSIÓN CORREGIDA - SIN DUPLICADOS)
+// (VERSIÓN COMPLETA CON ELIMINAR)
 // ============================================================
 
 import {
@@ -241,6 +241,9 @@ function createModalHTML() {
                             <button class="btn-translate-modal" id="modalTranslateBtn" style="display:none;">
                                 <i class="fas fa-language"></i> Traducir
                             </button>
+                            <button class="btn-delete-modal" id="modalDeleteBtn" style="display:none;">
+                                <i class="fas fa-trash-alt"></i> Eliminar
+                            </button>
                         </div>
                         
                         <button class="nav-arrow" id="navNextArrow" onclick="window.navigateStory(1)">
@@ -342,13 +345,19 @@ function setupModalEvents() {
         }
     });
 
-    // 🔥 BOTÓN DE TRADUCCIÓN
+    // BOTÓN DE TRADUCCIÓN
     document.getElementById('modalTranslateBtn')?.addEventListener('click', async () => {
         if (!currentStoryId) return;
         await toggleTranslation();
     });
 
-    // 🔥 ENVÍO DE COMENTARIO
+    // BOTÓN DE ELIMINAR
+    document.getElementById('modalDeleteBtn')?.addEventListener('click', async () => {
+        if (!currentStoryId) return;
+        await deleteStory(currentStoryId);
+    });
+
+    // ENVÍO DE COMENTARIO
     document.getElementById('sendCommentBtn')?.addEventListener('click', async () => {
         await handleSendComment();
     });
@@ -387,7 +396,96 @@ function setupModalEvents() {
 }
 
 // ============================================================
-// 🔥 ENVIAR COMENTARIO - CORREGIDO (SIN DUPLICADOS)
+// 🔥 ELIMINAR HISTORIA
+// ============================================================
+
+export async function deleteStory(storyId) {
+    if (!storyId) {
+        showToast('Historia no encontrada', true);
+        return;
+    }
+
+    const token = getToken();
+    if (!token) {
+        showToast('Inicia sesión para eliminar', true);
+        return;
+    }
+
+    // Confirmar eliminación
+    const confirmDelete = confirm('¿Estás seguro de que quieres eliminar esta historia? Esta acción no se puede deshacer.');
+    if (!confirmDelete) return;
+
+    // Mostrar indicador de carga
+    const deleteBtn = document.getElementById('modalDeleteBtn');
+    if (deleteBtn) {
+        deleteBtn.disabled = true;
+        deleteBtn.innerHTML = '<i class="fas fa-spinner fa-pulse"></i> Eliminando...';
+    }
+
+    try {
+        const res = await fetch(`${API_URL}/api/stories/${storyId}`, {
+            method: 'DELETE',
+            headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json'
+            }
+        });
+
+        if (res.ok) {
+            showToast('🗑️ Historia eliminada correctamente');
+            
+            // Eliminar de la lista local
+            if (currentStoriesList && currentStoriesList.length > 0) {
+                const idx = currentStoriesList.findIndex(s => s.id === storyId);
+                if (idx !== -1) {
+                    currentStoriesList.splice(idx, 1);
+                    
+                    // Si quedan historias, navegar a la siguiente
+                    if (currentStoriesList.length > 0) {
+                        const nextIdx = Math.min(idx, currentStoriesList.length - 1);
+                        currentStoryIndex = nextIdx;
+                        await loadStoryData(currentStoriesList[nextIdx].id, true);
+                    } else {
+                        // No quedan historias, cerrar modal
+                        closeStoryModal();
+                    }
+                }
+            } else {
+                closeStoryModal();
+            }
+            
+            // Emitir evento para actualizar feeds (si hay socket)
+            try {
+                if (window.io) {
+                    window.io.emit('story_deleted', { storyId });
+                }
+                // También emitir localmente
+                document.dispatchEvent(new CustomEvent('storyDeleted', { 
+                    detail: { storyId } 
+                }));
+            } catch (e) {
+                console.log('Evento emitido localmente');
+            }
+        } else {
+            const data = await res.json();
+            showToast(data.error || 'Error al eliminar la historia', true);
+            if (deleteBtn) {
+                deleteBtn.disabled = false;
+                deleteBtn.innerHTML = '<i class="fas fa-trash-alt"></i> Eliminar';
+            }
+        }
+    } catch (error) {
+        console.error('❌ Error eliminando historia:', error);
+        showToast('Error al eliminar la historia', true);
+        if (deleteBtn) {
+            deleteBtn.disabled = false;
+            deleteBtn.innerHTML = '<i class="fas fa-trash-alt"></i> Eliminar';
+        }
+    }
+}
+
+// ============================================================
+// ENVIAR COMENTARIO
 // ============================================================
 
 async function handleSendComment() {
@@ -471,7 +569,7 @@ async function handleSendComment() {
 }
 
 // ============================================================
-// 🔥 ENVIAR RESPUESTA - CORREGIDO (SIN DUPLICADOS)
+// ENVIAR RESPUESTA
 // ============================================================
 
 async function handleSendReply(storyId, commentId) {
@@ -540,7 +638,7 @@ async function handleSendReply(storyId, commentId) {
 }
 
 // ============================================================
-// 🔥 AÑADIR RESPUESTA A LA UI (SIN DUPLICAR)
+// AÑADIR RESPUESTA A LA UI
 // ============================================================
 
 function addReplyToUI(parentCommentId, reply) {
@@ -594,7 +692,7 @@ function addReplyToUI(parentCommentId, reply) {
 }
 
 // ============================================================
-// 🔥 AÑADIR COMENTARIO A LA UI (SIN DUPLICAR)
+// AÑADIR COMENTARIO A LA UI
 // ============================================================
 
 function addCommentToUI(comment) {
@@ -652,7 +750,7 @@ function addCommentToUI(comment) {
 }
 
 // ============================================================
-// 🔥 ACTUALIZAR CONTADOR DE COMENTARIOS
+// ACTUALIZAR CONTADOR DE COMENTARIOS
 // ============================================================
 
 function updateCommentCount(increment) {
@@ -738,7 +836,7 @@ function formatVTTTime(seconds) {
 }
 
 // ============================================================
-// 🔥 ALTERNAR TRADUCCIÓN/ORIGINAL
+// ALTERNAR TRADUCCIÓN/ORIGINAL
 // ============================================================
 
 async function toggleTranslation() {
@@ -945,7 +1043,7 @@ async function toggleTranslation() {
 }
 
 // ============================================================
-// 🔥 ACTUALIZAR SOLO textContent
+// ACTUALIZAR SOLO textContent
 // ============================================================
 
 function updateTextContentOnly(updatedData) {
@@ -1082,6 +1180,23 @@ function updateModalUI(story) {
     document.getElementById('modalUserName').textContent = user.fullName || 'Usuario';
     document.getElementById('modalUserHandle').textContent = `@${user.username || 'usuario'}`;
     window._modalUserId = user.id;
+
+    // ============================================================
+    // 🔥 MOSTRAR/OCULTAR BOTÓN DE ELIMINAR
+    // ============================================================
+    const deleteBtn = document.getElementById('modalDeleteBtn');
+    if (deleteBtn) {
+        const currentUser = getCurrentUser();
+        const isOwner = currentUser && user.id && currentUser.id === user.id;
+        if (isOwner) {
+            deleteBtn.style.display = 'inline-flex';
+            deleteBtn.disabled = false;
+            deleteBtn.innerHTML = '<i class="fas fa-trash-alt"></i> Eliminar';
+            deleteBtn.title = 'Eliminar esta historia';
+        } else {
+            deleteBtn.style.display = 'none';
+        }
+    }
 
     // Botón de traducción - siempre visible
     const contentLanguage = story.language || story.originalLanguage || 'es';
@@ -1351,6 +1466,7 @@ async function handleModalLike() {
 window.openStoryModal = openStoryModal;
 window.closeStoryModal = closeStoryModal;
 window.navigateStory = navigateStory;
+window.deleteStory = deleteStory;
 
 window.openProfileFromModal = function() {
     const userId = window._modalUserId;
@@ -1373,4 +1489,8 @@ window.openProfileFromModal = function() {
     }
 };
 
-export { loadStoryData, handleModalLike };
+// ============================================================
+// EXPORTACIONES
+// ============================================================
+
+export { loadStoryData, handleModalLike, deleteStory };

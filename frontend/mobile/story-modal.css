@@ -1,5 +1,5 @@
 /* ============================================================
-   STORY MODAL - CON SUBTÍTULOS Y COMENTARIOS MEJORADOS
+   STORY MODAL - CON SUBTÍTULOS, COMENTARIOS MEJORADOS Y ELIMINAR
    ============================================================ */
 
 .modal-overlay {
@@ -367,6 +367,7 @@
     gap: 6px;
     flex: 1;
     padding: 0 4px;
+    flex-wrap: wrap;
 }
 
 .modal-actions button {
@@ -389,6 +390,10 @@
     transform: scale(0.92);
 }
 
+/* ============================================================
+   BOTÓN LIKE
+   ============================================================ */
+
 .modal-actions .btn-like-modal {
     background: rgba(255, 107, 107, 0.1);
     color: #ff6b6b;
@@ -400,19 +405,82 @@
     box-shadow: 0 4px 16px rgba(255, 107, 107, 0.2);
 }
 
+/* ============================================================
+   BOTÓN COMENTARIO
+   ============================================================ */
+
 .modal-actions .btn-comment-modal {
     background: rgba(192, 132, 252, 0.1);
     color: #c084fc;
 }
+
+/* ============================================================
+   BOTÓN COMPARTIR
+   ============================================================ */
 
 .modal-actions .btn-share-modal {
     background: rgba(255, 255, 255, 0.04);
     color: rgba(255, 255, 255, 0.3);
 }
 
+/* ============================================================
+   BOTÓN PERFIL
+   ============================================================ */
+
 .modal-actions .btn-profile-modal {
     background: rgba(192, 132, 252, 0.06);
     color: #c084fc;
+}
+
+/* ============================================================
+   BOTÓN TRADUCIR
+   ============================================================ */
+
+.modal-actions .btn-translate-modal {
+    background: rgba(192, 132, 252, 0.08);
+    color: #a78bfa;
+    border: 1px solid rgba(192, 132, 252, 0.1);
+}
+
+.modal-actions .btn-translate-modal:hover {
+    background: rgba(192, 132, 252, 0.15);
+    border-color: rgba(192, 132, 252, 0.2);
+}
+
+.modal-actions .btn-translate-modal:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+/* ============================================================
+   🔥 BOTÓN ELIMINAR - NUEVO
+   ============================================================ */
+
+.modal-actions .btn-delete-modal {
+    background: rgba(239, 68, 68, 0.12);
+    color: #ef4444;
+    border: 1px solid rgba(239, 68, 68, 0.15);
+    transition: all 0.3s ease;
+}
+
+.modal-actions .btn-delete-modal:hover {
+    background: rgba(239, 68, 68, 0.2);
+    border-color: rgba(239, 68, 68, 0.3);
+    transform: scale(1.05);
+}
+
+.modal-actions .btn-delete-modal:active {
+    transform: scale(0.92);
+}
+
+.modal-actions .btn-delete-modal:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    transform: none;
+}
+
+.modal-actions .btn-delete-modal i {
+    font-size: 13px;
 }
 
 /* ============================================================
@@ -439,6 +507,14 @@
     flex-shrink: 0;
     text-transform: uppercase;
     letter-spacing: 0.5px;
+}
+
+.comments-section .comments-title span:last-child {
+    background: rgba(255, 255, 255, 0.03);
+    padding: 1px 8px;
+    border-radius: 10px;
+    font-size: 10px;
+    color: rgba(255, 255, 255, 0.15);
 }
 
 .comments-section .comments-list {
@@ -546,6 +622,7 @@
     align-items: center;
     gap: 6px;
     margin-top: 2px;
+    flex-wrap: wrap;
 }
 
 .comment-item .comment-body .comment-meta button {
@@ -579,6 +656,10 @@
     font-size: 10px;
 }
 
+/* ============================================================
+   BOTÓN LIKE COMENTARIO
+   ============================================================ */
+
 .comment-item .comment-body .comment-meta .btn-like-comment {
     background: rgba(255, 255, 255, 0.03);
     border: 1px solid rgba(255, 255, 255, 0.04);
@@ -608,6 +689,10 @@
     margin-left: 1px;
 }
 
+/* ============================================================
+   BOTÓN RESPONDER COMENTARIO
+   ============================================================ */
+
 .comment-item .comment-body .comment-meta .btn-reply-comment {
     background: rgba(255, 255, 255, 0.03);
     border: 1px solid rgba(255, 255, 255, 0.04);
@@ -619,6 +704,10 @@
     border-color: rgba(192, 132, 252, 0.1);
     color: rgba(192, 132, 252, 0.5);
 }
+
+/* ============================================================
+   BOTÓN ELIMINAR COMENTARIO
+   ============================================================ */
 
 .comment-item .comment-body .comment-meta .btn-delete-comment {
     background: rgba(255, 255, 255, 0.03);
@@ -688,6 +777,11 @@
 
 .reply-input-container .reply-send-btn:active {
     transform: scale(0.92);
+}
+
+.reply-input-container .reply-send-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
 }
 
 /* ============================================================
@@ -808,7 +902,7 @@
 }
 
 /* ============================================================
-   RESPONSIVE
+   RESPONSIVE - MÓVIL PEQUEÑO
    ============================================================ */
 
 @media (max-width: 480px) {
@@ -952,6 +1046,10 @@
     }
 }
 
+/* ============================================================
+   RESPONSIVE - MÓVIL MUY PEQUEÑO
+   ============================================================ */
+
 @media (max-width: 380px) {
     .modal-header {
         padding: 10px 12px 8px;
@@ -1062,6 +1160,10 @@
     }
 }
 
+/* ============================================================
+   RESPONSIVE - PANTALLA BAJA
+   ============================================================ */
+
 @media (max-height: 600px) {
     .modal-header {
         padding: 8px 14px 6px;
@@ -1134,4 +1236,108 @@
         font-size: 8px;
         padding: 2px 7px;
     }
+}
+
+/* ============================================================
+   RESPONSIVE - TABLET
+   ============================================================ */
+
+@media (min-width: 768px) {
+    .modal-content {
+        border-radius: 24px;
+        max-width: 600px;
+        max-height: 90vh;
+        height: auto;
+        margin: auto;
+        box-shadow: 0 24px 80px rgba(0, 0, 0, 0.8);
+    }
+    
+    .modal-overlay {
+        padding: 20px;
+        align-items: center;
+        justify-content: center;
+    }
+    
+    .modal-media {
+        height: 340px;
+        min-height: 340px;
+        max-height: 340px;
+    }
+}
+
+@media (min-width: 1024px) {
+    .modal-content {
+        max-width: 700px;
+        max-height: 85vh;
+    }
+    
+    .modal-media {
+        height: 400px;
+        min-height: 400px;
+        max-height: 400px;
+    }
+    
+    .modal-media .text-content {
+        font-size: 26px;
+    }
+}
+
+/* ============================================================
+   SCROLLBAR PERSONALIZADA
+   ============================================================ */
+
+.modal-body::-webkit-scrollbar,
+.comments-section .comments-list::-webkit-scrollbar {
+    width: 3px;
+}
+
+.modal-body::-webkit-scrollbar-track,
+.comments-section .comments-list::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.modal-body::-webkit-scrollbar-thumb,
+.comments-section .comments-list::-webkit-scrollbar-thumb {
+    background: rgba(192, 132, 252, 0.15);
+    border-radius: 10px;
+}
+
+.modal-body::-webkit-scrollbar-thumb:hover,
+.comments-section .comments-list::-webkit-scrollbar-thumb:hover {
+    background: rgba(192, 132, 252, 0.25);
+}
+
+/* ============================================================
+   ANIMACIONES ADICIONALES
+   ============================================================ */
+
+@keyframes slideUp {
+    0% { opacity: 0; transform: translateY(10px); }
+    100% { opacity: 1; transform: translateY(0); }
+}
+
+.comment-item {
+    animation: slideUp 0.25s ease forwards;
+}
+
+.comment-item:nth-child(2) { animation-delay: 0.05s; }
+.comment-item:nth-child(3) { animation-delay: 0.1s; }
+.comment-item:nth-child(4) { animation-delay: 0.15s; }
+.comment-item:nth-child(5) { animation-delay: 0.2s; }
+
+/* ============================================================
+   BADGE DE TRADUCCIÓN
+   ============================================================ */
+
+.translation-badge-modal {
+    display: inline-block;
+    font-size: 9px;
+    color: rgba(192, 132, 252, 0.7);
+    margin-left: 6px;
+    font-weight: 400;
+}
+
+.translation-badge-modal i {
+    font-size: 8px;
+    margin-right: 2px;
 }

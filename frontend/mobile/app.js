@@ -349,15 +349,20 @@ async function init() {
 }
 
 // ============================================================
-// 🔥 UPDATE HEADER UI - CORREGIDO (SIEMPRE MUESTRA INICIAR SESIÓN)
+// 🔥 UPDATE HEADER UI - CORREGIDO (OCULTA LOGIN CUANDO HAY USUARIO)
 // ============================================================
 
 function updateHeaderUI(user) {
     const loginBtn = document.getElementById('loginBtn');
+    const userBadge = document.getElementById('userBadge');
+    const navProfile = document.getElementById('navProfile');
+    const avatar = document.getElementById('headerAvatar');
+    const name = document.getElementById('headerName');
     
     if (!user) {
-        document.getElementById('userBadge').style.display = 'none';
-        document.getElementById('navProfile').style.display = 'none';
+        // Usuario NO logueado
+        if (userBadge) userBadge.style.display = 'none';
+        if (navProfile) navProfile.style.display = 'none';
         if (loginBtn) {
             loginBtn.style.display = 'flex';
             loginBtn.innerHTML = '<i class="fas fa-sign-in-alt"></i>';
@@ -369,12 +374,13 @@ function updateHeaderUI(user) {
         return;
     }
 
-    // Usuario logueado
-    document.getElementById('userBadge').style.display = 'flex';
-    document.getElementById('navProfile').style.display = 'flex';
+    // 🔥 Usuario logueado - OCULTAR loginBtn y MOSTRAR userBadge
+    if (loginBtn) {
+        loginBtn.style.display = 'none';  // ✅ Ocultar botón de login
+    }
     
-    const avatar = document.getElementById('headerAvatar');
-    const name = document.getElementById('headerName');
+    if (userBadge) userBadge.style.display = 'flex';
+    if (navProfile) navProfile.style.display = 'flex';
 
     if (avatar) {
         avatar.src = user.avatar || getAvatar(user.fullName || user.username);
@@ -383,16 +389,6 @@ function updateHeaderUI(user) {
         };
     }
     if (name) name.textContent = user.fullName || user.username;
-
-    // 🔥 El botón SIEMPRE muestra "Iniciar sesión" y redirige al login
-    if (loginBtn) {
-        loginBtn.style.display = 'flex';
-        loginBtn.innerHTML = '<i class="fas fa-sign-in-alt"></i>';
-        loginBtn.title = 'Iniciar sesión';
-        loginBtn.onclick = () => {
-            window.location.href = '/login.html';
-        };
-    }
 }
 
 // ============================================================
