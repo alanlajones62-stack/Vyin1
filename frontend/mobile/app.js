@@ -1,6 +1,6 @@
 // ============================================================
 // app.js - VERSIÓN COMPLETA CON FEED INFINITO POR CURSOR
-// (CORREGIDO: SEPARACIÓN DE RECIENTES Y PARA TI POR ANTIGÜEDAD)
+// (CORREGIDO: REDIRIGE A LOGIN SIN SESIÓN)
 // ============================================================
 
 import {
@@ -320,6 +320,10 @@ async function init() {
         if (!isValid) {
             updateUIForLoggedOut();
             showToast('Sesión expirada', true);
+            setTimeout(() => {
+                window.location.href = '/login.html';
+            }, 500);
+            return;
         } else {
             const refreshedUser = getCurrentUser();
             if (refreshedUser) {
@@ -346,8 +350,32 @@ async function init() {
             }
         }
     } else {
+        // 🔥 SIN SESIÓN: Mostrar pantalla de login
         updateUIForLoggedOut();
-        await loadPublicFeed();
+        showToast('Inicia sesión para ver el contenido', true);
+        
+        // Mostrar mensaje en el feed
+        const container = document.getElementById('feedContainer');
+        if (container) {
+            container.innerHTML = `
+                <div class="empty-state" style="padding:60px 20px;text-align:center;">
+                    <i class="fas fa-lock" style="font-size:48px;color:#c084fc;margin-bottom:20px;display:block;"></i>
+                    <h3 style="color:#fff;margin-bottom:10px;">Contenido privado</h3>
+                    <p style="color:rgba(255,255,255,0.4);margin-bottom:20px;">Inicia sesión para ver las historias de tus amigos</p>
+                    <button onclick="window.location.href='/login.html'" 
+                            style="background:linear-gradient(135deg,#c084fc,#db2777);
+                                   border:none;
+                                   color:#fff;
+                                   padding:12px 32px;
+                                   border-radius:50px;
+                                   font-size:16px;
+                                   font-weight:600;
+                                   cursor:pointer;">
+                        <i class="fas fa-sign-in-alt"></i> Iniciar sesión
+                    </button>
+                </div>
+            `;
+        }
     }
 
     setupEvents();
@@ -383,7 +411,7 @@ function updateHeaderUI(user) {
 
     // 🔥 Usuario logueado - OCULTAR loginBtn y MOSTRAR userBadge
     if (loginBtn) {
-        loginBtn.style.display = 'none';  // ✅ Ocultar botón de login
+        loginBtn.style.display = 'none';
     }
     
     if (userBadge) userBadge.style.display = 'flex';
@@ -565,13 +593,16 @@ function hideNewStoriesBadge() {
 }
 
 // ============================================================
-// 🔥 FETCH FEED POR CURSOR - CORREGIDO CON FILTRO DE TIEMPO
+// 🔥 FETCH FEED POR CURSOR (SOLO CON SESIÓN)
 // ============================================================
 
 async function fetchFeedByCursor(filter, cursor = null) {
     const token = getToken();
     if (!token) {
-        await loadPublicFeed();
+        showToast('Inicia sesión para ver historias', true);
+        setTimeout(() => {
+            window.location.href = '/login.html';
+        }, 500);
         return;
     }
 
@@ -748,61 +779,6 @@ async function fetchUsers(userIds) {
 }
 
 // ============================================================
-// 🔥 LOAD PUBLIC FEED (PARA USUARIOS NO AUTENTICADOS)
-// ============================================================
-
-async function loadPublicFeed() {
-    try {
-        console.log('📡 Cargando feed público...');
-        
-        // Obtener historias públicas del backend
-        const res = await fetch(`${API_URL}/api/stories/public?limit=20`);
-        
-        if (!res.ok) {
-            throw new Error(`HTTP ${res.status}`);
-        }
-        
-        const data = await res.json();
-        
-        if (data.data && data.data.length > 0) {
-            // Enriquecer con datos de usuario
-            const users = await fetchUsers(data.data.map(s => s.userId));
-            const userMap = {};
-            users.forEach(u => { userMap[u.id] = u; });
-            
-            const enrichedStories = data.data.map(story => {
-                const owner = userMap[story.userId] || story.userData || story.user || {};
-                return {
-                    ...story,
-                    userData: {
-                        id: owner.id || story.userId,
-                        username: owner.username || story.username || 'usuario',
-                        fullName: owner.fullName || story.fullName || 'Usuario',
-                        avatar: owner.avatar || story.avatar || getAvatar(owner.fullName || 'U'),
-                        isVerified: owner.isVerified || false,
-                        accountType: owner.accountType || 'personal'
-                    },
-                    hasSubtitles: story.hasSubtitles || false,
-                    subtitles: story.subtitles || null,
-                    language: story.language || 'es'
-                };
-            });
-            
-            displayedStories = enrichedStories;
-            currentFilter = 'public';
-            renderFeed(displayedStories);
-            console.log(`📊 Feed público: ${displayedStories.length} historias`);
-        } else {
-            showEmptyState('No hay historias públicas disponibles. Inicia sesión para ver más contenido.');
-        }
-        
-    } catch (error) {
-        console.error('Error cargando feed público:', error);
-        showEmptyState('Error al cargar el feed público');
-    }
-}
-
-// ============================================================
 // 🔥 PRE-CARGAR SIGUIENTE PÁGINA
 // ============================================================
 
@@ -819,7 +795,7 @@ function preloadNextPage() {
 }
 
 // ============================================================
-// 🔥 LOAD MORE STORIES - CORREGIDO CON FILTRO DE TIEMPO
+// 🔥 LOAD MORE STORIES (SOLO CON SESIÓN)
 // ============================================================
 
 async function loadMoreStories(preload = false) {
@@ -967,10 +943,23 @@ function refreshFeedInBackground() {
 }
 
 // ============================================================
-// 🔥 APLICAR FILTRO
+// 🔥 APLICAR FILTRO (VERIFICA SESIÓN)
 // ============================================================
 
 function applyFilter(filter) {
+    const token = getToken();
+    
+    // 🔥 Sin sesión: redirigir a login
+    if (!token) {
+        console.log('🔒 Sin sesión - Redirigiendo a login');
+        showToast('Inicia sesión para ver historias', true);
+        setTimeout(() => {
+            window.location.href = '/login.html';
+        }, 500);
+        return;
+    }
+
+    // 🔥 Con sesión: aplicar filtros normales
     currentFilter = filter;
     displayedStories = [];
     feedCursor = null;
@@ -1338,7 +1327,13 @@ async function registerView(storyId) {
     if (isStoryViewed(storyId)) return;
 
     const token = getToken();
-    if (!token) return;
+    if (!token) {
+        console.log('🔒 Sin sesión - Redirigiendo a login');
+        setTimeout(() => {
+            window.location.href = '/login.html';
+        }, 500);
+        return;
+    }
 
     console.log(`👁️ [VIEW] Registrando vista para: ${storyId}`);
 
@@ -1633,6 +1628,15 @@ async function handleLike(storyId, btn) {
 // ============================================================
 
 async function refreshFeed() {
+    const token = getToken();
+    if (!token) {
+        showToast('Inicia sesión para actualizar', true);
+        setTimeout(() => {
+            window.location.href = '/login.html';
+        }, 500);
+        return;
+    }
+    
     console.log(`🔄 Refrescando feed: ${currentFilter}`);
     showToast('🔄 Actualizando feed...');
     
@@ -1700,6 +1704,9 @@ function setupEvents() {
         const token = getToken();
         if (!token) {
             showToast('Inicia sesión para configurar', true);
+            setTimeout(() => {
+                window.location.href = '/login.html';
+            }, 500);
             return;
         }
         const user = getCurrentUser();
@@ -1725,6 +1732,9 @@ function setupEvents() {
             openProfileModal(user.id);
         } else {
             showToast('Inicia sesión', true);
+            setTimeout(() => {
+                window.location.href = '/login.html';
+            }, 500);
         }
     });
 
@@ -1745,6 +1755,9 @@ function setupEvents() {
             }, 100);
         } else {
             showToast('Inicia sesión', true);
+            setTimeout(() => {
+                window.location.href = '/login.html';
+            }, 500);
         }
     });
 
@@ -1753,11 +1766,28 @@ function setupEvents() {
     });
 
     document.getElementById('createBtn')?.addEventListener('click', () => {
+        const token = getToken();
+        if (!token) {
+            showToast('Inicia sesión para crear historias', true);
+            setTimeout(() => {
+                window.location.href = '/login.html';
+            }, 500);
+            return;
+        }
         openCreator();
     });
 
     // 🔥 FILTRO: PARA TI
     document.getElementById('filterRanked')?.addEventListener('click', () => {
+        const token = getToken();
+        if (!token) {
+            showToast('Inicia sesión para ver historias', true);
+            setTimeout(() => {
+                window.location.href = '/login.html';
+            }, 500);
+            return;
+        }
+        
         hideNewStoriesBadge();
         document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
         document.getElementById('filterRanked').classList.add('active');
@@ -1766,6 +1796,15 @@ function setupEvents() {
 
     // 🔥 FILTRO: RECIENTES
     document.getElementById('filterRecent')?.addEventListener('click', () => {
+        const token = getToken();
+        if (!token) {
+            showToast('Inicia sesión para ver historias', true);
+            setTimeout(() => {
+                window.location.href = '/login.html';
+            }, 500);
+            return;
+        }
+        
         document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
         document.getElementById('filterRecent').classList.add('active');
         if (pendingNewStories > 0) {
@@ -1776,6 +1815,15 @@ function setupEvents() {
 
     // BOTTOM NAV
     document.getElementById('navFeed')?.addEventListener('click', () => {
+        const token = getToken();
+        if (!token) {
+            showToast('Inicia sesión para ver el feed', true);
+            setTimeout(() => {
+                window.location.href = '/login.html';
+            }, 500);
+            return;
+        }
+        
         closeExploreModal();
         closeActivityModal();
         closeStoryModal();
@@ -1793,6 +1841,9 @@ function setupEvents() {
         const token = getToken();
         if (!token) {
             showToast('Inicia sesión para explorar', true);
+            setTimeout(() => {
+                window.location.href = '/login.html';
+            }, 500);
             return;
         }
         
@@ -1814,6 +1865,9 @@ function setupEvents() {
         const token = getToken();
         if (!token) {
             showToast('Inicia sesión para ver notificaciones', true);
+            setTimeout(() => {
+                window.location.href = '/login.html';
+            }, 500);
             return;
         }
         
