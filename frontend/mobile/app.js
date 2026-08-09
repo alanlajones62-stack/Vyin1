@@ -348,14 +348,31 @@ async function init() {
     console.log('✅ App lista');
 }
 
+// ============================================================
+// 🔥 UPDATE HEADER UI - CORREGIDO (SIEMPRE MUESTRA INICIAR SESIÓN)
+// ============================================================
+
 function updateHeaderUI(user) {
+    const loginBtn = document.getElementById('loginBtn');
+    
     if (!user) {
         document.getElementById('userBadge').style.display = 'none';
-        document.getElementById('loginBtn').style.display = 'flex';
         document.getElementById('navProfile').style.display = 'none';
+        if (loginBtn) {
+            loginBtn.style.display = 'flex';
+            loginBtn.innerHTML = '<i class="fas fa-sign-in-alt"></i>';
+            loginBtn.title = 'Iniciar sesión';
+            loginBtn.onclick = () => {
+                window.location.href = '/login.html';
+            };
+        }
         return;
     }
 
+    // Usuario logueado
+    document.getElementById('userBadge').style.display = 'flex';
+    document.getElementById('navProfile').style.display = 'flex';
+    
     const avatar = document.getElementById('headerAvatar');
     const name = document.getElementById('headerName');
 
@@ -367,9 +384,15 @@ function updateHeaderUI(user) {
     }
     if (name) name.textContent = user.fullName || user.username;
 
-    document.getElementById('userBadge').style.display = 'flex';
-    document.getElementById('loginBtn').style.display = 'none';
-    document.getElementById('navProfile').style.display = 'flex';
+    // 🔥 El botón SIEMPRE muestra "Iniciar sesión" y redirige al login
+    if (loginBtn) {
+        loginBtn.style.display = 'flex';
+        loginBtn.innerHTML = '<i class="fas fa-sign-in-alt"></i>';
+        loginBtn.title = 'Iniciar sesión';
+        loginBtn.onclick = () => {
+            window.location.href = '/login.html';
+        };
+    }
 }
 
 // ============================================================

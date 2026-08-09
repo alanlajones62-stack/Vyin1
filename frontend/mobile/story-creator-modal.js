@@ -26,6 +26,7 @@ let processedVideoData = null;
 let zoomLevel = 1;
 let selectedTextBg = '#1a1a2e';
 let captureMode = 'video';
+let isPublishing = false; // 🔥 Prevenir duplicados
 
 // ============================================================
 // PALETA DE COLORES MODERNA
@@ -70,6 +71,7 @@ export async function openCreator() {
     isCreatorOpen = true;
     processedVideoData = null;
     captureMode = 'video';
+    isPublishing = false;
 
     // Crear el HTML si no existe
     const overlay = safeGetElement('creatorOverlay');
@@ -77,7 +79,6 @@ export async function openCreator() {
         createCreatorHTML();
     }
 
-    // Ahora obtener el overlay recién creado
     const overlayEl = safeGetElement('creatorOverlay');
     if (overlayEl) {
         overlayEl.classList.add('active');
@@ -90,6 +91,7 @@ export async function openCreator() {
 
 export function closeCreator() {
     isCreatorOpen = false;
+    isPublishing = false;
     resetCreatorState();
 
     if (mediaRecorder && mediaRecorder.state === 'recording') {
@@ -109,7 +111,7 @@ export function closeCreator() {
 }
 
 // ============================================================
-// RESETEAR ESTADO - CON VERIFICACIÓN DE ELEMENTOS
+// RESETEAR ESTADO
 // ============================================================
 
 function resetCreatorState() {
@@ -163,30 +165,29 @@ function resetCreatorState() {
 // ============================================================
 
 function createCreatorHTML() {
-    // Verificar que no exista ya
     if (safeGetElement('creatorOverlay')) return;
 
     const html = `
         <div id="creatorOverlay" class="creator-overlay">
             
-            <!-- ===== CAPA 1: PREVIEW ===== -->
+            <!-- PREVIEW -->
             <div class="creator-preview" id="creatorPreview"></div>
 
-            <!-- ===== CAPA 2: RECORDING OVERLAY ===== -->
+            <!-- RECORDING OVERLAY -->
             <div class="recording-overlay" id="recordingOverlay">
                 <div class="recording-timer" id="recordTimer">00:00</div>
             </div>
 
-            <!-- ===== CAPA 3: ZOOM INDICATOR ===== -->
+            <!-- ZOOM INDICATOR -->
             <div class="zoom-indicator" id="zoomIndicator">1x</div>
 
-            <!-- ===== CAPA 4: SUBTÍTULOS ===== -->
+            <!-- SUBTÍTULOS -->
             <div class="subtitles-status" id="subtitlesStatus">
                 <i class="fas fa-closed-captioning"></i>
                 <span id="subtitlesText">Generando subtítulos...</span>
             </div>
 
-            <!-- ===== CAPA 5: TEXT TOOLS (colores) ===== -->
+            <!-- TEXT TOOLS -->
             <div class="text-tools" id="textTools">
                 ${COLOR_PALETTE.map(color => `
                     <button class="btn-bg ${color === selectedTextBg ? 'active' : ''}" 
@@ -198,7 +199,7 @@ function createCreatorHTML() {
                 </button>
             </div>
 
-            <!-- ===== CAPA 6: CAPTURE ACTIONS (Rehacer/Usar) ===== -->
+            <!-- CAPTURE ACTIONS -->
             <div class="capture-actions" id="captureActions">
                 <button class="btn-retake" onclick="window.retakeMedia()">
                     <i class="fas fa-undo"></i>
@@ -210,7 +211,7 @@ function createCreatorHTML() {
                 </button>
             </div>
 
-            <!-- ===== CAPA 7: INPUT DE TÍTULO ===== -->
+            <!-- INPUT DE TÍTULO -->
             <div class="input-area" id="inputArea">
                 <div class="input-wrapper">
                     <i class="fas fa-pencil-alt"></i>
@@ -219,7 +220,7 @@ function createCreatorHTML() {
                 </div>
             </div>
 
-            <!-- ===== CAPA 8: CONTROLES SUPERIORES ===== -->
+            <!-- CONTROLES SUPERIORES -->
             <div class="top-controls">
                 <button class="btn-close" onclick="window.closeCreator()">
                     <i class="fas fa-chevron-down"></i>
@@ -230,7 +231,7 @@ function createCreatorHTML() {
                 </button>
             </div>
 
-            <!-- ===== CAPA 9: SELECTOR DE MODO ===== -->
+            <!-- 🔥 SELECTOR DE MODO CON BOTÓN DE GIRO -->
             <div class="mode-selector" id="modeSelector">
                 <button class="mode-btn active" data-mode="video">
                     <i class="fas fa-video"></i>
@@ -240,9 +241,13 @@ function createCreatorHTML() {
                     <i class="fas fa-camera"></i>
                     <span>Foto</span>
                 </button>
+                <button class="mode-btn flip-btn" id="flipCameraBtn" title="Girar cámara">
+                    <i class="fas fa-sync-alt"></i>
+                    <span>Girar</span>
+                </button>
             </div>
 
-            <!-- ===== CAPA 10: CONTROLES INFERIORES ===== -->
+            <!-- CONTROLES INFERIORES -->
             <div class="bottom-controls" id="bottomControls">
                 <button class="btn-gallery" onclick="window.openGallery()">
                     <i class="fas fa-image"></i>
@@ -303,6 +308,16 @@ function setupCreatorEvents() {
         });
     });
 
+    // 🔥 BOTÓN DE GIRO DE CÁMARA
+    const flipBtn = safeGetElement('flipCameraBtn');
+    flipBtn?.addEventListener('click', () => {
+        if (cameraStream && !mediaType) {
+            flipCamera();
+        } else {
+            showToast('No hay cámara activa', true);
+        }
+    });
+
     const captionInput = safeGetElement('creatorCaption');
     captionInput?.addEventListener('input', (e) => {
         const counter = safeGetElement('charCounter');
@@ -331,6 +346,25 @@ function setupCreatorEvents() {
             closeCreator();
         }
     });
+}
+
+// ============================================================
+// 🔥 GIRAR CÁMARA
+// ============================================================
+
+async function flipCamera() {
+    if (!cameraStream) {
+        showToast('No hay cámara activa', true);
+        return;
+    }
+
+    // Cambiar modo de la cámara
+    facingMode = facingMode === 'environment' ? 'user' : 'environment';
+    showToast(facingMode === 'user' ? '📸 Cámara frontal' : '📸 Cámara trasera');
+
+    // Reiniciar cámara con el nuevo modo
+    stopCamera();
+    await startCamera();
 }
 
 // ============================================================
@@ -364,6 +398,7 @@ window.backToCamera = function() {
         preview.style.background = '#000';
     }
     
+    mediaType = null;
     startCamera();
 };
 
@@ -384,7 +419,6 @@ async function startCamera() {
         const preview = safeGetElement('creatorPreview');
         if (!preview) return;
 
-        // Limpiar preview
         preview.innerHTML = '';
 
         const video = document.createElement('video');
@@ -397,15 +431,16 @@ async function startCamera() {
         preview.appendChild(video);
         cameraVideo = video;
 
-        const stream = await navigator.mediaDevices.getUserMedia({
+        const constraints = {
             video: { 
                 facingMode: facingMode,
                 width: { ideal: 1080 },
                 height: { ideal: 1920 }
             },
             audio: true
-        });
+        };
 
+        const stream = await navigator.mediaDevices.getUserMedia(constraints);
         cameraStream = stream;
         video.srcObject = stream;
 
@@ -417,6 +452,10 @@ async function startCamera() {
         
         const bottomControls = safeGetElement('bottomControls');
         if (bottomControls) bottomControls.style.display = 'flex';
+
+        // 🔥 Mostrar el botón de flip solo si hay cámara
+        const flipBtn = safeGetElement('flipCameraBtn');
+        if (flipBtn) flipBtn.style.display = 'flex';
 
     } catch (error) {
         console.error('Error al acceder a la cámara:', error);
@@ -491,6 +530,10 @@ function capturePhoto() {
             if (bottomControls) bottomControls.style.display = 'none';
             
             stopCamera();
+
+            // 🔥 Ocultar botón de flip
+            const flipBtn = safeGetElement('flipCameraBtn');
+            if (flipBtn) flipBtn.style.display = 'none';
         }
     }, 'image/jpeg', 0.9);
 }
@@ -596,6 +639,10 @@ window.retakeMedia = function() {
         preview.style.background = '#000';
     }
     
+    // 🔥 Mostrar botón de flip
+    const flipBtn = safeGetElement('flipCameraBtn');
+    if (flipBtn) flipBtn.style.display = 'flex';
+    
     startCamera();
 };
 
@@ -659,6 +706,9 @@ window.openGallery = function() {
             
             showToast('✅ Imagen seleccionada');
             stopCamera();
+
+            const flipBtn = safeGetElement('flipCameraBtn');
+            if (flipBtn) flipBtn.style.display = 'none';
         }
         document.body.removeChild(input);
     };
@@ -707,6 +757,50 @@ window.createTextStory = function() {
                 if (inputAreaEl) inputAreaEl.style.display = 'block';
             }
         });
+
+        // 🔥 Botón para salir del modo texto
+        const exitTextBtn = document.createElement('button');
+        exitTextBtn.className = 'btn-exit-text';
+        exitTextBtn.innerHTML = '<i class="fas fa-times"></i> Salir';
+        exitTextBtn.onclick = () => {
+            resetCreatorState();
+            const previewEl = safeGetElement('creatorPreview');
+            if (previewEl) {
+                previewEl.innerHTML = '';
+                previewEl.style.background = '#000';
+            }
+            const textToolsEl = safeGetElement('textTools');
+            if (textToolsEl) textToolsEl.style.display = 'none';
+            const inputAreaEl = safeGetElement('inputArea');
+            if (inputAreaEl) inputAreaEl.style.display = 'none';
+            const publishBtnEl = safeGetElement('publishBtn');
+            if (publishBtnEl) publishBtnEl.disabled = true;
+            const modeSelectorEl = safeGetElement('modeSelector');
+            if (modeSelectorEl) modeSelectorEl.style.display = 'flex';
+            const bottomControlsEl = safeGetElement('bottomControls');
+            if (bottomControlsEl) bottomControlsEl.style.display = 'flex';
+            mediaType = null;
+            startCamera();
+        };
+        exitTextBtn.style.cssText = `
+            position: absolute;
+            bottom: 100px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(255,255,255,0.1);
+            border: none;
+            color: #fff;
+            padding: 8px 20px;
+            border-radius: 50px;
+            font-size: 13px;
+            cursor: pointer;
+            backdrop-filter: blur(10px);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            z-index: 15;
+        `;
+        preview.appendChild(exitTextBtn);
     }
     mediaType = 'text';
     mediaFile = null;
@@ -716,6 +810,9 @@ window.createTextStory = function() {
     if (publishBtn) publishBtn.disabled = true;
     
     stopCamera();
+
+    const flipBtn = safeGetElement('flipCameraBtn');
+    if (flipBtn) flipBtn.style.display = 'none';
 };
 
 // ============================================================
@@ -749,6 +846,9 @@ async function handleVideoFile(file) {
     
     const bottomControls = safeGetElement('bottomControls');
     if (bottomControls) bottomControls.style.display = 'none';
+
+    const flipBtn = safeGetElement('flipCameraBtn');
+    if (flipBtn) flipBtn.style.display = 'none';
 
     // Preguntar si quiere subtítulos
     const addSubtitles = confirm('🎬 ¿Agregar subtítulos al video?');
@@ -866,10 +966,16 @@ async function processVideoWithSubtitles(file) {
 }
 
 // ============================================================
-// PUBLICAR - VERSIÓN CORREGIDA
+// PUBLICAR - VERSIÓN CORREGIDA (SIN DUPLICADOS)
 // ============================================================
 
 window.publishStory = async function() {
+    // 🔥 Prevenir publicaciones duplicadas
+    if (isPublishing) {
+        console.log('⏳ Ya se está publicando...');
+        return;
+    }
+
     const token = getToken();
     if (!token) {
         showToast('Inicia sesión para publicar', true);
@@ -878,6 +984,9 @@ window.publishStory = async function() {
 
     const publishBtn = safeGetElement('publishBtn');
     const caption = safeGetElement('creatorCaption');
+
+    // 🔥 Marcar como publicando
+    isPublishing = true;
 
     if (publishBtn) {
         publishBtn.disabled = true;
@@ -892,7 +1001,7 @@ window.publishStory = async function() {
         let segments = null;
 
         // ============================================================
-        // 🔥 TEXTO
+        // TEXTO
         // ============================================================
         if (mediaType === 'text') {
             const textInput = safeGetElement('textContent');
@@ -903,7 +1012,7 @@ window.publishStory = async function() {
         }
 
         // ============================================================
-        // 🔥 VIDEO (CON O SIN SUBTÍTULOS)
+        // VIDEO (CON O SIN SUBTÍTULOS)
         // ============================================================
         else if (mediaType === 'video') {
             console.log('🎬 Publicando video...');
@@ -944,7 +1053,7 @@ window.publishStory = async function() {
         }
 
         // ============================================================
-        // 🔥 IMAGEN
+        // IMAGEN
         // ============================================================
         else if (mediaType === 'image' && mediaFile) {
             console.log('📸 Publicando imagen...');
@@ -972,19 +1081,20 @@ window.publishStory = async function() {
                     publishBtn.disabled = false;
                     publishBtn.textContent = 'Siguiente';
                 }
+                isPublishing = false;
                 return;
             }
         }
 
         // ============================================================
-        // 🔥 VALIDAR
+        // VALIDAR
         // ============================================================
         if (!mediaUrl && mediaType !== 'text') {
             throw new Error('No se pudo obtener la URL del medio');
         }
 
         // ============================================================
-        // 🔥 CREAR HISTORIA
+        // CREAR HISTORIA
         // ============================================================
         console.log('📤 Publicando historia:', {
             mediaType,
@@ -1023,13 +1133,16 @@ window.publishStory = async function() {
         const story = await storyRes.json();
         showToast(hasSubtitles ? '📸 Publicada con subtítulos ✅' : '📸 Publicada');
 
+        // 🔥 Emitir evento SOLO UNA VEZ
         const socket = window.socket;
         if (socket) {
             socket.emit('user_published_story', { storyId: story.id });
         }
 
         processedVideoData = null;
+        isPublishing = false;
         closeCreator();
+        
         if (window.refreshFeed) {
             setTimeout(() => window.refreshFeed(), 500);
         }
@@ -1037,6 +1150,7 @@ window.publishStory = async function() {
     } catch (error) {
         console.error('❌ Error publicando:', error);
         showToast(error.message || 'Error al publicar', true);
+        isPublishing = false;
         if (publishBtn) {
             publishBtn.disabled = false;
             publishBtn.textContent = 'Siguiente';
@@ -1054,13 +1168,13 @@ window.publishStory = publishStory;
 window.retakeMedia = retakeMedia;
 window.useMedia = useMedia;
 window.backToCamera = backToCamera;
+window.flipCamera = flipCamera;
 
 // ============================================================
 // ESTILOS
 // ============================================================
 
 function injectStyles() {
-    // Verificar si los estilos ya están inyectados
     if (document.getElementById('creatorStyles')) return;
     
     const styles = document.createElement('style');
@@ -1393,6 +1507,9 @@ function injectStyles() {
             color: #000;
         }
         .mode-selector .mode-btn:active { transform: scale(0.95); }
+        .mode-selector .flip-btn {
+            border-left: 1px solid rgba(255,255,255,0.1);
+        }
 
         .bottom-controls {
             position: absolute;
@@ -1478,6 +1595,7 @@ function injectStyles() {
             align-items: center;
             justify-content: center;
             padding: 40px;
+            position: relative;
         }
         .text-editor textarea {
             width: 80%;

@@ -1,5 +1,5 @@
 // ============================================================
-// edit-profile-modal.js - Modal para editar perfil (CON AUTO-GUARDADO)
+// edit-profile-modal.js - Modal para editar perfil (CON AUTO-GUARDADO Y LOGOUT)
 // ============================================================
 
 import {
@@ -491,6 +491,37 @@ function injectStyles() {
             border: 1px solid rgba(192, 132, 252, 0.1);
         }
         
+        /* Logout button */
+        .edit-logout-section {
+            margin-top: 20px;
+            padding-top: 20px;
+            border-top: 1px solid rgba(255, 255, 255, 0.06);
+        }
+        .btn-logout {
+            width: 100%;
+            padding: 14px;
+            background: rgba(239, 68, 68, 0.08);
+            border: 2px solid rgba(239, 68, 68, 0.15);
+            border-radius: 12px;
+            color: #ff6b6b;
+            font-size: 15px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+            font-family: inherit;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+        }
+        .btn-logout:hover {
+            background: rgba(239, 68, 68, 0.15);
+            border-color: #ff6b6b;
+            transform: translateY(-2px);
+        }
+        .btn-logout:active { transform: scale(0.97); }
+        .btn-logout i { font-size: 16px; }
+        
         /* Scrollbar */
         .edit-profile-body::-webkit-scrollbar,
         .business-request-body::-webkit-scrollbar {
@@ -526,6 +557,7 @@ function injectStyles() {
             .privacy-option { padding: 10px 14px; }
             .privacy-option .privacy-info .title { font-size: 12px; }
             .privacy-option .privacy-info .desc { font-size: 10px; }
+            .btn-logout { font-size: 14px; padding: 12px; }
         }
         @media (max-height: 600px) {
             .edit-profile-header { padding: 10px 16px 8px; }
@@ -674,6 +706,7 @@ function createEditProfileHTML() {
     window.requestBusinessAccount = requestBusinessAccount;
     window.closeBusinessRequestModal = closeBusinessRequestModal;
     window.submitBusinessRequest = submitBusinessRequest;
+    window.handleLogout = handleLogout;
 }
 
 // ============================================================
@@ -1029,6 +1062,17 @@ function loadEditProfileData(user) {
         </div>
 
         ${businessSectionHtml}
+
+        <!-- 🔥 SECCIÓN DE CERRAR SESIÓN -->
+        <div class="edit-logout-section">
+            <button class="btn-logout" onclick="window.handleLogout()">
+                <i class="fas fa-sign-out-alt"></i>
+                Cerrar sesión
+            </button>
+            <div class="edit-helper" style="text-align:center;margin-top:8px;">
+                <i class="fas fa-info-circle"></i> Cerrarás tu sesión actual
+            </div>
+        </div>
     `;
 
     // Eventos para auto-guardado
@@ -1099,6 +1143,39 @@ function loadEditProfileData(user) {
     setTimeout(() => {
         updateSaveStatus('saved');
     }, 500);
+}
+
+// ============================================================
+// 🔥 MANEJAR CIERRE DE SESIÓN
+// ============================================================
+
+function handleLogout() {
+    if (confirm('¿Estás seguro de que quieres cerrar sesión?')) {
+        // Cerrar el modal de edición
+        closeEditProfileModal();
+        
+        // Cerrar cualquier otro modal abierto
+        const storyModal = document.getElementById('storyModalOverlay');
+        if (storyModal) storyModal.classList.remove('active');
+        
+        const profileModal = document.getElementById('profileModalOverlay');
+        if (profileModal) profileModal.classList.remove('active');
+        
+        // Ejecutar logout desde auth.js
+        import('./auth.js').then(({ logout }) => {
+            logout();
+            showToast('👋 Sesión cerrada', false);
+            // Recargar la página para limpiar el estado
+            setTimeout(() => {
+                window.location.href = '/login.html';
+            }, 500);
+        }).catch(() => {
+            // Fallback: limpiar localStorage y recargar
+            localStorage.removeItem('token');
+            localStorage.removeItem('user');
+            window.location.href = '/login.html';
+        });
+    }
 }
 
 // ============================================================
@@ -1346,5 +1423,6 @@ async function submitBusinessRequest() {
 if (typeof window !== 'undefined') {
     window.openEditProfileModal = openEditProfileModal;
     window.closeEditProfileModal = closeEditProfileModal;
+    window.handleLogout = handleLogout;
     console.log('✅ edit-profile-modal: Funciones asignadas a window');
 }
