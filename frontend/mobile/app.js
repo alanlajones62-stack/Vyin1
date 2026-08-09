@@ -350,32 +350,9 @@ async function init() {
             }
         }
     } else {
-        // 🔥 SIN SESIÓN: Mostrar pantalla de login
+        // 🔥 SIN SESIÓN: Mostrar pantalla de login mejorada
         updateUIForLoggedOut();
-        showToast('Inicia sesión para ver el contenido', true);
-        
-        // Mostrar mensaje en el feed
-        const container = document.getElementById('feedContainer');
-        if (container) {
-            container.innerHTML = `
-                <div class="empty-state" style="padding:60px 20px;text-align:center;">
-                    <i class="fas fa-lock" style="font-size:48px;color:#c084fc;margin-bottom:20px;display:block;"></i>
-                    <h3 style="color:#fff;margin-bottom:10px;">Contenido privado</h3>
-                    <p style="color:rgba(255,255,255,0.4);margin-bottom:20px;">Inicia sesión para ver las historias de tus amigos</p>
-                    <button onclick="window.location.href='/login.html'" 
-                            style="background:linear-gradient(135deg,#c084fc,#db2777);
-                                   border:none;
-                                   color:#fff;
-                                   padding:12px 32px;
-                                   border-radius:50px;
-                                   font-size:16px;
-                                   font-weight:600;
-                                   cursor:pointer;">
-                        <i class="fas fa-sign-in-alt"></i> Iniciar sesión
-                    </button>
-                </div>
-            `;
-        }
+        showLoginScreen();
     }
 
     setupEvents();
@@ -384,7 +361,112 @@ async function init() {
 }
 
 // ============================================================
-// 🔥 UPDATE HEADER UI - CORREGIDO (OCULTA LOGIN CUANDO HAY USUARIO)
+// 🔥 SHOW LOGIN SCREEN - MEJORADA
+// ============================================================
+
+function showLoginScreen() {
+    const container = document.getElementById('feedContainer');
+    if (!container) return;
+
+    container.innerHTML = `
+        <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:70vh;padding:40px 24px;text-align:center;animation:fadeIn 0.6s ease;">
+            <!-- Logo -->
+            <div style="width:100px;height:100px;background:linear-gradient(135deg,#c084fc,#db2777);border-radius:50%;display:flex;align-items:center;justify-content:center;margin-bottom:28px;box-shadow:0 12px 48px rgba(192,132,252,0.25);">
+                <i class="fas fa-camera" style="font-size:42px;color:#fff;"></i>
+            </div>
+            
+            <h2 style="color:#fff;font-size:24px;font-weight:700;margin-bottom:8px;">Bienvenido a Vyin</h2>
+            <p style="color:rgba(255,255,255,0.35);font-size:14px;margin-bottom:32px;max-width:300px;">
+                Descubre historias, conecta con amigos y comparte momentos únicos
+            </p>
+            
+            <!-- Botón de login mejorado -->
+            <button onclick="window.location.href='/login.html'" 
+                    style="background:linear-gradient(135deg,#c084fc,#db2777);
+                           border:none;
+                           color:#fff;
+                           padding:16px 48px;
+                           border-radius:50px;
+                           font-size:17px;
+                           font-weight:700;
+                           cursor:pointer;
+                           display:flex;
+                           align-items:center;
+                           gap:12px;
+                           transition:all 0.3s ease;
+                           box-shadow:0 8px 32px rgba(192,132,252,0.3);
+                           position:relative;
+                           overflow:hidden;
+                           letter-spacing:0.5px;">
+                <i class="fas fa-sign-in-alt" style="font-size:18px;"></i>
+                Iniciar sesión
+                <span style="position:absolute;top:-50%;left:-50%;width:200%;height:200%;background:radial-gradient(circle,rgba(255,255,255,0.1) 0%,transparent 70%);transform:scale(0);transition:transform 0.5s ease;"></span>
+            </button>
+            
+            <div style="margin-top:16px;display:flex;gap:20px;align-items:center;">
+                <span style="color:rgba(255,255,255,0.08);font-size:12px;">¿No tienes cuenta?</span>
+                <a href="/register.html" style="color:#c084fc;font-size:13px;font-weight:600;text-decoration:none;transition:color 0.3s;">
+                    Regístrate gratis
+                    <i class="fas fa-arrow-right" style="font-size:10px;margin-left:4px;"></i>
+                </a>
+            </div>
+            
+            <!-- Características -->
+            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-top:40px;width:100%;max-width:320px;">
+                <div style="background:rgba(255,255,255,0.03);border-radius:12px;padding:12px 8px;border:1px solid rgba(255,255,255,0.04);">
+                    <i class="fas fa-camera" style="color:#c084fc;font-size:16px;margin-bottom:4px;display:block;"></i>
+                    <span style="color:rgba(255,255,255,0.15);font-size:9px;font-weight:500;">Historias</span>
+                </div>
+                <div style="background:rgba(255,255,255,0.03);border-radius:12px;padding:12px 8px;border:1px solid rgba(255,255,255,0.04);">
+                    <i class="fas fa-users" style="color:#c084fc;font-size:16px;margin-bottom:4px;display:block;"></i>
+                    <span style="color:rgba(255,255,255,0.15);font-size:9px;font-weight:500;">Conecta</span>
+                </div>
+                <div style="background:rgba(255,255,255,0.03);border-radius:12px;padding:12px 8px;border:1px solid rgba(255,255,255,0.04);">
+                    <i class="fas fa-globe" style="color:#c084fc;font-size:16px;margin-bottom:4px;display:block;"></i>
+                    <span style="color:rgba(255,255,255,0.15);font-size:9px;font-weight:500;">Global</span>
+                </div>
+            </div>
+        </div>
+    `;
+
+    // Agregar animación fadeIn
+    const style = document.createElement('style');
+    style.textContent = `
+        @keyframes fadeIn {
+            0% { opacity: 0; transform: translateY(20px); }
+            100% { opacity: 1; transform: translateY(0); }
+        }
+        .login-btn-hover:hover {
+            transform: scale(1.05);
+            box-shadow: 0 12px 40px rgba(192,132,252,0.4);
+        }
+        .login-btn-hover:active {
+            transform: scale(0.95);
+        }
+    `;
+    document.head.appendChild(style);
+
+    // Agregar efecto hover al botón
+    const loginBtn = container.querySelector('button');
+    if (loginBtn) {
+        loginBtn.classList.add('login-btn-hover');
+        loginBtn.addEventListener('mouseenter', () => {
+            const span = loginBtn.querySelector('span');
+            if (span) {
+                span.style.transform = 'scale(1)';
+            }
+        });
+        loginBtn.addEventListener('mouseleave', () => {
+            const span = loginBtn.querySelector('span');
+            if (span) {
+                span.style.transform = 'scale(0)';
+            }
+        });
+    }
+}
+
+// ============================================================
+// 🔥 UPDATE HEADER UI
 // ============================================================
 
 function updateHeaderUI(user) {
@@ -409,7 +491,7 @@ function updateHeaderUI(user) {
         return;
     }
 
-    // 🔥 Usuario logueado - OCULTAR loginBtn y MOSTRAR userBadge
+    // Usuario logueado
     if (loginBtn) {
         loginBtn.style.display = 'none';
     }
