@@ -157,7 +157,7 @@ app.get(/.*\.js$/, (req, res) => {
         path.join(FRONTEND_DIR, cleanPath),
         path.join(FRONTEND_DIR, 'feed', path.basename(cleanPath)),
         path.join(FRONTEND_DIR, 'feed', cleanPath.replace(/^\/feed\//, '')),
-        path.join(FRONTEND_DIR, 'mobile/components', cleanPath.replace(/^\/mobile\//, '')),
+        path.join(MOBILE_DIR, cleanPath.replace(/^\/mobile\//, '')),
         path.join(MOBILE_DIR, 'components', path.basename(cleanPath)),
         path.join(__dirname, '..', cleanPath)
     ];
@@ -1174,30 +1174,36 @@ app.get('/health', (req, res) => {
 // 🔥 RUTAS DEL FRONTEND PARA RENDER
 // ============================================================
 
-// Servir archivos estáticos del frontend
-app.use(express.static(FRONTEND_DIR));
-app.use('/mobile', express.static(MOBILE_DIR));
-app.use('/uploads', express.static(UPLOADS_DIR));
+const FRONTEND_PATH = path.join(__dirname, '../frontend');
+const MOBILE_PATH = path.join(FRONTEND_PATH, 'mobile');
+
+console.log(`📁 Frontend path: ${FRONTEND_PATH}`);
+console.log(`📁 Mobile path: ${MOBILE_PATH}`);
+
+// Servir archivos estáticos
+app.use(express.static(FRONTEND_PATH));
+app.use('/mobile', express.static(MOBILE_PATH));
+app.use('/uploads', express.static(path.join(FRONTEND_PATH, 'uploads')));
 
 // Ruta principal - App móvil
 app.get('/', (req, res) => {
-    res.sendFile(path.join(MOBILE_DIR, 'components/index.html'));
+    res.sendFile(path.join(MOBILE_PATH, 'index.html'));
 });
 
 // Feed - App móvil
 app.get('/feed.html', (req, res) => {
-    res.sendFile(path.join(MOBILE_DIR, 'components/index.html'));
+    res.sendFile(path.join(MOBILE_PATH, 'index.html'));
 });
 
 // Login
 app.get('/login.html', (req, res) => {
-    res.sendFile(path.join(FRONTEND_DIR, 'login.html'));
+    res.sendFile(path.join(FRONTEND_PATH, 'login.html'));
 });
 
 // Cualquier otra ruta no API - App móvil (SPA)
 app.get('*', (req, res) => {
     if (!req.path.startsWith('/api')) {
-        res.sendFile(path.join(MOBILE_DIR, 'components/index.html'));
+        res.sendFile(path.join(MOBILE_PATH, 'index.html'));
     }
 });
 
