@@ -66,12 +66,10 @@ function openProfileModal(userId, fromFollowers = false) {
 
     console.log(`👤 Abriendo perfil: ${userId}, desde seguidores: ${fromFollowers}`);
 
-    // Si estamos abriendo el mismo perfil, no hacer nada
     if (isProfileModalOpen && currentProfileUserId === userId) {
         return;
     }
 
-    // Si hay un perfil abierto, cerrarlo
     if (isProfileModalOpen) {
         closeProfileModal();
     }
@@ -80,13 +78,11 @@ function openProfileModal(userId, fromFollowers = false) {
     isProfileModalOpen = true;
     isEditMode = false;
 
-    // Crear overlay si no existe
     const overlay = document.getElementById('profileModalOverlay');
     if (!overlay) {
         createProfileModalHTML();
     }
 
-    // Mostrar overlay
     const overlayEl = document.getElementById('profileModalOverlay');
     if (overlayEl) {
         overlayEl.style.display = 'flex';
@@ -96,16 +92,13 @@ function openProfileModal(userId, fromFollowers = false) {
 
     document.body.style.overflow = 'hidden';
 
-    // Limpiar intervalo anterior
     if (refreshInterval) {
         clearInterval(refreshInterval);
         refreshInterval = null;
     }
 
-    // Cargar datos
     loadProfileData(userId);
 
-    // Actualizar cada 15 segundos
     refreshInterval = setInterval(() => {
         if (isProfileModalOpen && currentProfileUserId === userId) {
             refreshProfileInBackground(userId);
@@ -186,7 +179,6 @@ function createProfileModalHTML() {
         }
     });
 
-    // Funciones globales
     window.closeProfileModal = closeProfileModal;
     window.openFollowersFromProfile = openFollowersFromProfile;
     window.handleProfileFollow = handleFollowUser;
@@ -226,12 +218,9 @@ function openFollowersFromProfile(filter) {
     
     console.log(`📊 Abriendo ${filter} para usuario: ${currentProfileUserId}`);
     
-    // Guardar el userId actual para pasarlo al modal de seguidores
     const userId = currentProfileUserId;
     
-    // 🔥 Abrir el modal de seguidores SIN cerrar el perfil
     import('./followers-modal.js').then(({ openFollowersModal }) => {
-        // El modal de seguidores se abrirá encima
         openFollowersModal(userId, filter);
     }).catch((err) => {
         console.error('❌ Error cargando followers-modal:', err);
@@ -252,8 +241,6 @@ async function loadProfileData(userId) {
     }
 
     try {
-        // 🔥 LIMPIAR CACHÉ para este usuario (forzar recarga)
-        // Esto asegura que no se muestren datos viejos
         clearProfileCache(userId);
 
         console.log(`📡 Cargando perfil ${userId} desde servidor...`);
@@ -277,11 +264,9 @@ async function loadProfileData(userId) {
         const user = await res.json();
         currentProfileData = user;
 
-        // Guardar en caché
         profileCache.set(userId, user);
         cleanCache();
 
-        // Cargar historias
         const storiesRes = await fetch(`${API_URL}/api/stories/user/${userId}`, {
             headers: { 'Authorization': `Bearer ${token}` }
         });
@@ -406,7 +391,6 @@ function updateStoriesOnly(stories) {
 
     grid.innerHTML = storiesHtml;
 
-    // Actualizar contador de historias
     const statNumbers = container.querySelectorAll('.profile-stats .stat .number');
     if (statNumbers.length >= 3) {
         statNumbers[2].textContent = formatNumber(stories?.length || 0);
@@ -634,7 +618,6 @@ async function handleFollowUser(userId, btn) {
                 followersEl.textContent = formatNumber(newCount);
             }
             
-            // Limpiar caché para forzar recarga
             clearProfileCache(userId);
         } else {
             showToast(data.error || 'Error al seguir', true);
@@ -690,16 +673,15 @@ function openStoryFromProfileOverlay(storyId, storiesJson, profileUserId) {
 }
 
 // ============================================================
-// 🔥 PRE-CARGAR PERFIL DEL USUARIO ACTUAL
+// 🔥 PRE-CARGAR PERFIL DEL USUARIO ACTUAL (SIN EXPORT AQUÍ)
 // ============================================================
 
-export function preloadCurrentUserProfile() {
+function preloadCurrentUserProfile() {
     const currentUser = getCurrentUser();
     if (!currentUser || !currentUser.id) return;
     
     const userId = currentUser.id;
     
-    // Si ya está en caché, no hacer nada
     if (profileCache.has(userId)) return;
     
     console.log(`🔄 Pre-cargando perfil de ${currentUser.fullName}...`);
@@ -773,7 +755,7 @@ window.goToProfileUserFromModal = function() {
 };
 
 // ============================================================
-// EXPORTAR
+// ✅ EXPORTAR - UNA SOLA VEZ
 // ============================================================
 
 export { 
