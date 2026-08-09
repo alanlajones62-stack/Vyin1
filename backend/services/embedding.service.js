@@ -1,17 +1,19 @@
-// backend/services/embedding.service.js - VERSIÓN COMPLETA CON MODELO MULTILINGÜE
+// backend/services/embedding.service.js - VERSIÓN CORREGIDA (SIN MODELO DE IA)
 
 const fs = require('fs');
 const path = require('path');
 
 // ============================================================
-// CONFIGURACIÓN - MODELO MULTILINGÜE CORRECTO
+// 🔥 CONFIGURACIÓN - DESACTIVAR EMBEDDINGS PARA PRODUCCIÓN
 // ============================================================
 
 const EMBEDDING_CACHE_FILE = path.join(__dirname, '../data/embeddings.json');
-// ✅ MODELO MULTILINGÜE - SOPORTA 100+ IDIOMAS
+const EMBEDDINGS_ENABLED = false;  // ← 🔥 CAMBIAR A false para ahorrar memoria
 const MODEL_NAME = 'Xenova/paraphrase-multilingual-MiniLM-L12-v2';
 const EMBEDDING_DIMENSION = 384;
-const SIMILARITY_THRESHOLD = 0.45; // Reducido para más resultados
+const SIMILARITY_THRESHOLD = 0.45;
+
+console.log(`🔧 [Embeddings] ${EMBEDDINGS_ENABLED ? 'ACTIVADOS' : 'DESACTIVADOS (modo ahorro de memoria)'}`);
 
 // ============================================================
 // CLASE PRINCIPAL DEL SERVICIO DE EMBEDDINGS
@@ -26,18 +28,30 @@ class EmbeddingService {
         this.dimension = EMBEDDING_DIMENSION;
         this.modelName = MODEL_NAME;
         this._loadCache();
-        this._loadModel();
+        
+        // 🔥 SOLO CARGAR EL MODELO SI ESTÁ ACTIVADO
+        if (EMBEDDINGS_ENABLED) {
+            this._loadModel();
+        } else {
+            console.log('⏭️ [Embeddings] Modelo NO cargado (ahorrando memoria)');
+            this.isLoaded = false;
+        }
     }
 
     /**
-     * Carga el modelo de embeddings
+     * Carga el modelo de embeddings (solo si está activado)
      */
     async _loadModel() {
         if (this.isLoading) return;
+        if (!EMBEDDINGS_ENABLED) {
+            this.isLoaded = false;
+            return;
+        }
+        
         this.isLoading = true;
         
         try {
-            console.log(`🔄 Cargando modelo multilingüe: ${this.modelName}`);
+            console.log(`🔄 [Embeddings] Cargando modelo multilingüe: ${this.modelName}`);
             console.log('⏳ Esto puede tomar unos segundos la primera vez...');
             console.log('🌐 Soporte para 100+ idiomas (español, inglés, portugués, etc.)');
             
@@ -69,7 +83,7 @@ class EmbeddingService {
                     const test = await this.model(text, { pooling: 'mean', normalize: true });
                     if (test && test.data) {
                         this.isLoaded = true;
-                        console.log(`✅ Modelo multilingüe cargado correctamente: ${this.modelName}`);
+                        console.log(`✅ [Embeddings] Modelo multilingüe cargado correctamente`);
                         console.log(`📊 Dimensión del embedding: ${this.dimension}`);
                         console.log(`🌐 Idiomas soportados: 100+`);
                         break;
@@ -77,11 +91,11 @@ class EmbeddingService {
                 }
             } catch (testError) {
                 console.warn('⚠️ El modelo cargó pero la prueba falló:', testError.message);
-                this.isLoaded = true; // Asumimos que funciona
+                this.isLoaded = true;
             }
             
         } catch (error) {
-            console.error('❌ Error cargando modelo multilingüe:', error.message);
+            console.error('❌ [Embeddings] Error cargando modelo multilingüe:', error.message);
             console.log('💡 Usando modo de respaldo (embeddings sintéticos)');
             this.isLoaded = false;
         } finally {
@@ -97,10 +111,10 @@ class EmbeddingService {
             if (fs.existsSync(EMBEDDING_CACHE_FILE)) {
                 const data = fs.readFileSync(EMBEDDING_CACHE_FILE, 'utf8');
                 this.embeddingsCache = JSON.parse(data);
-                console.log(`📦 Embeddings cargados: ${this.embeddingsCache.length} textos`);
+                console.log(`📦 [Embeddings] Cargados ${this.embeddingsCache.length} embeddings del caché`);
             } else {
                 this.embeddingsCache = [];
-                console.log('📦 Archivo de embeddings no encontrado, creando nuevo');
+                console.log('📦 [Embeddings] Archivo de embeddings no encontrado, creando nuevo');
             }
         } catch (error) {
             console.error('❌ Error cargando embeddings:', error);
@@ -114,7 +128,7 @@ class EmbeddingService {
     _saveCache() {
         try {
             fs.writeFileSync(EMBEDDING_CACHE_FILE, JSON.stringify(this.embeddingsCache, null, 2));
-            console.log(`💾 Embeddings guardados: ${this.embeddingsCache.length} textos`);
+            console.log(`💾 [Embeddings] Guardados ${this.embeddingsCache.length} embeddings en caché`);
         } catch (error) {
             console.error('❌ Error guardando embeddings:', error);
         }
@@ -131,8 +145,13 @@ class EmbeddingService {
         // Limpiar texto - preservar caracteres multilingües
         const cleaned = text.trim().substring(0, 1000);
 
+        // 🔥 SI ESTÁ DESACTIVADO, USAR MODO SINTÉTICO
+        if (!EMBEDDINGS_ENABLED || !this.isLoaded) {
+            return this._generateSyntheticEmbedding(cleaned);
+        }
+
         try {
-            if (this.isLoaded && this.model) {
+            if (this.model) {
                 // Usar modelo real con pooling mean y normalización
                 const result = await this.model(cleaned, { 
                     pooling: 'mean',
@@ -387,6 +406,7 @@ class EmbeddingService {
         });
 
         return {
+            enabled: EMBEDDINGS_ENABLED,
             totalEmbeddings: this.embeddingsCache.length,
             dimension: this.dimension,
             threshold: SIMILARITY_THRESHOLD,
@@ -445,7 +465,7 @@ class EmbeddingService {
      * Verifica si el modelo está listo
      */
     isReady() {
-        return this.isLoaded;
+        return this.isLoaded && EMBEDDINGS_ENABLED;
     }
 
     /**
@@ -485,10 +505,12 @@ async function getEmbeddingService() {
         try {
             instance = new EmbeddingService();
             
-            // Esperar a que el modelo cargue (máximo 30 segundos)
-            await instance.waitForModel(30000);
+            // Esperar a que el modelo cargue (máximo 30 segundos) - SOLO SI ESTÁ ACTIVADO
+            if (EMBEDDINGS_ENABLED) {
+                await instance.waitForModel(30000);
+            }
             
-            console.log(`✅ EmbeddingService ${instance.isLoaded ? 'cargado' : 'en modo fallback'}`);
+            console.log(`✅ [EmbeddingService] ${instance.isLoaded ? 'cargado' : 'en modo fallback (sin IA)'}`);
         } catch (error) {
             console.error('❌ Error inicializando EmbeddingService:', error);
             instance = new EmbeddingService();
@@ -502,6 +524,7 @@ async function getEmbeddingService() {
 module.exports = {
     getEmbeddingService,
     EmbeddingService,
+    EMBEDDINGS_ENABLED,
     SIMILARITY_THRESHOLD,
     EMBEDDING_DIMENSION,
     MODEL_NAME
