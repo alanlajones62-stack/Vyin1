@@ -1,5 +1,5 @@
-// profile-modal.js - Modal para ver perfil de usuario (VERSIÓN SIMPLIFICADA)
-// CON RESTAURACIÓN DE NAVEGACIÓN A INICIO
+// profile-modal.js - Modal para ver perfil de usuario
+// CON NAVEGACIÓN EN CASCADA Y SOPORTE PARA RETORNO A SEGUIDORES
 
 import {
     getToken, getCurrentUser, showToast,
@@ -110,11 +110,14 @@ function openProfileModal(userId, fromFollowers = false) {
 }
 
 // ============================================================
-// CERRAR MODAL DE PERFIL
+// CERRAR MODAL DE PERFIL - CON SOPORTE PARA VOLVER A SEGUIDORES
 // ============================================================
 
 function closeProfileModal() {
     console.log('🔒 Cerrando perfil');
+    
+    // 🔥 Verificar si debemos volver a seguidores
+    const shouldReturnToFollowers = window._followersContext?.returnToFollowers === true;
     
     if (isEditMode) {
         if (typeof window.closeEditProfileModal === 'function') {
@@ -138,6 +141,38 @@ function closeProfileModal() {
     isProfileModalOpen = false;
     currentProfileUserId = null;
     currentProfileData = null;
+
+    // 🔥 Si debemos volver a seguidores, restaurar el modal de seguidores
+    if (shouldReturnToFollowers && window._followersContext) {
+        const context = window._followersContext;
+        console.log(`🔄 Volviendo a seguidores de usuario: ${context.parentUserId}, filtro: ${context.parentFilter}`);
+        
+        // Limpiar el contexto
+        const parentUserId = context.parentUserId;
+        const parentFilter = context.parentFilter;
+        window._followersContext = null;
+        
+        // Restaurar el modal de seguidores
+        const followersOverlay = document.getElementById('followersModalOverlay');
+        if (followersOverlay) {
+            followersOverlay.style.display = 'flex';
+            followersOverlay.classList.add('active');
+            followersOverlay.style.zIndex = '10004';
+            
+            // Recargar los datos del modal de seguidores
+            if (typeof window.restoreFollowersData === 'function') {
+                window.restoreFollowersData(parentUserId, parentFilter);
+            } else {
+                // Fallback: importar y llamar
+                import('./followers-modal.js').then(({ openFollowersModal }) => {
+                    openFollowersModal(parentUserId, parentFilter);
+                }).catch(() => {});
+            }
+        }
+        
+        document.body.style.overflow = 'hidden';
+        return;
+    }
 
     document.body.style.overflow = '';
     restoreNavToHome();
@@ -179,6 +214,7 @@ function createProfileModalHTML() {
         }
     });
 
+    // Funciones globales
     window.closeProfileModal = closeProfileModal;
     window.openFollowersFromProfile = openFollowersFromProfile;
     window.handleProfileFollow = handleFollowUser;
@@ -673,7 +709,7 @@ function openStoryFromProfileOverlay(storyId, storiesJson, profileUserId) {
 }
 
 // ============================================================
-// 🔥 PRE-CARGAR PERFIL DEL USUARIO ACTUAL (SIN EXPORT AQUÍ)
+// 🔥 PRE-CARGAR PERFIL DEL USUARIO ACTUAL
 // ============================================================
 
 function preloadCurrentUserProfile() {
