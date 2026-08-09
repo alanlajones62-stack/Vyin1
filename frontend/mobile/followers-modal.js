@@ -1,6 +1,6 @@
 // ============================================================
 // followers-modal.js - Modal de seguidores/seguidos
-// (CON BARRA DE BÚSQUEDA Y FILTROS - NAVEGACIÓN EN CASCADA)
+// (VERSIÓN SIMPLIFICADA Y CORREGIDA)
 // ============================================================
 
 import { getToken, getCurrentUser, showToast, getAvatar, escapeHtml } from './auth.js';
@@ -19,9 +19,6 @@ let followingList = [];
 let filteredList = [];
 let searchQuery = '';
 let isLoading = false;
-let isOpeningProfile = false;
-let parentProfileId = null;
-let parentFilter = null;
 
 // ============================================================
 // ABRIR MODAL DE SEGUIDORES
@@ -44,11 +41,15 @@ async function openFollowersModal(userId, filter = 'followers') {
 
     console.log(`📊 Abriendo modal de seguidores: userId=${userId}, filter=${filter}`);
 
+    // 🔥 RESETEAR ESTADO COMPLETAMENTE
     currentUserId = userId;
     currentFilter = filter;
     searchQuery = '';
+    followersList = [];
+    followingList = [];
+    filteredList = [];
     isFollowersModalOpen = true;
-    isOpeningProfile = false;
+    isLoading = false;
 
     const overlay = document.getElementById('followersModalOverlay');
     if (!overlay) {
@@ -73,13 +74,13 @@ async function openFollowersModal(userId, filter = 'followers') {
 
 function closeFollowersModal() {
     console.log('🔒 Cerrando modal de seguidores');
+    
     isFollowersModalOpen = false;
     currentUserId = null;
     followersList = [];
     followingList = [];
     filteredList = [];
     searchQuery = '';
-    isOpeningProfile = false;
 
     const overlay = document.getElementById('followersModalOverlay');
     if (overlay) {
@@ -89,53 +90,6 @@ function closeFollowersModal() {
     }
 
     document.body.style.overflow = '';
-    
-    // 🔥 Si hay un perfil padre, restaurarlo (cerrar seguidores y volver al perfil)
-    if (parentProfileId) {
-        console.log(`🔄 Volviendo al perfil padre: ${parentProfileId}`);
-        const profileId = parentProfileId;
-        parentProfileId = null;
-        parentFilter = null;
-        
-        // Importar y abrir el perfil padre
-        import('./profile-modal.js').then(({ openProfileModal }) => {
-            openProfileModal(profileId);
-        }).catch(() => {
-            if (typeof window.openProfileModal === 'function') {
-                window.openProfileModal(profileId);
-            }
-        });
-    }
-}
-
-// ============================================================
-// 🔥 FUNCIONES PARA NAVEGACIÓN EN CASCADA (SIN EXPORTAR AQUÍ)
-// ============================================================
-
-function setParentProfile(userId, filter) {
-    parentProfileId = userId;
-    parentFilter = filter;
-    console.log(`📌 Perfil padre guardado: ${userId}, filter: ${filter}`);
-}
-
-function restoreFollowersModal() {
-    console.log('🔄 Restaurando modal de seguidores');
-    if (parentProfileId) {
-        const userId = parentProfileId;
-        const filter = parentFilter || 'followers';
-        
-        const overlay = document.getElementById('followersModalOverlay');
-        if (overlay) {
-            overlay.style.display = 'flex';
-            overlay.classList.add('active');
-            overlay.style.zIndex = '10004';
-        }
-        currentUserId = userId;
-        currentFilter = filter;
-        isFollowersModalOpen = true;
-        document.body.style.overflow = 'hidden';
-        loadFollowersData(userId);
-    }
 }
 
 // ============================================================
@@ -220,7 +174,7 @@ function createFollowersModalHTML() {
     }
 
     document.addEventListener('keydown', (e) => {
-        if (e.key === 'Escape' && isFollowersModalOpen && !isOpeningProfile) {
+        if (e.key === 'Escape' && isFollowersModalOpen) {
             closeFollowersModal();
         }
     });
@@ -230,7 +184,6 @@ function createFollowersModalHTML() {
     window.switchFollowersTab = switchFollowersTab;
     window.handleFollowersFollow = handleFollowersFollow;
     window.openProfileFromFollowers = openProfileFromFollowers;
-    window.restoreFollowersModal = restoreFollowersModal;
     
     // Inyectar estilos
     injectFollowersStyles();
@@ -280,7 +233,7 @@ function updateModalTitle() {
 }
 
 // ============================================================
-// CARGAR DATOS DE SEGUIDORES/SEGUIDOS
+// CARGAR DATOS DE SEGUIDORES/SEGUIDOS (SIEMPRE FRESCO)
 // ============================================================
 
 async function loadFollowersData(userId) {
@@ -299,8 +252,14 @@ async function loadFollowersData(userId) {
     }
 
     try {
-        const followersRes = await fetch(`${API_URL}/api/follows/followers/${userId}`, {
-            headers: { 'Authorization': `Bearer ${token}` }
+        console.log(`📡 Cargando seguidores para userId: ${userId}`);
+
+        // 🔥 Cargar seguidores SIEMPRE del servidor, sin caché
+        const followersRes = await fetch(`${API_URL}/api/follows/followers/${userId}?t=${Date.now()}`, {
+            headers: { 
+                'Authorization': `Bearer ${token}`,
+                'Cache-Control': 'no-cache, no-store, must-revalidate'
+            }
         });
 
         if (followersRes.ok) {
@@ -310,8 +269,12 @@ async function loadFollowersData(userId) {
             console.log(`📊 Seguidores cargados: ${followersList.length}`);
         }
 
-        const followingRes = await fetch(`${API_URL}/api/follows/following/${userId}`, {
-            headers: { 'Authorization': `Bearer ${token}` }
+        // 🔥 Cargar seguidos SIEMPRE del servidor, sin caché
+        const followingRes = await fetch(`${API_URL}/api/follows/following/${userId}?t=${Date.now()}`, {
+            headers: { 
+                'Authorization': `Bearer ${token}`,
+                'Cache-Control': 'no-cache, no-store, must-revalidate'
+            }
         });
 
         if (followingRes.ok) {
@@ -473,30 +436,27 @@ window.handleFollowersFollow = async function(userId, btn) {
 };
 
 // ============================================================
-// 🔥 ABRIR PERFIL DESDE EL MODAL DE SEGUIDORES - NAVEGACIÓN EN CASCADA
+// 🔥 ABRIR PERFIL DESDE EL MODAL DE SEGUIDORES
 // ============================================================
 
 window.openProfileFromFollowers = function(userId) {
     if (!userId) return;
     
     console.log(`👤 Abriendo perfil de ${userId} desde seguidores`);
-    isOpeningProfile = true;
     
-    // Guardar el perfil padre para poder volver
-    const parentId = currentUserId;
-    const parentF = currentFilter;
+    // 🔥 Guardar el userId actual antes de abrir el perfil
+    const currentUserIdForReturn = currentUserId;
+    const currentFilterForReturn = currentFilter;
     
-    // Primero, ocultar el modal de seguidores (no cerrarlo)
+    // Primero, ocultar el modal de seguidores
     const followersOverlay = document.getElementById('followersModalOverlay');
     if (followersOverlay) {
         followersOverlay.classList.remove('active');
         followersOverlay.style.display = 'none';
     }
     
-    // Establecer el perfil padre en followers-modal
-    setParentProfile(parentId, parentF);
-    
-    // Abrir el perfil
+    // 🔥 Abrir el perfil usando la función global
+    // El perfil se abrirá encima
     import('./profile-modal.js').then(({ openProfileModal }) => {
         openProfileModal(userId);
     }).catch((err) => {
@@ -505,8 +465,13 @@ window.openProfileFromFollowers = function(userId) {
             window.openProfileModal(userId);
         } else {
             showToast('Error al abrir perfil', true);
+            // Restaurar el modal de seguidores si falla
+            if (followersOverlay) {
+                followersOverlay.style.display = 'flex';
+                followersOverlay.classList.add('active');
+                followersOverlay.style.zIndex = '10004';
+            }
         }
-        isOpeningProfile = false;
     });
 };
 
@@ -676,12 +641,8 @@ function injectFollowersStyles() {
             overflow-y: auto;
             padding: 8px 4px;
         }
-        .followers-modal-list::-webkit-scrollbar {
-            width: 3px;
-        }
-        .followers-modal-list::-webkit-scrollbar-track {
-            background: transparent;
-        }
+        .followers-modal-list::-webkit-scrollbar { width: 3px; }
+        .followers-modal-list::-webkit-scrollbar-track { background: transparent; }
         .followers-modal-list::-webkit-scrollbar-thumb {
             background: rgba(192,132,252,0.2);
             border-radius: 10px;
@@ -744,14 +705,8 @@ function injectFollowersStyles() {
             align-items: center;
             gap: 4px;
         }
-        .followers-name .verified-badge {
-            color: #c084fc;
-            font-size: 12px;
-        }
-        .followers-username {
-            font-size: 12px;
-            color: rgba(255,255,255,0.3);
-        }
+        .followers-name .verified-badge { color: #c084fc; font-size: 12px; }
+        .followers-username { font-size: 12px; color: rgba(255,255,255,0.3); }
         .followers-follow-btn {
             padding: 6px 14px;
             border-radius: 50px;
@@ -774,14 +729,8 @@ function injectFollowersStyles() {
             background: rgba(255,68,68,0.1);
             color: #ff6b6b;
         }
-        .followers-follow-btn:disabled {
-            opacity: 0.5;
-            cursor: not-allowed;
-        }
-        .followers-follow-btn i {
-            font-size: 10px;
-            margin-right: 4px;
-        }
+        .followers-follow-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        .followers-follow-btn i { font-size: 10px; margin-right: 4px; }
         @media (max-width: 480px) {
             .followers-modal-header { padding: 12px 16px 10px; }
             .followers-modal-header .title { font-size: 16px; }
@@ -824,12 +773,10 @@ function injectFollowersStyles() {
 }
 
 // ============================================================
-// ✅ EXPORTACIONES - UNA SOLA VEZ
+// ✅ EXPORTACIONES
 // ============================================================
 
 export { 
     openFollowersModal, 
-    closeFollowersModal,
-    setParentProfile,
-    restoreFollowersModal
+    closeFollowersModal
 };
