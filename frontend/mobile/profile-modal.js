@@ -199,7 +199,7 @@ function createProfileModalHTML() {
     // 🔥 FUNCIONES GLOBALES - EXPUESTAS A window
     window.closeProfileModal = closeProfileModal;
     window.openFollowersFromProfile = openFollowersFromProfile;
-    window.handleProfileFollow = handleFollowUser;  // ✅ Usar handleFollowUser
+    window.handleProfileFollow = handleFollowUser;
     window.openStoryFromProfileOverlay = openStoryFromProfileOverlay;
     window.openEditProfileFromModal = openEditProfileFromModal;
 }
@@ -225,23 +225,24 @@ function openEditProfileFromModal() {
 }
 
 // ============================================================
-// 🔥 ABRIR MODAL DE SEGUIDORES DESDE EL PERFIL
+// 🔥 ABRIR MODAL DE SEGUIDORES DESDE EL PERFIL (SUPERPUESTO)
 // ============================================================
 
 function openFollowersFromProfile(filter) {
-    if (!currentProfileUserId) return;
-    closeProfileModal();
-    setTimeout(() => {
-        import('./followers-modal.js').then(({ openFollowersModal }) => {
-            openFollowersModal(currentProfileUserId, filter);
-        }).catch(() => {
-            if (typeof window.openFollowersModal === 'function') {
-                window.openFollowersModal(currentProfileUserId, filter);
-            } else {
-                showToast('Error al abrir seguidores', true);
-            }
-        });
-    }, 100);
+    if (!currentProfileUserId) {
+        showToast('Usuario no encontrado', true);
+        return;
+    }
+    
+    console.log(`📊 Abriendo ${filter} para usuario: ${currentProfileUserId}`);
+    
+    // 🔥 IMPORTANTE: NO cerrar el perfil, solo abrir el modal de seguidores encima
+    import('./followers-modal.js').then(({ openFollowersModal }) => {
+        openFollowersModal(currentProfileUserId, filter);
+    }).catch((err) => {
+        console.error('❌ Error cargando followers-modal:', err);
+        showToast('Error al abrir seguidores', true);
+    });
 }
 
 // ============================================================
