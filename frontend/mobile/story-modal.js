@@ -1,6 +1,6 @@
 // ============================================================
 // story-modal.js - Modal para ver historias con navegación 
-// (VERSIÓN COMPLETA - USA story-comments.js PARA COMENTARIOS)
+// (VERSIÓN COMPLETA - DELEGA COMENTARIOS A story-comments.js)
 // ============================================================
 
 import {
@@ -9,7 +9,7 @@ import {
 } from './auth.js';
 
 import { formatNumber } from './utils.js';
-import { initComments, addComment } from './story-comments.js';
+import { initComments } from './story-comments.js';
 
 const API_URL = window.location.origin;
 let currentStoryId = null;
@@ -357,17 +357,8 @@ function setupModalEvents() {
         await deleteStory(currentStoryId);
     });
 
-    // 🔥 ENVÍO DE COMENTARIO - USA story-comments.js
-    document.getElementById('sendCommentBtn')?.addEventListener('click', async () => {
-        await handleSendComment();
-    });
-
-    document.getElementById('commentInput')?.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter' && !e.shiftKey) {
-            e.preventDefault();
-            handleSendComment();
-        }
-    });
+    // 🔥 LOS COMENTARIOS SON MANEJADOS POR story-comments.js
+    // NO agregar eventos de comentarios aquí
 
     let touchStartX = 0;
     let touchStartY = 0;
@@ -474,80 +465,6 @@ async function deleteStory(storyId) {
             deleteBtn.disabled = false;
             deleteBtn.innerHTML = '<i class="fas fa-trash-alt"></i> Eliminar';
         }
-    }
-}
-
-// ============================================================
-// 🔥 ENVIAR COMENTARIO - USA story-comments.js (SIN DUPLICADOS)
-// ============================================================
-
-async function handleSendComment() {
-    const input = document.getElementById('commentInput');
-    if (!input) return;
-    
-    const content = input.value.trim();
-    if (!content) {
-        showToast('Escribe un comentario', true);
-        return;
-    }
-
-    const token = getToken();
-    if (!token) {
-        showToast('Inicia sesión para comentar', true);
-        return;
-    }
-
-    if (!currentStoryId) {
-        showToast('Error: historia no cargada', true);
-        return;
-    }
-
-    input.disabled = true;
-    const sendBtn = document.getElementById('sendCommentBtn');
-    if (sendBtn) {
-        sendBtn.disabled = true;
-        sendBtn.textContent = 'Enviando...';
-    }
-
-    try {
-        // 🔥 USAR addComment DE story-comments.js
-        const newComment = await addComment(currentStoryId, content);
-        
-        if (newComment) {
-            input.value = '';
-            updateCommentCount(1);
-            
-            // ✅ SOLO mostrar toast - story-comments.js maneja TODO lo demás
-            showToast('💬 Comentario enviado');
-        }
-    } catch (error) {
-        console.error('Error enviando comentario:', error);
-        showToast('Error al enviar comentario', true);
-    } finally {
-        input.disabled = false;
-        if (sendBtn) {
-            sendBtn.disabled = false;
-            sendBtn.textContent = 'Enviar';
-        }
-        input.focus();
-    }
-}
-
-// ============================================================
-// ACTUALIZAR CONTADOR DE COMENTARIOS
-// ============================================================
-
-function updateCommentCount(increment) {
-    const commentsEl = document.getElementById('modalComments');
-    if (commentsEl) {
-        const current = parseInt(commentsEl.textContent.replace(/[^0-9]/g, '')) || 0;
-        commentsEl.textContent = formatNumber(current + increment);
-    }
-    
-    const commentsCountEl = document.getElementById('commentsCount');
-    if (commentsCountEl) {
-        const current = parseInt(commentsCountEl.textContent.replace(/[^0-9]/g, '')) || 0;
-        commentsCountEl.textContent = formatNumber(current + increment);
     }
 }
 
@@ -1266,7 +1183,7 @@ window.openProfileFromModal = function() {
 };
 
 // ============================================================
-// ✅ EXPORTACIONES - ÚNICA VEZ
+// ✅ EXPORTACIONES
 // ============================================================
 
 export { 
