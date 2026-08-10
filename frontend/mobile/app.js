@@ -1063,7 +1063,7 @@ function showEmptyState(message) {
 }
 
 // ============================================================
-// 🔥 RENDER FEED
+// 🔥 RENDER FEED - CORREGIDO (ALTURA DINÁMICA)
 // ============================================================
 
 function renderFeed(storiesData) {
@@ -1315,7 +1315,11 @@ function renderFeed(storiesData) {
         });
     });
 
-    container.scrollTop = 0;
+    // 🔥 CORREGIDO: Ya no hacemos scrollTop = 0 aquí porque rompe la navegación
+    // Solo hacemos scroll al inicio si es la primera carga
+    if (container.scrollTop > 0 && !isLoading) {
+        // No forzar scroll
+    }
 }
 
 // ============================================================
