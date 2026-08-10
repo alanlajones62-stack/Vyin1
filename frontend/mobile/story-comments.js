@@ -17,6 +17,7 @@ let commentLikes = new Map(); // commentId -> Set de userIds
 let repliesVisibility = new Map(); // commentId -> boolean (true = visible, false = oculto)
 
 // 🔥 SET PARA RASTREAR COMENTARIOS YA RENDERIZADOS (EVITA DUPLICADOS)
+// Usamos claves únicas: `${storyId}_${commentId}`
 const renderedComments = new Set();
 
 // ============================================================
@@ -89,8 +90,14 @@ export async function loadComments(storyId, forceReload = false) {
 
     if (forceReload && commentsCache.has(storyId)) {
         commentsCache.delete(storyId);
-        // 🔥 LIMPIAR SET AL RECARGAR
-        renderedComments.clear();
+        // 🔥 LIMPIAR SOLO LOS IDs DE ESTA HISTORIA
+        const toRemove = [];
+        for (const key of renderedComments) {
+            if (key.startsWith(`${storyId}_`)) {
+                toRemove.push(key);
+            }
+        }
+        toRemove.forEach(key => renderedComments.delete(key));
     }
 
     if (commentsCache.has(storyId)) {
@@ -208,18 +215,29 @@ export async function addComment(storyId, content, parentCommentId = null) {
                 const parentComment = findCommentById(comments, parentCommentId);
                 if (parentComment) {
                     if (!parentComment.replies) parentComment.replies = [];
-                    parentComment.replies.push(newComment);
-                    parentComment.replies.sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
-                    repliesVisibility.set(parentCommentId, true);
+                    // ✅ Verificar que no exista ya
+                    const exists = parentComment.replies.some(r => r.id === newComment.id);
+                    if (!exists) {
+                        parentComment.replies.push(newComment);
+                        parentComment.replies.sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
+                        repliesVisibility.set(parentCommentId, true);
+                    }
                 }
             } else {
-                comments.unshift(newComment);
+                // ✅ Verificar que no exista ya
+                const exists = comments.some(c => c.id === newComment.id);
+                if (!exists) {
+                    comments.unshift(newComment);
+                }
             }
             commentsCache.set(storyId, comments);
         }
 
-        // 🔥 ACTUALIZAR UI SIN DUPLICADOS
-        updateCommentsUI(storyId);
+        // 🔥 ACTUALIZAR UI SIN DUPLICADOS (SOLO SI EL MODAL ESTÁ ABIERTO)
+        const modalOverlay = document.getElementById('storyModalOverlay');
+        if (modalOverlay && modalOverlay.style.display !== 'none' && modalOverlay.style.display !== '') {
+            updateCommentsUI(storyId);
+        }
 
         showToast(parentCommentId ? '💬 Respuesta agregada' : '💬 Comentario agregado');
         return newComment;
@@ -272,7 +290,8 @@ export async function deleteComment(storyId, commentId, parentCommentId = null) 
         }
 
         // 🔥 ELIMINAR DEL SET DE RENDERIZADOS
-        renderedComments.delete(commentId);
+        const uniqueKey = `${storyId}_${commentId}`;
+        renderedComments.delete(uniqueKey);
         updateCommentsUI(storyId);
 
         showToast('🗑️ Eliminado');
@@ -343,10 +362,34 @@ function updateCommentsUI(storyId) {
     const container = document.getElementById('commentsList');
     if (!container) return;
     
-    const currentUser = getCurrentUser();
-    const comments = commentsCache.get(storyId) || [];
+    // 🔥 VERIFICAR QUE EL MODAL ESTÉ ABIERTO Y SEA LA MISMA HISTORIA
+    const modalOverlay = document.getElementById('storyModalOverlay');
+    if (!modalOverlay || modalOverlay.style.display === 'none') {
+        console.log('⏭️ [updateCommentsUI] Modal cerrado, omitiendo actualización');
+        return;
+    }
     
-    renderComments(comments, storyId, currentUser?.id, container);
+    const currentStoryId = window._currentStoryId || storyId;
+    if (currentStoryId !== storyId) {
+        console.log(`⏭️ [updateCommentsUI] Historia no coincide (${storyId} vs ${currentStoryId}), omitiendo`);
+        return;
+    }
+    
+    // 🔥 EVITAR RENDERIZADOS CONCURRENTES
+    if (container.dataset.updating === 'true') {
+        console.log('⚠️ [updateCommentsUI] Ya hay una actualización en progreso');
+        return;
+    }
+    
+    container.dataset.updating = 'true';
+    
+    try {
+        const currentUser = getCurrentUser();
+        const comments = commentsCache.get(storyId) || [];
+        renderComments(comments, storyId, currentUser?.id, container);
+    } finally {
+        container.dataset.updating = 'false';
+    }
 }
 
 // ============================================================
@@ -445,14 +488,28 @@ export function renderComments(comments, storyId, currentUserId, container, high
         return;
     }
 
+    // 🔥 SET LOCAL PARA EVITAR DUPLICADOS EN ESTA PASADA
+    const renderedInThisPass = new Set();
+    
     let html = '';
     
     comments.forEach(comment => {
-        // 🔥 VERIFICAR SI EL COMENTARIO YA FUE RENDERIZADO
-        if (renderedComments.has(comment.id)) {
-            console.log('⚠️ Comentario ya renderizado, omitiendo duplicado:', comment.id);
+        const uniqueKey = `${storyId}_${comment.id}`;
+        
+        // 🔥 VERIFICAR SI EL COMENTARIO YA FUE RENDERIZADO EN ESTA PASADA
+        if (renderedInThisPass.has(uniqueKey)) {
+            console.log('⚠️ Comentario duplicado en esta renderización, omitiendo:', comment.id);
             return;
         }
+        
+        // 🔥 VERIFICAR SI EL COMENTARIO YA FUE RENDERIZADO GLOBALMENTE
+        if (renderedComments.has(uniqueKey)) {
+            console.log('⚠️ Comentario ya renderizado globalmente, omitiendo:', comment.id);
+            return;
+        }
+        
+        renderedInThisPass.add(uniqueKey);
+        renderedComments.add(uniqueKey);
         
         const cachedLikes = commentLikes.get(comment.id);
         const isLiked = cachedLikes ? cachedLikes.has(currentUserId) : (comment.likes?.includes(currentUserId) || false);
@@ -463,9 +520,6 @@ export function renderComments(comments, storyId, currentUserId, container, high
         const isExpanded = repliesVisibility.get(comment.id) || false;
         
         const isHighlighted = highlightCommentId && comment.id === highlightCommentId;
-
-        // 🔥 AGREGAR AL SET DE RENDERIZADOS
-        renderedComments.add(comment.id);
 
         html += `
             <div class="comment-item ${isHighlighted ? 'highlighted' : ''}" data-comment-id="${comment.id}" style="${isHighlighted ? 'background:rgba(192,132,252,0.08);border-left:3px solid #c084fc;padding-left:10px;' : ''}">
@@ -533,23 +587,34 @@ function renderFlatReplies(replies, storyId, currentUserId, parentCommentId, all
     // Si no está expandido, no mostrar nada
     if (!isExpanded) return '';
 
+    // 🔥 SET LOCAL PARA RESPONDER DUPLICADOS EN ESTA PASADA
+    const renderedInThisPass = new Set();
+
     let html = `<div class="replies" id="replies-${parentCommentId}" style="margin-left: 40px; margin-top: 8px; display: flex; flex-direction: column; gap: 8px; border-left: 2px solid rgba(192,132,252,0.08); padding-left: 12px;">`;
     
     flatReplies.forEach((reply) => {
-        // 🔥 VERIFICAR SI LA RESPUESTA YA FUE RENDERIZADA
-        if (renderedComments.has(reply.id)) {
-            console.log('⚠️ Respuesta ya renderizada, omitiendo duplicado:', reply.id);
+        const uniqueKey = `${storyId}_${reply.id}`;
+        
+        // 🔥 VERIFICAR SI LA RESPUESTA YA FUE RENDERIZADA EN ESTA PASADA
+        if (renderedInThisPass.has(uniqueKey)) {
+            console.log('⚠️ Respuesta duplicada en esta renderización, omitiendo:', reply.id);
             return;
         }
+        
+        // 🔥 VERIFICAR SI LA RESPUESTA YA FUE RENDERIZADA GLOBALMENTE
+        if (renderedComments.has(uniqueKey)) {
+            console.log('⚠️ Respuesta ya renderizada globalmente, omitiendo:', reply.id);
+            return;
+        }
+        
+        renderedInThisPass.add(uniqueKey);
+        renderedComments.add(uniqueKey);
         
         const cachedLikes = commentLikes.get(reply.id);
         const isLiked = cachedLikes ? cachedLikes.has(currentUserId) : (reply.likes?.includes(currentUserId) || false);
         const likesCount = cachedLikes ? cachedLikes.size : (reply.likes?.length || 0);
         const isOwn = reply.userId === currentUserId;
         const isHighlighted = highlightCommentId && reply.id === highlightCommentId;
-        
-        // 🔥 AGREGAR AL SET DE RENDERIZADOS
-        renderedComments.add(reply.id);
         
         const context = getReplyContext(reply, currentUserId, reply._parentId || parentCommentId, allComments);
         
@@ -704,8 +769,14 @@ export async function initComments(storyId, containerId = 'commentsList', highli
     container.dataset.storyId = storyId;
     window._currentStoryId = storyId;
 
-    // 🔥 LIMPIAR SET ANTES DE CARGAR
-    renderedComments.clear();
+    // 🔥 LIMPIAR SOLO LOS IDs DE ESTA HISTORIA
+    const toRemove = [];
+    for (const key of renderedComments) {
+        if (key.startsWith(`${storyId}_`)) {
+            toRemove.push(key);
+        }
+    }
+    toRemove.forEach(key => renderedComments.delete(key));
 
     // FORZAR RECARGA COMPLETA DESDE EL SERVIDOR
     const comments = await loadComments(storyId, true);
