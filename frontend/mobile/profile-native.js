@@ -1,5 +1,6 @@
 // profile-native.js - Perfil nativo del usuario (SECCIÓN NATIVA)
 // OPTIMIZADO: Sin estado de carga, con precarga y actualización en tiempo real
+// 🔥 NAVEGACIÓN: Soporte para followers-modal con fromNative=true
 // ============================================================
 
 import {
@@ -596,7 +597,7 @@ window.openEditProfileFromNative = function() {
 };
 
 // ============================================================
-// ABRIR SEGUIDORES DESDE NATIVO
+// 🔥 ABRIR SEGUIDORES DESDE NATIVO - CORREGIDO
 // ============================================================
 
 window.openFollowersFromNative = function(filter) {
@@ -608,7 +609,8 @@ window.openFollowersFromNative = function(filter) {
     console.log(`📊 Abriendo ${filter} desde perfil nativo para: ${currentProfileUserId}`);
 
     import('./followers-modal.js').then(({ openFollowersModal }) => {
-        openFollowersModal(currentProfileUserId, filter, true);
+        // 🔥 CORREGIDO: pasar fromNative = true (4to parámetro)
+        openFollowersModal(currentProfileUserId, filter, true, true);
     }).catch((err) => {
         console.error('❌ Error cargando followers-modal:', err);
         showToast('Error al abrir seguidores', true);
