@@ -18,6 +18,7 @@ let currentSearchResults = [];
 let currentSearchQuery = '';
 let searchInProgress = false;
 let savedTab = 'trending'; // 🔥 Guardar la pestaña activa
+let lastLoadedData = null; // 🔥 CACHÉ DE DATOS CARGADOS
 
 // ============================================================
 // CREAR ELEMENTOS DEL MODAL
@@ -151,7 +152,7 @@ function filterPublicStories(stories) {
 }
 
 // ============================================================
-// ABRIR / CERRAR
+// 🔥 ABRIR MODAL - SIEMPRE RECARGA DATOS
 // ============================================================
 
 function openExploreModal() {
@@ -178,8 +179,52 @@ function openExploreModal() {
     exploreOverlay.classList.add('active');
     document.body.style.overflow = 'hidden';
     
+    // 🔥 CARGAR DATOS FRESCOS
     loadExploreData(tabToLoad);
 }
+
+// ============================================================
+// 🔥 MOSTRAR MODAL SIN RECARGAR (PARA VOLVER DE PERFIL)
+// ============================================================
+
+function showExploreModal() {
+    if (!exploreOverlay) {
+        createExploreModal();
+        openExploreModal();
+        return;
+    }
+    
+    console.log(`📌 Mostrando explore-modal sin recargar (pestaña: ${savedTab || currentTab})`);
+    
+    // 🔥 Restaurar la pestaña activa visualmente
+    const tabToShow = savedTab || currentTab || 'trending';
+    currentTab = tabToShow;
+    
+    const tabs = exploreOverlay.querySelectorAll('.explore-tabs button');
+    tabs.forEach(btn => {
+        const isActive = btn.dataset.tab === tabToShow;
+        btn.classList.toggle('active', isActive);
+    });
+    
+    // 🔥 Si hay datos en caché, no recargar
+    const content = document.getElementById('exploreContent');
+    if (content && lastLoadedData && lastLoadedData.tab === tabToShow) {
+        console.log(`📦 Usando datos en caché para ${tabToShow}`);
+        // No recargar, solo mostrar
+    } else {
+        console.log(`📡 No hay caché para ${tabToShow}, cargando...`);
+        // Si no hay caché, cargar datos
+        setTimeout(() => loadExploreData(tabToShow), 100);
+    }
+    
+    isOpen = true;
+    exploreOverlay.classList.add('active');
+    document.body.style.overflow = 'hidden';
+}
+
+// ============================================================
+// CERRAR
+// ============================================================
 
 function closeExploreModal() {
     isOpen = false;
@@ -554,6 +599,13 @@ async function loadExploreData(tab) {
             }
         }
         
+        // 🔥 GUARDAR EN CACHÉ PARA MOSTRAR DESPUÉS SIN RECARGAR
+        lastLoadedData = {
+            tab: tab,
+            data: data,
+            timestamp: Date.now()
+        };
+        
         renderExploreContent(tab, data);
         
     } catch (error) {
@@ -874,5 +926,6 @@ window.followUserFromExplore = async (userId, btn) => {
 
 export { 
     openExploreModal, 
+    showExploreModal, // 🔥 NUEVA FUNCIÓN EXPORTADA
     closeExploreModal 
 };
