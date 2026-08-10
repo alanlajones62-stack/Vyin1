@@ -18,7 +18,8 @@ let currentSearchQuery = '';
 let searchInProgress = false;
 let savedTab = 'trending';
 let lastLoadedData = null;
-let savedScrollPosition = 0; // 🔥 Guardar posición de scroll
+let savedScrollPosition = 0;
+let isSearchMode = false;
 
 // ============================================================
 // 🔥 CACHÉ EN localStorage PARA USUARIOS POPULARES
@@ -32,7 +33,7 @@ const CACHE_KEYS = {
     STATE: 'explore_state'
 };
 
-const CACHE_TTL = 5 * 60 * 1000; // 5 minutos
+const CACHE_TTL = 5 * 60 * 1000;
 
 function saveToCache(key, data) {
     try {
@@ -63,13 +64,14 @@ function getFromCache(key) {
     }
 }
 
-function saveExploreState(tab, query = '', results = [], scrollPos = 0) {
+function saveExploreState(tab, query = '', results = [], scrollPos = 0, isSearch = false) {
     try {
         const state = {
             tab: tab,
             query: query,
-            results: results.slice(0, 50), // Guardar más resultados
+            results: results.slice(0, 50),
             scrollPosition: scrollPos,
+            isSearchMode: isSearch,
             timestamp: Date.now()
         };
         localStorage.setItem(CACHE_KEYS.STATE, JSON.stringify(state));
@@ -153,7 +155,6 @@ function createExploreModal() {
     document.body.appendChild(overlay);
     exploreOverlay = overlay;
     
-    // Eventos
     overlay.querySelector('#closeExplore').addEventListener('click', closeExploreModal);
     overlay.addEventListener('click', (e) => {
         if (e.target === overlay) closeExploreModal();
@@ -175,7 +176,6 @@ function createExploreModal() {
             if (query.length >= 2) {
                 performSmartSearch(query);
             } else if (query.length === 0) {
-                // 🔥 Limpiar búsqueda y restaurar tabs
                 currentSearchResults = [];
                 clearSearchMode();
                 loadExploreDataWithCache(currentTab);
@@ -193,11 +193,10 @@ function createExploreModal() {
         }
     });
     
-    // 🔥 Guardar posición de scroll al hacer scroll
     const content = document.getElementById('exploreContent');
     if (content) {
         content.addEventListener('scroll', () => {
-            if (isOpen && currentSearchQuery.length >= 2) {
+            if (isOpen && isSearchMode) {
                 savedScrollPosition = content.scrollTop;
             }
         });
@@ -211,17 +210,16 @@ function createExploreModal() {
 }
 
 // ============================================================
-// 🔥 LIMPIAR MODO DE BÚSQUEDA (restaurar tabs)
+// 🔥 LIMPIAR MODO DE BÚSQUEDA
 // ============================================================
 
 function clearSearchMode() {
-    // 🔥 Quitar desactivación de tabs y restaurar estilos
+    isSearchMode = false;
     const tabs = exploreOverlay.querySelectorAll('.explore-tabs button');
     tabs.forEach(btn => {
         btn.style.opacity = '1';
         btn.style.pointerEvents = 'auto';
         btn.style.cursor = 'pointer';
-        // Restaurar el active según la pestaña actual
         const isActive = btn.dataset.tab === currentTab;
         btn.classList.toggle('active', isActive);
     });
@@ -232,15 +230,14 @@ function clearSearchMode() {
 }
 
 // ============================================================
-// 🔥 ACTIVAR MODO DE BÚSQUEDA (desactivar tabs)
+// 🔥 ACTIVAR MODO DE BÚSQUEDA
 // ============================================================
 
 function activateSearchMode() {
+    isSearchMode = true;
     const tabs = exploreOverlay.querySelectorAll('.explore-tabs button');
     tabs.forEach(btn => {
-        // 🔥 Quitar el estilo active de TODAS las tabs
         btn.classList.remove('active');
-        // Estilo visual de desactivado
         btn.style.opacity = '0.3';
         btn.style.pointerEvents = 'none';
         btn.style.cursor = 'default';
@@ -262,10 +259,6 @@ function filterPublicUsers(users) {
         return user.privacy === 'public' || user.privacy === undefined;
     });
 }
-
-// ============================================================
-// 🔥 FILTRAR HISTORIAS POR PRIVACIDAD
-// ============================================================
 
 function filterPublicStories(stories) {
     if (!stories || !Array.isArray(stories)) return [];
@@ -299,15 +292,22 @@ function openExploreModal(restoreState = true) {
             savedTab = tabToLoad;
             currentSearchQuery = savedState.query || '';
             savedScrollPosition = savedState.scrollPosition || 0;
+            isSearchMode = savedState.isSearchMode || false;
             
-            // Actualizar tabs visualmente
             const tabs = exploreOverlay.querySelectorAll('.explore-tabs button');
             tabs.forEach(btn => {
-                const isActive = btn.dataset.tab === tabToLoad;
-                btn.classList.toggle('active', isActive);
-                btn.style.opacity = '1';
-                btn.style.pointerEvents = 'auto';
-                btn.style.cursor = 'pointer';
+                if (isSearchMode) {
+                    btn.classList.remove('active');
+                    btn.style.opacity = '0.3';
+                    btn.style.pointerEvents = 'none';
+                    btn.style.cursor = 'default';
+                } else {
+                    const isActive = btn.dataset.tab === tabToLoad;
+                    btn.classList.toggle('active', isActive);
+                    btn.style.opacity = '1';
+                    btn.style.pointerEvents = 'auto';
+                    btn.style.cursor = 'pointer';
+                }
             });
             
             const searchInput = exploreOverlay.querySelector('#exploreSearchInput');
@@ -315,14 +315,11 @@ function openExploreModal(restoreState = true) {
                 searchInput.value = savedState.query || '';
             }
             
-            // 🔥 Si hay resultados de búsqueda, restaurarlos
             if (savedState.results && savedState.results.length > 0 && savedState.query) {
                 currentSearchResults = savedState.results;
-                // 🔥 Activar modo de búsqueda (desactivar tabs)
-                activateSearchMode();
+                if (!isSearchMode) activateSearchMode();
                 renderSearchResults(savedState.query, savedState.results, [], {});
                 
-                // 🔥 Restaurar posición de scroll
                 setTimeout(() => {
                     const content = document.getElementById('exploreContent');
                     if (content && savedState.scrollPosition) {
@@ -336,7 +333,6 @@ function openExploreModal(restoreState = true) {
                 return;
             }
             
-            // Si no hay resultados de búsqueda, cargar datos de la pestaña
             isOpen = true;
             exploreOverlay.classList.add('active');
             document.body.style.overflow = 'hidden';
@@ -345,13 +341,13 @@ function openExploreModal(restoreState = true) {
         }
     }
     
-    // 🔥 SI NO HAY ESTADO GUARDADO, CARGAR NORMAL
     const tabToLoad = savedTab || 'trending';
     currentTab = tabToLoad;
     currentSearchResults = [];
     currentSearchQuery = '';
     searchInProgress = false;
     savedScrollPosition = 0;
+    isSearchMode = false;
     
     const tabs = exploreOverlay.querySelectorAll('.explore-tabs button');
     tabs.forEach(btn => {
@@ -372,7 +368,7 @@ function openExploreModal(restoreState = true) {
 }
 
 // ============================================================
-// 🔥 MOSTRAR MODAL CON CACHÉ (SIN RECARGAR)
+// 🔥 MOSTRAR MODAL CON CACHÉ
 // ============================================================
 
 function showExploreModal() {
@@ -390,14 +386,22 @@ function showExploreModal() {
         currentTab = tabToShow;
         savedTab = tabToShow;
         savedScrollPosition = savedState.scrollPosition || 0;
+        isSearchMode = savedState.isSearchMode || false;
         
         const tabs = exploreOverlay.querySelectorAll('.explore-tabs button');
         tabs.forEach(btn => {
-            const isActive = btn.dataset.tab === tabToShow;
-            btn.classList.toggle('active', isActive);
-            btn.style.opacity = '1';
-            btn.style.pointerEvents = 'auto';
-            btn.style.cursor = 'pointer';
+            if (isSearchMode) {
+                btn.classList.remove('active');
+                btn.style.opacity = '0.3';
+                btn.style.pointerEvents = 'none';
+                btn.style.cursor = 'default';
+            } else {
+                const isActive = btn.dataset.tab === tabToShow;
+                btn.classList.toggle('active', isActive);
+                btn.style.opacity = '1';
+                btn.style.pointerEvents = 'auto';
+                btn.style.cursor = 'pointer';
+            }
         });
         
         const searchInput = exploreOverlay.querySelector('#exploreSearchInput');
@@ -405,14 +409,12 @@ function showExploreModal() {
             searchInput.value = savedState.query || '';
         }
         
-        // 🔥 Si hay resultados de búsqueda guardados, mostrarlos
         if (savedState.results && savedState.results.length > 0 && savedState.query) {
             currentSearchResults = savedState.results;
             currentSearchQuery = savedState.query;
-            activateSearchMode(); // 🔥 Desactivar tabs
+            if (!isSearchMode) activateSearchMode();
             renderSearchResults(savedState.query, savedState.results, [], {});
             
-            // 🔥 Restaurar posición de scroll
             setTimeout(() => {
                 const content = document.getElementById('exploreContent');
                 if (content && savedState.scrollPosition) {
@@ -447,16 +449,16 @@ function closeExploreModal() {
         const searchInput = exploreOverlay.querySelector('#exploreSearchInput');
         const query = searchInput ? searchInput.value.trim() : '';
         
-        // 🔥 Guardar posición de scroll actual
         const content = document.getElementById('exploreContent');
         const scrollPos = content ? content.scrollTop : 0;
         
-        saveExploreState(currentTab, query, currentSearchResults, scrollPos);
+        saveExploreState(currentTab, query, currentSearchResults, scrollPos, isSearchMode);
         console.log('💾 Estado guardado:', { 
             tab: currentTab, 
             query, 
             results: currentSearchResults.length,
-            scrollPosition: scrollPos
+            scrollPosition: scrollPos,
+            isSearchMode: isSearchMode
         });
     }
     
@@ -475,8 +477,7 @@ function closeExploreModal() {
 // ============================================================
 
 function switchExploreTab(tab) {
-    // 🔥 Si hay búsqueda activa, limpiarla
-    if (currentSearchQuery.length >= 2) {
+    if (isSearchMode) {
         const searchInput = exploreOverlay.querySelector('#exploreSearchInput');
         if (searchInput) {
             searchInput.value = '';
@@ -505,8 +506,9 @@ function switchExploreTab(tab) {
     }
     currentSearchResults = [];
     searchInProgress = false;
+    isSearchMode = false;
     
-    saveExploreState(tab, '', [], 0);
+    saveExploreState(tab, '', [], 0, false);
     loadExploreDataWithCache(tab);
 }
 
@@ -643,7 +645,6 @@ async function performSmartSearch(query) {
 
     if (searchInProgress) return;
     
-    // 🔥 ACTIVAR MODO DE BÚSQUEDA (desactivar tabs)
     activateSearchMode();
     
     const cacheKey = `search_${query.toLowerCase().trim()}`;
@@ -653,7 +654,7 @@ async function performSmartSearch(query) {
         console.log(`🔍 Resultados de búsqueda desde caché: "${query}"`);
         currentSearchResults = cachedResults;
         renderSearchResults(query, cachedResults, [], {});
-        saveExploreState(currentTab, query, cachedResults, 0);
+        saveExploreState(currentTab, query, cachedResults, 0, true);
         return;
     }
     
@@ -722,7 +723,7 @@ async function performSmartSearch(query) {
         const combinedResults = [...stories, ...users.map(u => ({ ...u, type: 'user' }))];
         currentSearchResults = combinedResults;
         saveToCache(cacheKey, combinedResults);
-        saveExploreState(currentTab, query, combinedResults, 0);
+        saveExploreState(currentTab, query, combinedResults, 0, true);
         
         renderSearchResults(query, stories, users, meta);
 
@@ -1186,7 +1187,6 @@ async function followUserFromExplore(userId, btn) {
 // 🔥 ACCIONES GLOBALES - SUPERPONER MODALES
 // ============================================================
 
-// Definir funciones globales ANTES de usarlas en el HTML
 window.openStoryFromExplore = (storyId) => {
     if (storyId) {
         window._fromExploreModal = true;
@@ -1204,18 +1204,18 @@ window.openProfileFromExplore = (userId) => {
     if (userId) {
         window._fromExploreModal = true;
         
-        // 🔥 Guardar estado actual ANTES de abrir el perfil
         const searchInput = exploreOverlay?.querySelector('#exploreSearchInput');
         const query = searchInput ? searchInput.value.trim() : currentSearchQuery;
         const content = document.getElementById('exploreContent');
         const scrollPos = content ? content.scrollTop : 0;
         
-        saveExploreState(currentTab, query, currentSearchResults, scrollPos);
+        saveExploreState(currentTab, query, currentSearchResults, scrollPos, isSearchMode);
         console.log('💾 Estado guardado antes de abrir perfil:', { 
             tab: currentTab, 
             query, 
             results: currentSearchResults.length,
-            scrollPosition: scrollPos
+            scrollPosition: scrollPos,
+            isSearchMode: isSearchMode
         });
         
         if (typeof window.openProfileModal === 'function') {
@@ -1240,13 +1240,8 @@ window.openProfileFromExplore = (userId) => {
     }
 };
 
-// 🔥 ASIGNAR openHashtagStories A window
 window.openHashtagStories = openHashtagStories;
-
-// 🔥 ASIGNAR performSmartSearch A window
 window.performSmartSearch = performSmartSearch;
-
-// 🔥 ASIGNAR followUserFromExplore A window
 window.followUserFromExplore = followUserFromExplore;
 
 // ============================================================
