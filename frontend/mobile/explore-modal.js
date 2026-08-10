@@ -1,11 +1,11 @@
 // explore-modal.js - BÚSQUEDA HÍBRIDA CON RESULTADOS PRIORIZADOS
 // Y SUPERPOSICIÓN DE MODALES
 // 🔥 FILTRO DE PRIVACIDAD: Solo usuarios públicos aparecen
+// 🔥 MANTIENE LA PESTAÑA ACTIVA AL VOLVER
 
 import { getToken, getCurrentUser, showToast, getAvatar } from './auth.js';
 import { formatNumber } from './utils.js';
 import { openStoryModal } from './story-modal.js';
-// ✅ NO importar profile-modal.js - usar window en su lugar
 
 const API_URL = window.location.origin;
 
@@ -17,6 +17,7 @@ let hashtagStoriesCache = new Map();
 let currentSearchResults = [];
 let currentSearchQuery = '';
 let searchInProgress = false;
+let savedTab = 'trending'; // 🔥 Guardar la pestaña activa
 
 // ============================================================
 // CREAR ELEMENTOS DEL MODAL
@@ -124,12 +125,8 @@ function filterPublicUsers(users) {
     const currentUser = getCurrentUser();
     const currentUserId = currentUser?.id;
     
-    // 🔥 Solo mostrar usuarios con perfil público
     return users.filter(user => {
-        // Siempre mostrar al usuario actual si está en la lista
         if (user.id === currentUserId) return true;
-        
-        // 🔥 SOLO usuarios con privacy === 'public'
         return user.privacy === 'public' || user.privacy === undefined;
     });
 }
@@ -144,16 +141,11 @@ function filterPublicStories(stories) {
     const currentUser = getCurrentUser();
     const currentUserId = currentUser?.id;
     
-    // 🔥 Solo mostrar historias de usuarios públicos o propias
     return stories.filter(story => {
-        // Siempre mostrar historias propias
         if (story.userId === currentUserId) return true;
-        
-        // 🔥 Si el usuario es privado o solo seguidores, no mostrar sus historias
         if (story.user?.privacy === 'private' || story.user?.privacy === 'followers') {
             return false;
         }
-        
         return true;
     });
 }
@@ -165,14 +157,18 @@ function filterPublicStories(stories) {
 function openExploreModal() {
     if (!exploreOverlay) createExploreModal();
     
-    currentTab = 'trending';
+    // 🔥 Usar la pestaña guardada, o 'trending' si es la primera vez
+    const tabToLoad = savedTab || 'trending';
+    currentTab = tabToLoad;
     currentSearchResults = [];
     currentSearchQuery = '';
     searchInProgress = false;
     
+    // 🔥 Actualizar tabs visualmente
     const tabs = exploreOverlay.querySelectorAll('.explore-tabs button');
     tabs.forEach(btn => {
-        btn.classList.toggle('active', btn.dataset.tab === 'trending');
+        const isActive = btn.dataset.tab === tabToLoad;
+        btn.classList.toggle('active', isActive);
     });
     
     const searchInput = exploreOverlay.querySelector('#exploreSearchInput');
@@ -182,7 +178,7 @@ function openExploreModal() {
     exploreOverlay.classList.add('active');
     document.body.style.overflow = 'hidden';
     
-    loadExploreData('trending');
+    loadExploreData(tabToLoad);
 }
 
 function closeExploreModal() {
@@ -197,11 +193,12 @@ function closeExploreModal() {
 }
 
 // ============================================================
-// CAMBIAR TAB
+// CAMBIAR TAB - GUARDA LA PESTAÑA
 // ============================================================
 
 function switchExploreTab(tab) {
     currentTab = tab;
+    savedTab = tab; // 🔥 Guardar la pestaña activa
     
     const tabs = exploreOverlay.querySelectorAll('.explore-tabs button');
     tabs.forEach(btn => {
@@ -245,7 +242,6 @@ async function performSmartSearch(query) {
     `;
 
     try {
-        // 🔥 Buscar USUARIOS primero (prioridad)
         const usersRes = await fetch(`${API_URL}/api/users/search?q=${encodeURIComponent(query)}`, {
             headers: { 'Authorization': `Bearer ${token}` }
         });
@@ -257,7 +253,6 @@ async function performSmartSearch(query) {
             console.log(`👥 Usuarios encontrados (públicos): ${users.length} de ${allUsers.length} totales`);
         }
 
-        // 🔥 Buscar HISTORIAS después
         const hybridRes = await fetch(`${API_URL}/api/stories/search/hybrid?q=${encodeURIComponent(query)}&limit=30`, {
             headers: { 'Authorization': `Bearer ${token}` }
         });
@@ -276,7 +271,6 @@ async function performSmartSearch(query) {
             console.log(`📸 Historias relevantes (públicas): ${stories.length} de ${allStories.length} totales`);
         }
 
-        // Si no hay resultados
         if (stories.length === 0 && users.length === 0) {
             content.innerHTML = `
                 <div class="explore-empty">
@@ -334,10 +328,6 @@ function renderSearchResults(query, stories, users, meta) {
             </div>
     `;
 
-    // ============================================================
-    // 🔥 SECCIÓN 1: USUARIOS PÚBLICOS (ARRIBA)
-    // ============================================================
-    
     if (users.length > 0) {
         html += `
             <div style="margin-bottom:16px;">
@@ -371,10 +361,6 @@ function renderSearchResults(query, stories, users, meta) {
         `;
     }
 
-    // ============================================================
-    // 🔥 SECCIÓN 2: HISTORIAS PÚBLICAS (ABAJO)
-    // ============================================================
-    
     if (filteredStories.length > 0) {
         html += `
             <div>
@@ -457,10 +443,6 @@ function renderSearchResults(query, stories, users, meta) {
         `;
     }
 
-    // ============================================================
-    // 🔥 SECCIÓN 3: SUGERENCIAS (SI HAY POCOS RESULTADOS)
-    // ============================================================
-    
     if (filteredStories.length < 5 && users.length < 3) {
         html += `
             <div style="margin-top:16px;padding:12px;background:rgba(255,255,255,0.02);border-radius:12px;border:1px solid rgba(255,255,255,0.03);">
@@ -824,13 +806,13 @@ window.openStoryFromExplore = (storyId) => {
 // 🔥 ABRIR PERFIL DESDE EXPLORE - CORREGIDO
 window.openProfileFromExplore = (userId) => {
     if (userId) {
-        // ✅ Guardar que venimos de explore
         window._fromExploreModal = true;
         
         if (typeof window.openProfileModal === 'function') {
             window.openProfileModal(userId, false, { 
                 fromExplore: true,
-                returnToExplore: true 
+                returnToExplore: true,
+                savedTab: savedTab // 🔥 Pasar la pestaña guardada
             });
         } else {
             showToast('Error al abrir perfil', true);
