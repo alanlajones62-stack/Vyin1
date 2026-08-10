@@ -194,6 +194,7 @@
             flex: 1;
             position: relative;
             overflow: hidden;
+            min-height: 0; /* Importante para flex */
         }
 
         .section {
@@ -262,7 +263,7 @@
         }
 
         /* ============================================================
-           FEED CONTAINER (SECCIÓN INICIO)
+           FEED CONTAINER (SECCIÓN INICIO) - CORREGIDO
         ============================================================ */
         .feed-container {
             height: 100%;
@@ -273,6 +274,201 @@
             position: relative;
         }
         .feed-container::-webkit-scrollbar { display: none; }
+
+        /* ============================================================
+           STORY CARD - CORREGIDO (ALTURA DINÁMICA)
+        ============================================================ */
+        .story-card {
+            height: 100%;
+            min-height: 100%;
+            max-height: 100%;
+            scroll-snap-align: start;
+            scroll-snap-stop: always;
+            display: flex;
+            flex-direction: column;
+            position: relative;
+            background: #0a0a1a;
+            overflow: hidden;
+            border: none;
+            margin: 0;
+            border-radius: 0;
+            flex-shrink: 0;
+        }
+
+        .story-card .card-header {
+            display: flex;
+            align-items: center;
+            padding: 10px 14px 8px;
+            gap: 10px;
+            background: linear-gradient(0deg, rgba(0,0,0,0) 0%, rgba(0,0,0,0.4) 100%);
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            z-index: 5;
+        }
+
+        .story-card .card-header .avatar {
+            width: 34px;
+            height: 34px;
+            border-radius: 50%;
+            object-fit: cover;
+            border: 2px solid rgba(255, 255, 255, 0.15);
+            flex-shrink: 0;
+            cursor: pointer;
+        }
+
+        .story-card .card-header .info {
+            flex: 1;
+            min-width: 0;
+        }
+        .story-card .card-header .info .name {
+            font-weight: 700;
+            font-size: 14px;
+            color: #fff;
+            cursor: pointer;
+            text-shadow: 0 1px 8px rgba(0,0,0,0.5);
+        }
+        .story-card .card-header .info .handle {
+            font-size: 11px;
+            color: rgba(255, 255, 255, 0.5);
+            text-shadow: 0 1px 8px rgba(0,0,0,0.5);
+        }
+        .story-card .card-header .time {
+            font-size: 10px;
+            color: rgba(255, 255, 255, 0.3);
+            flex-shrink: 0;
+            text-shadow: 0 1px 8px rgba(0,0,0,0.5);
+        }
+
+        .story-card .card-media {
+            flex: 1;
+            width: 100%;
+            background: #0a0a1a;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+            position: relative;
+            min-height: 0;
+            cursor: pointer;
+        }
+        .story-card .card-media img {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+            display: block;
+        }
+        .story-card .card-media video {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+        }
+        .story-card .card-media .text-placeholder {
+            width: 100%;
+            height: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            font-size: 20px;
+            font-weight: 500;
+            color: #fff;
+            line-height: 1.5;
+            padding: 30px;
+        }
+
+        .story-card .card-footer {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            padding: 10px 14px 14px;
+            padding-bottom: 58px;
+            background: linear-gradient(0deg, rgba(0,0,0,0.65) 0%, rgba(0,0,0,0.2) 50%, rgba(0,0,0,0) 100%);
+            z-index: 5;
+            pointer-events: none;
+        }
+
+        .story-card .card-footer * {
+            pointer-events: auto;
+        }
+
+        .story-card .card-footer .caption {
+            font-size: 13px;
+            color: rgba(255, 255, 255, 0.85);
+            margin-bottom: 4px;
+            line-height: 1.4;
+            text-shadow: 0 1px 12px rgba(0,0,0,0.5);
+            font-weight: 400;
+        }
+        .story-card .card-footer .caption .hashtag {
+            color: #c084fc;
+            font-weight: 500;
+        }
+
+        .story-card .card-footer .actions {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 4px;
+        }
+
+        .story-card .card-footer .actions .stats {
+            display: flex;
+            gap: 12px;
+            font-size: 12px;
+            color: rgba(255, 255, 255, 0.4);
+        }
+        .story-card .card-footer .actions .stats span {
+            display: flex;
+            align-items: center;
+            gap: 3px;
+        }
+        .story-card .card-footer .actions .stats i {
+            font-size: 13px;
+        }
+
+        .story-card .card-footer .actions .btns {
+            display: flex;
+            gap: 4px;
+        }
+        .story-card .card-footer .actions .btns button {
+            padding: 4px 12px;
+            border: none;
+            border-radius: 50px;
+            font-size: 11px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            font-family: inherit;
+        }
+        .story-card .card-footer .actions .btns button:active {
+            transform: scale(0.92);
+        }
+
+        .btn-like {
+            background: rgba(255, 107, 107, 0.15);
+            color: #ff6b6b;
+        }
+        .btn-like.liked {
+            background: linear-gradient(135deg, #ff6b6b, #ff4444);
+            color: #fff;
+            box-shadow: 0 4px 16px rgba(255, 107, 107, 0.25);
+        }
+        .btn-comment {
+            background: rgba(192, 132, 252, 0.12);
+            color: #c084fc;
+        }
+        .btn-share {
+            background: rgba(255, 255, 255, 0.05);
+            color: rgba(255, 255, 255, 0.3);
+            padding: 4px 10px !important;
+        }
 
         /* ============================================================
            PERFIL CONTAINER (SECCIÓN PERFIL)
@@ -496,201 +692,6 @@
         }
         .profile-native .profile-no-stories-native span {
             font-size: 12px;
-        }
-
-        /* ============================================================
-           STORY CARD
-        ============================================================ */
-        .story-card {
-            height: calc(100dvh - 52px - 44px - 74px);
-            min-height: calc(100dvh - 52px - 44px - 74px);
-            max-height: calc(100dvh - 52px - 44px - 74px);
-            scroll-snap-align: start;
-            scroll-snap-stop: always;
-            display: flex;
-            flex-direction: column;
-            position: relative;
-            background: #0a0a1a;
-            overflow: hidden;
-            border: none;
-            margin: 0;
-            border-radius: 0;
-            flex-shrink: 0;
-        }
-
-        .story-card .card-header {
-            display: flex;
-            align-items: center;
-            padding: 10px 14px 8px;
-            gap: 10px;
-            background: linear-gradient(0deg, rgba(0,0,0,0) 0%, rgba(0,0,0,0.4) 100%);
-            position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
-            z-index: 5;
-        }
-
-        .story-card .card-header .avatar {
-            width: 34px;
-            height: 34px;
-            border-radius: 50%;
-            object-fit: cover;
-            border: 2px solid rgba(255, 255, 255, 0.15);
-            flex-shrink: 0;
-            cursor: pointer;
-        }
-
-        .story-card .card-header .info {
-            flex: 1;
-            min-width: 0;
-        }
-        .story-card .card-header .info .name {
-            font-weight: 700;
-            font-size: 14px;
-            color: #fff;
-            cursor: pointer;
-            text-shadow: 0 1px 8px rgba(0,0,0,0.5);
-        }
-        .story-card .card-header .info .handle {
-            font-size: 11px;
-            color: rgba(255, 255, 255, 0.5);
-            text-shadow: 0 1px 8px rgba(0,0,0,0.5);
-        }
-        .story-card .card-header .time {
-            font-size: 10px;
-            color: rgba(255, 255, 255, 0.3);
-            flex-shrink: 0;
-            text-shadow: 0 1px 8px rgba(0,0,0,0.5);
-        }
-
-        .story-card .card-media {
-            flex: 1;
-            width: 100%;
-            background: #0a0a1a;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            overflow: hidden;
-            position: relative;
-            min-height: 0;
-            cursor: pointer;
-        }
-        .story-card .card-media img {
-            width: 100%;
-            height: 100%;
-            object-fit: contain;
-            display: block;
-        }
-        .story-card .card-media video {
-            width: 100%;
-            height: 100%;
-            object-fit: contain;
-        }
-        .story-card .card-media .text-placeholder {
-            width: 100%;
-            height: 100%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            text-align: center;
-            font-size: 20px;
-            font-weight: 500;
-            color: #fff;
-            line-height: 1.5;
-            padding: 30px;
-        }
-
-        .story-card .card-footer {
-            position: absolute;
-            bottom: 0;
-            left: 0;
-            right: 0;
-            padding: 10px 14px 14px;
-            padding-bottom: 58px;
-            background: linear-gradient(0deg, rgba(0,0,0,0.65) 0%, rgba(0,0,0,0.2) 50%, rgba(0,0,0,0) 100%);
-            z-index: 5;
-            pointer-events: none;
-        }
-
-        .story-card .card-footer * {
-            pointer-events: auto;
-        }
-
-        .story-card .card-footer .caption {
-            font-size: 13px;
-            color: rgba(255, 255, 255, 0.85);
-            margin-bottom: 4px;
-            line-height: 1.4;
-            text-shadow: 0 1px 12px rgba(0,0,0,0.5);
-            font-weight: 400;
-        }
-        .story-card .card-footer .caption .hashtag {
-            color: #c084fc;
-            font-weight: 500;
-        }
-
-        .story-card .card-footer .actions {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            flex-wrap: wrap;
-            gap: 4px;
-        }
-
-        .story-card .card-footer .actions .stats {
-            display: flex;
-            gap: 12px;
-            font-size: 12px;
-            color: rgba(255, 255, 255, 0.4);
-        }
-        .story-card .card-footer .actions .stats span {
-            display: flex;
-            align-items: center;
-            gap: 3px;
-        }
-        .story-card .card-footer .actions .stats i {
-            font-size: 13px;
-        }
-
-        .story-card .card-footer .actions .btns {
-            display: flex;
-            gap: 4px;
-        }
-        .story-card .card-footer .actions .btns button {
-            padding: 4px 12px;
-            border: none;
-            border-radius: 50px;
-            font-size: 11px;
-            font-weight: 600;
-            cursor: pointer;
-            transition: all 0.3s;
-            display: flex;
-            align-items: center;
-            gap: 4px;
-            font-family: inherit;
-        }
-        .story-card .card-footer .actions .btns button:active {
-            transform: scale(0.92);
-        }
-
-        .btn-like {
-            background: rgba(255, 107, 107, 0.15);
-            color: #ff6b6b;
-        }
-        .btn-like.liked {
-            background: linear-gradient(135deg, #ff6b6b, #ff4444);
-            color: #fff;
-            box-shadow: 0 4px 16px rgba(255, 107, 107, 0.25);
-        }
-        .btn-comment {
-            background: rgba(192, 132, 252, 0.12);
-            color: #c084fc;
-        }
-        .btn-share {
-            background: rgba(255, 255, 255, 0.05);
-            color: rgba(255, 255, 255, 0.3);
-            padding: 4px 10px !important;
         }
 
         /* ============================================================
@@ -1025,9 +1026,9 @@
                 height: 36px;
             }
             .story-card {
-                height: calc(100dvh - 52px - 44px - 74px);
-                min-height: calc(100dvh - 52px - 44px - 74px);
-                max-height: calc(100dvh - 52px - 44px - 74px);
+                height: 100%;
+                min-height: 100%;
+                max-height: 100%;
             }
             .bottom-nav .create-btn::after {
                 display: none;
@@ -1081,9 +1082,9 @@
                 height: 30px;
             }
             .story-card {
-                height: calc(100dvh - 52px - 40px - 64px);
-                min-height: calc(100dvh - 52px - 40px - 64px);
-                max-height: calc(100dvh - 52px - 40px - 64px);
+                height: 100%;
+                min-height: 100%;
+                max-height: 100%;
             }
             .profile-native .profile-avatar-native {
                 width: 56px;
@@ -1156,9 +1157,9 @@
                 height: 30px;
             }
             .story-card {
-                height: calc(100dvh - 40px - 38px - 60px);
-                min-height: calc(100dvh - 40px - 38px - 60px);
-                max-height: calc(100dvh - 40px - 38px - 60px);
+                height: 100%;
+                min-height: 100%;
+                max-height: 100%;
             }
             .bottom-nav .create-btn::after {
                 display: none;
