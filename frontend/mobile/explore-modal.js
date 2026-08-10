@@ -1,5 +1,6 @@
 // explore-modal.js - BÚSQUEDA HÍBRIDA CON RESULTADOS PRIORIZADOS
 // Y SUPERPOSICIÓN DE MODALES - VERSIÓN CORREGIDA CON CACHÉ
+// 🔥 MEJORADO: Desactiva tabs durante búsqueda, mantiene scroll y estado
 
 import { getToken, getCurrentUser, showToast, getAvatar } from './auth.js';
 import { formatNumber } from './utils.js';
@@ -17,6 +18,7 @@ let currentSearchQuery = '';
 let searchInProgress = false;
 let savedTab = 'trending';
 let lastLoadedData = null;
+let savedScrollPosition = 0; // 🔥 Guardar posición de scroll
 
 // ============================================================
 // 🔥 CACHÉ EN localStorage PARA USUARIOS POPULARES
@@ -61,12 +63,13 @@ function getFromCache(key) {
     }
 }
 
-function saveExploreState(tab, query = '', results = []) {
+function saveExploreState(tab, query = '', results = [], scrollPos = 0) {
     try {
         const state = {
             tab: tab,
             query: query,
-            results: results.slice(0, 20),
+            results: results.slice(0, 50), // Guardar más resultados
+            scrollPosition: scrollPos,
             timestamp: Date.now()
         };
         localStorage.setItem(CACHE_KEYS.STATE, JSON.stringify(state));
@@ -172,7 +175,9 @@ function createExploreModal() {
             if (query.length >= 2) {
                 performSmartSearch(query);
             } else if (query.length === 0) {
+                // 🔥 Limpiar búsqueda y restaurar tabs
                 currentSearchResults = [];
+                clearSearchMode();
                 loadExploreDataWithCache(currentTab);
             }
         }, 400);
@@ -188,10 +193,57 @@ function createExploreModal() {
         }
     });
     
+    // 🔥 Guardar posición de scroll al hacer scroll
+    const content = document.getElementById('exploreContent');
+    if (content) {
+        content.addEventListener('scroll', () => {
+            if (isOpen && currentSearchQuery.length >= 2) {
+                savedScrollPosition = content.scrollTop;
+            }
+        });
+    }
+    
     document.addEventListener('keydown', (e) => {
         if (e.key === 'Escape' && isOpen) {
             closeExploreModal();
         }
+    });
+}
+
+// ============================================================
+// 🔥 LIMPIAR MODO DE BÚSQUEDA (restaurar tabs)
+// ============================================================
+
+function clearSearchMode() {
+    // 🔥 Quitar desactivación de tabs y restaurar estilos
+    const tabs = exploreOverlay.querySelectorAll('.explore-tabs button');
+    tabs.forEach(btn => {
+        btn.style.opacity = '1';
+        btn.style.pointerEvents = 'auto';
+        btn.style.cursor = 'pointer';
+        // Restaurar el active según la pestaña actual
+        const isActive = btn.dataset.tab === currentTab;
+        btn.classList.toggle('active', isActive);
+    });
+    
+    currentSearchQuery = '';
+    currentSearchResults = [];
+    savedScrollPosition = 0;
+}
+
+// ============================================================
+// 🔥 ACTIVAR MODO DE BÚSQUEDA (desactivar tabs)
+// ============================================================
+
+function activateSearchMode() {
+    const tabs = exploreOverlay.querySelectorAll('.explore-tabs button');
+    tabs.forEach(btn => {
+        // 🔥 Quitar el estilo active de TODAS las tabs
+        btn.classList.remove('active');
+        // Estilo visual de desactivado
+        btn.style.opacity = '0.3';
+        btn.style.pointerEvents = 'none';
+        btn.style.cursor = 'default';
     });
 }
 
@@ -246,11 +298,16 @@ function openExploreModal(restoreState = true) {
             currentTab = tabToLoad;
             savedTab = tabToLoad;
             currentSearchQuery = savedState.query || '';
+            savedScrollPosition = savedState.scrollPosition || 0;
             
+            // Actualizar tabs visualmente
             const tabs = exploreOverlay.querySelectorAll('.explore-tabs button');
             tabs.forEach(btn => {
                 const isActive = btn.dataset.tab === tabToLoad;
                 btn.classList.toggle('active', isActive);
+                btn.style.opacity = '1';
+                btn.style.pointerEvents = 'auto';
+                btn.style.cursor = 'pointer';
             });
             
             const searchInput = exploreOverlay.querySelector('#exploreSearchInput');
@@ -258,15 +315,28 @@ function openExploreModal(restoreState = true) {
                 searchInput.value = savedState.query || '';
             }
             
+            // 🔥 Si hay resultados de búsqueda, restaurarlos
             if (savedState.results && savedState.results.length > 0 && savedState.query) {
                 currentSearchResults = savedState.results;
+                // 🔥 Activar modo de búsqueda (desactivar tabs)
+                activateSearchMode();
                 renderSearchResults(savedState.query, savedState.results, [], {});
+                
+                // 🔥 Restaurar posición de scroll
+                setTimeout(() => {
+                    const content = document.getElementById('exploreContent');
+                    if (content && savedState.scrollPosition) {
+                        content.scrollTop = savedState.scrollPosition;
+                    }
+                }, 100);
+                
                 isOpen = true;
                 exploreOverlay.classList.add('active');
                 document.body.style.overflow = 'hidden';
                 return;
             }
             
+            // Si no hay resultados de búsqueda, cargar datos de la pestaña
             isOpen = true;
             exploreOverlay.classList.add('active');
             document.body.style.overflow = 'hidden';
@@ -275,16 +345,21 @@ function openExploreModal(restoreState = true) {
         }
     }
     
+    // 🔥 SI NO HAY ESTADO GUARDADO, CARGAR NORMAL
     const tabToLoad = savedTab || 'trending';
     currentTab = tabToLoad;
     currentSearchResults = [];
     currentSearchQuery = '';
     searchInProgress = false;
+    savedScrollPosition = 0;
     
     const tabs = exploreOverlay.querySelectorAll('.explore-tabs button');
     tabs.forEach(btn => {
         const isActive = btn.dataset.tab === tabToLoad;
         btn.classList.toggle('active', isActive);
+        btn.style.opacity = '1';
+        btn.style.pointerEvents = 'auto';
+        btn.style.cursor = 'pointer';
     });
     
     const searchInput = exploreOverlay.querySelector('#exploreSearchInput');
@@ -314,11 +389,15 @@ function showExploreModal() {
         const tabToShow = savedState.tab || currentTab || 'trending';
         currentTab = tabToShow;
         savedTab = tabToShow;
+        savedScrollPosition = savedState.scrollPosition || 0;
         
         const tabs = exploreOverlay.querySelectorAll('.explore-tabs button');
         tabs.forEach(btn => {
             const isActive = btn.dataset.tab === tabToShow;
             btn.classList.toggle('active', isActive);
+            btn.style.opacity = '1';
+            btn.style.pointerEvents = 'auto';
+            btn.style.cursor = 'pointer';
         });
         
         const searchInput = exploreOverlay.querySelector('#exploreSearchInput');
@@ -326,10 +405,20 @@ function showExploreModal() {
             searchInput.value = savedState.query || '';
         }
         
+        // 🔥 Si hay resultados de búsqueda guardados, mostrarlos
         if (savedState.results && savedState.results.length > 0 && savedState.query) {
             currentSearchResults = savedState.results;
             currentSearchQuery = savedState.query;
+            activateSearchMode(); // 🔥 Desactivar tabs
             renderSearchResults(savedState.query, savedState.results, [], {});
+            
+            // 🔥 Restaurar posición de scroll
+            setTimeout(() => {
+                const content = document.getElementById('exploreContent');
+                if (content && savedState.scrollPosition) {
+                    content.scrollTop = savedState.scrollPosition;
+                }
+            }, 100);
         } else {
             const cacheKey = `explore_${tabToShow}_data`;
             const cachedData = getFromCache(cacheKey);
@@ -357,8 +446,18 @@ function closeExploreModal() {
     if (isOpen && exploreOverlay) {
         const searchInput = exploreOverlay.querySelector('#exploreSearchInput');
         const query = searchInput ? searchInput.value.trim() : '';
-        saveExploreState(currentTab, query, currentSearchResults);
-        console.log('💾 Estado guardado:', { tab: currentTab, query, results: currentSearchResults.length });
+        
+        // 🔥 Guardar posición de scroll actual
+        const content = document.getElementById('exploreContent');
+        const scrollPos = content ? content.scrollTop : 0;
+        
+        saveExploreState(currentTab, query, currentSearchResults, scrollPos);
+        console.log('💾 Estado guardado:', { 
+            tab: currentTab, 
+            query, 
+            results: currentSearchResults.length,
+            scrollPosition: scrollPos
+        });
     }
     
     isOpen = false;
@@ -376,12 +475,27 @@ function closeExploreModal() {
 // ============================================================
 
 function switchExploreTab(tab) {
+    // 🔥 Si hay búsqueda activa, limpiarla
+    if (currentSearchQuery.length >= 2) {
+        const searchInput = exploreOverlay.querySelector('#exploreSearchInput');
+        if (searchInput) {
+            searchInput.value = '';
+        }
+        currentSearchQuery = '';
+        currentSearchResults = [];
+        savedScrollPosition = 0;
+        clearSearchMode();
+    }
+    
     currentTab = tab;
     savedTab = tab;
     
     const tabs = exploreOverlay.querySelectorAll('.explore-tabs button');
     tabs.forEach(btn => {
         btn.classList.toggle('active', btn.dataset.tab === tab);
+        btn.style.opacity = '1';
+        btn.style.pointerEvents = 'auto';
+        btn.style.cursor = 'pointer';
     });
     
     const searchInput = exploreOverlay.querySelector('#exploreSearchInput');
@@ -392,7 +506,7 @@ function switchExploreTab(tab) {
     currentSearchResults = [];
     searchInProgress = false;
     
-    saveExploreState(tab, '', []);
+    saveExploreState(tab, '', [], 0);
     loadExploreDataWithCache(tab);
 }
 
@@ -529,6 +643,9 @@ async function performSmartSearch(query) {
 
     if (searchInProgress) return;
     
+    // 🔥 ACTIVAR MODO DE BÚSQUEDA (desactivar tabs)
+    activateSearchMode();
+    
     const cacheKey = `search_${query.toLowerCase().trim()}`;
     const cachedResults = getFromCache(cacheKey);
     
@@ -536,7 +653,7 @@ async function performSmartSearch(query) {
         console.log(`🔍 Resultados de búsqueda desde caché: "${query}"`);
         currentSearchResults = cachedResults;
         renderSearchResults(query, cachedResults, [], {});
-        saveExploreState(currentTab, query, cachedResults);
+        saveExploreState(currentTab, query, cachedResults, 0);
         return;
     }
     
@@ -605,7 +722,7 @@ async function performSmartSearch(query) {
         const combinedResults = [...stories, ...users.map(u => ({ ...u, type: 'user' }))];
         currentSearchResults = combinedResults;
         saveToCache(cacheKey, combinedResults);
-        saveExploreState(currentTab, query, combinedResults);
+        saveExploreState(currentTab, query, combinedResults, 0);
         
         renderSearchResults(query, stories, users, meta);
 
@@ -1086,13 +1203,20 @@ window.openStoryFromExplore = (storyId) => {
 window.openProfileFromExplore = (userId) => {
     if (userId) {
         window._fromExploreModal = true;
-        window._exploreState = {
-            tab: currentTab,
-            query: currentSearchQuery,
-            results: currentSearchResults
-        };
         
-        saveExploreState(currentTab, currentSearchQuery, currentSearchResults);
+        // 🔥 Guardar estado actual ANTES de abrir el perfil
+        const searchInput = exploreOverlay?.querySelector('#exploreSearchInput');
+        const query = searchInput ? searchInput.value.trim() : currentSearchQuery;
+        const content = document.getElementById('exploreContent');
+        const scrollPos = content ? content.scrollTop : 0;
+        
+        saveExploreState(currentTab, query, currentSearchResults, scrollPos);
+        console.log('💾 Estado guardado antes de abrir perfil:', { 
+            tab: currentTab, 
+            query, 
+            results: currentSearchResults.length,
+            scrollPosition: scrollPos
+        });
         
         if (typeof window.openProfileModal === 'function') {
             window.openProfileModal(userId, false, { 
@@ -1116,7 +1240,7 @@ window.openProfileFromExplore = (userId) => {
     }
 };
 
-// 🔥 ASIGNAR openHashtagStories A window ANTES DE QUE EL HTML LA USE
+// 🔥 ASIGNAR openHashtagStories A window
 window.openHashtagStories = openHashtagStories;
 
 // 🔥 ASIGNAR performSmartSearch A window
