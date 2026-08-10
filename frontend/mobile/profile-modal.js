@@ -1,7 +1,7 @@
 // profile-modal.js - Modal para ver perfil de usuario (VERSIÓN COMPLETA CORREGIDA)
 // CON SISTEMA DE BLOQUEO Y PRIVACIDAD COMPLETO
 // 🔥 NAVEGACIÓN: Soporte para followers-modal y explore-modal
-// 🔥 CORREGIDO: Renderizado de historias (maneja ambos formatos de respuesta)
+// 🔥 CORREGIDO: Renderizado de historias (petición separada)
 
 import {
     getToken, getCurrentUser, showToast,
@@ -135,7 +135,7 @@ function loadProfileWithCache(userId) {
 }
 
 // ============================================================
-// 🔥 CARGAR DATOS DEL PERFIL - CORREGIDO (maneja ambos formatos)
+// 🔥 CARGAR DATOS DEL PERFIL - CORREGIDO (petición separada)
 // ============================================================
 
 async function loadProfileData(userId, silent = false) {
@@ -155,10 +155,11 @@ async function loadProfileData(userId, silent = false) {
 
         console.log(`📡 Cargando perfil ${userId} desde servidor...`);
         
+        // 🔥 PRIMERO: OBTENER EL PERFIL DEL USUARIO
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 8000);
 
-        const res = await fetch(`${API_URL}/api/users/profile/${userId}?includeStories=true`, {
+        const res = await fetch(`${API_URL}/api/users/profile/${userId}`, {
             headers: { 'Authorization': `Bearer ${token}` },
             signal: controller.signal
         });
@@ -182,95 +183,25 @@ async function loadProfileData(userId, silent = false) {
             }
         }
 
-        const data = await res.json();
+        const user = await res.json();
         
-        // 🔥 CORRECCIÓN: Manejar ambos formatos de respuesta
-        let user = null;
+        // 🔥 SEGUNDO: OBTENER LAS HISTORIAS DEL USUARIO
         let stories = [];
-        
-        console.log('📦 Datos recibidos del servidor:', {
-            isArray: Array.isArray(data),
-            hasUser: !!data.user,
-            hasStories: !!data.stories,
-            keys: Object.keys(data)
-        });
-        
-        // Caso 1: La respuesta es un array de historias (formato antiguo de /stories/user/:userId)
-        if (Array.isArray(data)) {
-            console.log('📦 Formato: Array de historias');
-            stories = data;
+        try {
+            console.log(`📡 Cargando historias para ${userId}...`);
+            const storiesRes = await fetch(`${API_URL}/api/stories/user/${userId}`, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
             
-            // Intentar obtener el usuario de la primera historia
-            if (stories.length > 0 && stories[0].userData) {
-                user = stories[0].userData;
+            if (storiesRes.ok) {
+                stories = await storiesRes.json();
+                console.log(`📊 ${stories.length} historias cargadas para ${userId}`);
             } else {
-                // Si no hay historias o no tienen userData, hacer una petición adicional para obtener el usuario
-                try {
-                    const userRes = await fetch(`${API_URL}/api/users/batch`, {
-                        method: 'POST',
-                        headers: {
-                            'Authorization': `Bearer ${token}`,
-                            'Content-Type': 'application/json'
-                        },
-                        body: JSON.stringify({ userIds: [userId] })
-                    });
-                    if (userRes.ok) {
-                        const userData = await userRes.json();
-                        if (userData && userData.length > 0) {
-                            user = userData[0];
-                        }
-                    }
-                } catch (e) {
-                    console.warn('⚠️ Error obteniendo usuario adicional:', e);
-                }
-                
-                // Fallback: usuario mínimo
-                if (!user) {
-                    user = { 
-                        id: userId,
-                        username: 'usuario',
-                        fullName: 'Usuario',
-                        avatar: getAvatar('U')
-                    };
-                }
+                console.warn(`⚠️ No se pudieron cargar historias para ${userId}`);
             }
-        }
-        // Caso 2: La respuesta es un objeto con user y stories (formato esperado)
-        else if (data.user || data.stories) {
-            console.log('📦 Formato: Objeto con user y stories');
-            user = data.user || data;
-            stories = data.stories || [];
-        }
-        // Caso 3: La respuesta es un objeto que ES el usuario (con stories anidado)
-        else {
-            console.log('📦 Formato: Objeto usuario con stories anidado');
-            user = data;
-            stories = data.stories || [];
-            delete user.stories;
-        }
-        
-        // Si user tiene 'stories' anidado y no tenemos stories, extraerlo
-        if (user && user.stories && !stories.length) {
-            stories = user.stories;
-            delete user.stories;
-        }
-        
-        // Si user no tiene campos básicos, intentar construir desde data
-        if (user && !user.username && !user.fullName) {
-            user = {
-                id: userId,
-                username: data.username || 'usuario',
-                fullName: data.fullName || 'Usuario',
-                avatar: data.avatar || getAvatar(data.fullName || 'U'),
-                ...user
-            };
-        }
-        
-        // Si user tiene id pero no username, completar
-        if (user && user.id && !user.username) {
-            user.username = data.username || 'usuario';
-            user.fullName = data.fullName || 'Usuario';
-            user.avatar = data.avatar || getAvatar(user.fullName || 'U');
+        } catch (storiesError) {
+            console.warn('⚠️ Error cargando historias:', storiesError);
+            stories = [];
         }
 
         // Guardar en memoria
@@ -290,6 +221,7 @@ async function loadProfileData(userId, silent = false) {
 
         console.log(`📊 Perfil cargado: ${user.fullName}, ${stories.length} historias`);
         
+        // 🔥 ACTUALIZAR UI CON AMBOS DATOS
         updateProfileModalUI(user, stories);
 
         const loadTime = performance.now() - startTime;
@@ -463,7 +395,8 @@ async function refreshProfileInBackground(userId, silent = false) {
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 5000);
 
-        const res = await fetch(`${API_URL}/api/users/profile/${userId}?includeStories=true&minimal=true`, {
+        // 🔥 OBTENER PERFIL ACTUALIZADO
+        const res = await fetch(`${API_URL}/api/users/profile/${userId}`, {
             headers: { 'Authorization': `Bearer ${token}` },
             signal: controller.signal
         });
@@ -471,27 +404,19 @@ async function refreshProfileInBackground(userId, silent = false) {
         clearTimeout(timeoutId);
 
         if (res.ok) {
-            const data = await res.json();
+            const user = await res.json();
             
-            // 🔥 Manejar ambos formatos en la actualización en segundo plano
-            let user = null;
+            // 🔥 OBTENER HISTORIAS ACTUALIZADAS
             let stories = [];
-            
-            if (Array.isArray(data)) {
-                stories = data;
-                if (stories.length > 0 && stories[0].userData) {
-                    user = stories[0].userData;
-                } else {
-                    user = { id: userId };
+            try {
+                const storiesRes = await fetch(`${API_URL}/api/stories/user/${userId}`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                if (storiesRes.ok) {
+                    stories = await storiesRes.json();
                 }
-            } else {
-                user = data.user || data;
-                stories = data.stories || [];
-            }
-            
-            if (user && user.stories && !stories.length) {
-                stories = user.stories;
-                delete user.stories;
+            } catch (e) {
+                // Silencioso
             }
             
             profileCache.set(userId, {
@@ -684,7 +609,7 @@ function updateProfileModalUI(user, stories) {
     const followingCount = user.followingCount || 0;
     const badgeHtml = getVerificationBadge(user);
 
-    // 🔥 GENERAR HTML DE HISTORIAS - CORREGIDO
+    // 🔥 GENERAR HTML DE HISTORIAS
     let storiesHtml = '';
     if (stories && Array.isArray(stories) && stories.length > 0) {
         console.log(`📊 Renderizando ${stories.length} historias para ${user.fullName}`);
@@ -1427,31 +1352,25 @@ function preloadCurrentUserProfile() {
             const token = getToken();
             if (!token) return;
 
-            const res = await fetch(`${API_URL}/api/users/profile/${userId}?includeStories=true&minimal=true`, {
+            // 🔥 PRECARGAR PERFIL
+            const res = await fetch(`${API_URL}/api/users/profile/${userId}`, {
                 headers: { 'Authorization': `Bearer ${token}` }
             });
 
             if (res.ok) {
-                const data = await res.json();
+                const user = await res.json();
                 
-                let user = null;
+                // 🔥 PRECARGAR HISTORIAS
                 let stories = [];
-                
-                if (Array.isArray(data)) {
-                    stories = data;
-                    if (stories.length > 0 && stories[0].userData) {
-                        user = stories[0].userData;
-                    } else {
-                        user = { id: userId };
+                try {
+                    const storiesRes = await fetch(`${API_URL}/api/stories/user/${userId}`, {
+                        headers: { 'Authorization': `Bearer ${token}` }
+                    });
+                    if (storiesRes.ok) {
+                        stories = await storiesRes.json();
                     }
-                } else {
-                    user = data.user || data;
-                    stories = data.stories || [];
-                }
-                
-                if (user && user.stories && !stories.length) {
-                    stories = user.stories;
-                    delete user.stories;
+                } catch (e) {
+                    // Silencioso
                 }
                 
                 profileCache.set(userId, {
