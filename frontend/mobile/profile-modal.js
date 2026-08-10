@@ -747,6 +747,7 @@ function openProfileModal(userId, fromFollowers = false, fromFollowersStack = nu
     }
 
     console.log(`👤 Abriendo perfil modal: ${userId}, desde followers: ${fromFollowers}`);
+    console.log(`📊 _fromExploreModal: ${window._fromExploreModal}`);
 
     const currentUser = getCurrentUser();
 
@@ -759,12 +760,21 @@ function openProfileModal(userId, fromFollowers = false, fromFollowersStack = nu
     if (fromFollowers && fromFollowersStack) {
         window._followersContextData = fromFollowersStack;
         window._fromFollowers = true;
-        // Guardar también en window._profileContext para closeProfileModal
         window._profileContext = {
             followersContext: fromFollowersStack,
             returnToFollowers: true
         };
         console.log(`📌 Contexto de followers guardado:`, fromFollowersStack);
+    }
+
+    // 🔥 SI VIENE DE EXPLORE, guardar contexto
+    if (window._fromExploreModal) {
+        console.log(`📌 Contexto de explore: coming from explore`);
+        if (!window._followersContextData) {
+            window._profileContext = {
+                returnToExplore: true
+            };
+        }
     }
 
     if (isProfileModalOpen) {
@@ -774,7 +784,8 @@ function openProfileModal(userId, fromFollowers = false, fromFollowersStack = nu
             data: currentProfileData,
             fromFollowers: window._fromFollowers || false,
             scrollPosition: document.querySelector('.profile-modal-body')?.scrollTop || 0,
-            followersContext: window._followersContextData || null
+            followersContext: window._followersContextData || null,
+            fromExplore: window._fromExploreModal || false
         });
         console.log(`📌 Perfil ${currentProfileUserId} guardado en pila. Pila: ${navigationStack.length}`);
     }
@@ -872,6 +883,8 @@ function closeProfileModalInternal(restoreFromStack = true) {
 function closeProfileModal() {
     console.log('🔒 Cerrando modal de perfil (público)');
     console.log(`📊 Pila actual: ${navigationStack.length} elementos`);
+    console.log(`📊 _fromExploreModal: ${window._fromExploreModal}`);
+    console.log(`📊 _followersContextData:`, window._followersContextData);
     
     if (isEditMode) {
         if (typeof window.closeEditProfileModal === 'function') {
@@ -880,11 +893,30 @@ function closeProfileModal() {
         isEditMode = false;
     }
 
-    // 🔥 VERIFICAR SI VENIMOS DE FOLLOWERS MODAL
+    // 🔥 PRIMERO: VERIFICAR SI HAY PILA DE NAVEGACIÓN (más prioritario)
+    if (navigationStack.length > 0) {
+        const previous = navigationStack.pop();
+        console.log(`🔄 Restaurando desde pila: ${previous.type} - ${previous.userId || 'N/A'}`);
+        
+        closeProfileModalInternal(false);
+        
+        setTimeout(() => {
+            if (previous.type === 'profile') {
+                restorePreviousProfile(previous);
+            } else if (previous.type === 'followers') {
+                restorePreviousFollowers(previous);
+            }
+        }, 150);
+        return;
+    }
+
+    // 🔥 SEGUNDO: VERIFICAR SI VENIMOS DE FOLLOWERS MODAL
     const followersContext = window._followersContextData || window._profileContext?.followersContext;
     
     if (followersContext && followersContext.returnToFollowers) {
         console.log(`🔄 Volviendo a followers-modal desde profile-modal`);
+        
+        window._fromExploreModal = false;
         
         closeProfileModalInternal(false);
         
@@ -910,11 +942,11 @@ function closeProfileModal() {
         return;
     }
 
-    // 🔥 VERIFICAR SI VIENE DE EXPLORE
+    // 🔥 TERCERO: VERIFICAR SI VIENE DE EXPLORE (SOLO si no hay followersContext)
     if (window._fromExploreModal) {
         console.log(`🔄 Volviendo a explore-modal desde profile-modal`);
-        closeProfileModalInternal(false);
         window._fromExploreModal = false;
+        closeProfileModalInternal(false);
         setTimeout(() => {
             import('./explore-modal.js').then(({ openExploreModal }) => {
                 if (typeof openExploreModal === 'function') {
@@ -929,26 +961,13 @@ function closeProfileModal() {
         return;
     }
 
-    // 🔥 NAVEGACIÓN NORMAL CON PILA
-    if (navigationStack.length > 0) {
-        const previous = navigationStack.pop();
-        console.log(`🔄 Restaurando: ${previous.type} - ${previous.userId || 'N/A'}`);
-        
-        closeProfileModalInternal(false);
-        
-        setTimeout(() => {
-            if (previous.type === 'profile') {
-                restorePreviousProfile(previous);
-            } else if (previous.type === 'followers') {
-                restorePreviousFollowers(previous);
-            }
-        }, 150);
-        return;
-    }
-
-    // 🔥 Si no hay pila, cerrar normalmente
+    // 🔥 CUARTO: SI NO HAY NADA, CERRAR NORMALMENTE
     const currentUser = getCurrentUser();
     const wasOwnProfile = currentProfileUserId === currentUser?.id;
+    
+    window._fromExploreModal = false;
+    window._followersContextData = null;
+    window._profileContext = null;
     
     closeProfileModalInternal(false);
     

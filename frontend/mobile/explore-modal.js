@@ -150,7 +150,6 @@ function filterPublicStories(stories) {
         if (story.userId === currentUserId) return true;
         
         // 🔥 Si el usuario es privado o solo seguidores, no mostrar sus historias
-        // (el backend ya filtra, pero por seguridad)
         if (story.user?.privacy === 'private' || story.user?.privacy === 'followers') {
             return false;
         }
@@ -254,7 +253,6 @@ async function performSmartSearch(query) {
         let users = [];
         if (usersRes.ok) {
             const allUsers = await usersRes.json();
-            // 🔥 FILTRAR: SOLO usuarios PÚBLICOS
             users = filterPublicUsers(allUsers);
             console.log(`👥 Usuarios encontrados (públicos): ${users.length} de ${allUsers.length} totales`);
         }
@@ -273,7 +271,6 @@ async function performSmartSearch(query) {
                 const relevance = s.relevanceScore || 0;
                 return relevance > 30;
             });
-            // 🔥 FILTRAR: SOLO historias de usuarios PÚBLICOS
             stories = filterPublicStories(allStories);
             meta = result.meta || {};
             console.log(`📸 Historias relevantes (públicas): ${stories.length} de ${allStories.length} totales`);
@@ -325,7 +322,6 @@ function renderSearchResults(query, stories, users, meta) {
     const currentUser = getCurrentUser();
     const currentUserId = currentUser?.id;
 
-    // 🔥 Filtrar historias propias y de usuarios privados
     const filteredStories = stories.filter(s => s.userId !== currentUserId);
 
     let html = `
@@ -545,7 +541,6 @@ async function loadExploreData(tab) {
             if (res.ok) {
                 const result = await res.json();
                 const allStories = (result.data || []).filter(story => story.userId !== currentUser?.id);
-                // 🔥 FILTRAR: SOLO historias de usuarios PÚBLICOS
                 data.stories = filterPublicStories(allStories);
                 console.log(`📸 Historias públicas: ${data.stories.length} de ${allStories.length} totales`);
             }
@@ -556,7 +551,6 @@ async function loadExploreData(tab) {
             const res = await fetch(url, { headers });
             if (res.ok) {
                 const allUsers = await res.json();
-                // 🔥 FILTRAR: SOLO usuarios PÚBLICOS
                 data.users = filterPublicUsers(allUsers).slice(0, 10);
                 console.log(`👥 Usuarios populares (públicos): ${data.users.length} de ${allUsers.length} totales`);
             }
@@ -640,7 +634,6 @@ function renderHashtags(content, data) {
 
 function renderStoriesGrid(content, stories) {
     const currentUser = getCurrentUser();
-    // 🔥 Ya filtrados, pero por seguridad
     const filteredStories = filterPublicStories(stories || []).filter(story => story.userId !== currentUser?.id);
     
     if (!filteredStories || filteredStories.length === 0) {
@@ -690,7 +683,6 @@ function renderStoriesGrid(content, stories) {
 }
 
 function renderUsersList(content, users) {
-    // 🔥 Ya filtrados, pero por seguridad
     const publicUsers = filterPublicUsers(users || []);
     
     if (!publicUsers || publicUsers.length === 0) {
@@ -787,7 +779,6 @@ async function openHashtagStories(tag) {
             stories.push(...data.data);
         }
 
-        // 🔥 FILTRAR: SOLO historias de usuarios PÚBLICOS
         stories = filterPublicStories(stories);
 
         if (stories.length === 0) {
@@ -830,16 +821,19 @@ window.openStoryFromExplore = (storyId) => {
     }
 };
 
-// 🔥 ABRIR PERFIL DESDE EXPLORE - SUPERPONER (NO CERRAR EXPLORE)
+// 🔥 ABRIR PERFIL DESDE EXPLORE - CORREGIDO
 window.openProfileFromExplore = (userId) => {
     if (userId) {
-        // ✅ NO cerrar explore, superponer perfil encima
+        // ✅ Guardar que venimos de explore
+        window._fromExploreModal = true;
+        
         if (typeof window.openProfileModal === 'function') {
-            // El perfil se abrirá encima con z-index más alto
-            window.openProfileModal(userId, true); // true = desde explore
+            window.openProfileModal(userId, false, { 
+                fromExplore: true,
+                returnToExplore: true 
+            });
         } else {
             showToast('Error al abrir perfil', true);
-            // Fallback: cerrar explore y abrir perfil
             closeExploreModal();
             setTimeout(() => {
                 import('./profile-modal.js').then(({ openProfileModal }) => {
