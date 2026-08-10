@@ -231,13 +231,13 @@ export async function addComment(storyId, content, parentCommentId = null) {
                 }
             }
             commentsCache.set(storyId, comments);
+        } else {
+            // Si no hay caché, crearlo con el nuevo comentario
+            commentsCache.set(storyId, [newComment]);
         }
 
-        // 🔥 ACTUALIZAR UI SIN DUPLICADOS (SOLO SI EL MODAL ESTÁ ABIERTO)
-        const modalOverlay = document.getElementById('storyModalOverlay');
-        if (modalOverlay && modalOverlay.style.display !== 'none' && modalOverlay.style.display !== '') {
-            updateCommentsUI(storyId);
-        }
+        // 🔥 ACTUALIZAR UI SIEMPRE (con verificación mejorada)
+        updateCommentsUI(storyId);
 
         showToast(parentCommentId ? '💬 Respuesta agregada' : '💬 Comentario agregado');
         return newComment;
@@ -360,12 +360,25 @@ export async function likeComment(storyId, commentId) {
 
 function updateCommentsUI(storyId) {
     const container = document.getElementById('commentsList');
-    if (!container) return;
+    if (!container) {
+        console.log('⏭️ [updateCommentsUI] Contenedor no encontrado');
+        return;
+    }
     
-    // 🔥 VERIFICAR QUE EL MODAL ESTÉ ABIERTO Y SEA LA MISMA HISTORIA
+    // 🔥 VERIFICAR QUE EL MODAL ESTÉ ABIERTO
     const modalOverlay = document.getElementById('storyModalOverlay');
-    if (!modalOverlay || modalOverlay.style.display === 'none') {
-        console.log('⏭️ [updateCommentsUI] Modal cerrado, omitiendo actualización');
+    if (!modalOverlay) {
+        console.log('⏭️ [updateCommentsUI] Modal overlay no encontrado');
+        return;
+    }
+    
+    // ✅ Verificación mejorada: el modal está abierto si no está oculto
+    const isModalVisible = modalOverlay.style.display !== 'none' && 
+                           modalOverlay.style.visibility !== 'hidden' &&
+                           modalOverlay.classList.contains('active');
+    
+    if (!isModalVisible) {
+        console.log('⏭️ [updateCommentsUI] Modal cerrado o invisible, omitiendo actualización');
         return;
     }
     
@@ -387,8 +400,29 @@ function updateCommentsUI(storyId) {
         const currentUser = getCurrentUser();
         const comments = commentsCache.get(storyId) || [];
         renderComments(comments, storyId, currentUser?.id, container);
+        
+        // 🔥 ACTUALIZAR CONTADORES EN EL MODAL
+        updateModalCommentCount(storyId, comments.length);
+        
     } finally {
         container.dataset.updating = 'false';
+    }
+}
+
+// ============================================================
+// ACTUALIZAR CONTADORES DEL MODAL
+// ============================================================
+
+function updateModalCommentCount(storyId, count) {
+    // Actualizar el contador en el modal
+    const modalComments = document.getElementById('modalComments');
+    if (modalComments) {
+        modalComments.textContent = formatNumber(count);
+    }
+    
+    const commentsCount = document.getElementById('commentsCount');
+    if (commentsCount) {
+        commentsCount.textContent = formatNumber(count);
     }
 }
 
@@ -485,6 +519,8 @@ export function renderComments(comments, storyId, currentUserId, container, high
                 <span>No hay comentarios aún</span>
             </div>
         `;
+        // Actualizar contadores a 0
+        updateModalCommentCount(storyId, 0);
         return;
     }
 
@@ -571,6 +607,9 @@ export function renderComments(comments, storyId, currentUserId, container, high
     });
 
     container.innerHTML = html;
+    
+    // 🔥 ACTUALIZAR CONTADORES DESPUÉS DE RENDERIZAR
+    updateModalCommentCount(storyId, comments.length);
 }
 
 // ============================================================
@@ -811,26 +850,53 @@ export async function initComments(storyId, containerId = 'commentsList', highli
     const sendBtn = document.getElementById('sendCommentBtn');
 
     if (input && sendBtn) {
-        const sendComment = async () => {
-            const content = input.value.trim();
-            if (!content) return;
+        // ✅ Eliminar event listeners antiguos para evitar duplicados
+        const newSendBtn = sendBtn.cloneNode(true);
+        sendBtn.parentNode.replaceChild(newSendBtn, sendBtn);
+        
+        const newInput = input.cloneNode(true);
+        input.parentNode.replaceChild(newInput, input);
+        
+        // ✅ Obtener referencias actualizadas
+        const finalInput = document.getElementById('commentInput');
+        const finalSendBtn = document.getElementById('sendCommentBtn');
+        
+        if (finalInput && finalSendBtn) {
+            const sendComment = async () => {
+                const content = finalInput.value.trim();
+                if (!content) {
+                    showToast('Escribe un comentario', true);
+                    return;
+                }
 
-            sendBtn.disabled = true;
-            const newComment = await addComment(storyId, content);
-            if (newComment) {
-                input.value = '';
-                updateCommentsUI(storyId);
-            }
-            sendBtn.disabled = false;
-        };
+                finalSendBtn.disabled = true;
+                finalSendBtn.textContent = 'Enviando...';
+                
+                try {
+                    const newComment = await addComment(storyId, content);
+                    if (newComment) {
+                        finalInput.value = '';
+                        // ✅ La UI ya se actualiza en addComment()
+                        showToast('💬 Comentario enviado');
+                    }
+                } catch (error) {
+                    console.error('Error enviando comentario:', error);
+                    showToast('Error al enviar comentario', true);
+                } finally {
+                    finalSendBtn.disabled = false;
+                    finalSendBtn.textContent = 'Enviar';
+                    finalInput.focus();
+                }
+            };
 
-        sendBtn.onclick = sendComment;
-        input.onkeydown = (e) => {
-            if (e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault();
-                sendComment();
-            }
-        };
+            finalSendBtn.onclick = sendComment;
+            finalInput.onkeydown = (e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    sendComment();
+                }
+            };
+        }
     }
     
     if (highlightCommentId) {
