@@ -1,9 +1,8 @@
-// backend/storyInteractions.js - VERSIÓN CON RESPUESTAS ANIDADAS (MÚLTIPLES NIVELES)
+// backend/storyInteractions.js - VERSIÓN COMPLETA CON RESPUESTAS ANIDADAS
 // CON MENSAJES DE NOTIFICACIÓN CORREGIDOS
 
 const auth = require('./middleware/auth');
 
-// ✅ EXPORTAR COMO FUNCIÓN QUE RECIBE DEPENDENCIAS
 module.exports = function(read, write, io, areStoriesVisible, logger) {
     const router = require('express').Router();
 
@@ -323,7 +322,7 @@ module.exports = function(read, write, io, areStoriesVisible, logger) {
                 return res.status(404).json({ error: 'Comentario no encontrado' });
             }
             
-            // 🔥 BUSCAR EL COMENTARIO PADRE (EN CUALQUIER NIVEL)
+            // BUSCAR EL COMENTARIO PADRE (EN CUALQUIER NIVEL)
             const parentComment = findCommentById(stories[storyIndex].comments, parentCommentId);
             
             if (!parentComment) {
@@ -371,7 +370,7 @@ module.exports = function(read, write, io, areStoriesVisible, logger) {
             });
             
             // ============================================================
-            // 🔥 NOTIFICACIÓN: AL DUEÑO DEL COMENTARIO QUE SE ESTÁ RESPONDIENDO
+            // NOTIFICACIÓN: AL DUEÑO DEL COMENTARIO QUE SE ESTÁ RESPONDIENDO
             // ============================================================
             if (parentComment.userId && parentComment.userId !== userId) {
                 const notifications = read('notifications.json');
@@ -386,11 +385,9 @@ module.exports = function(read, write, io, areStoriesVisible, logger) {
                 let notificationType = 'reply';
                 
                 if (isReplyToReply) {
-                    // 🔥 RESPUESTA A UNA RESPUESTA → "Usuario respondió a tu comentario"
                     message = `${user?.fullName || 'Usuario'} respondió a tu comentario`;
                     notificationType = 'reply_to_reply';
                 } else {
-                    // 🔥 RESPUESTA A COMENTARIO PRINCIPAL → "Usuario respondió a tu comentario"
                     message = `${user?.fullName || 'Usuario'} respondió a tu comentario`;
                     notificationType = 'reply';
                 }

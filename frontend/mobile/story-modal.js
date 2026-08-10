@@ -626,70 +626,27 @@ async function handleSendReply(storyId, commentId) {
 }
 
 // ============================================================
-// AÑADIR RESPUESTA A LA UI
-// ============================================================
-
-function addReplyToUI(parentCommentId, reply) {
-    const repliesContainer = document.getElementById(`replies-${parentCommentId}`);
-    if (!repliesContainer) return;
-
-    const existingReply = repliesContainer.querySelector(`[data-comment-id="${reply.id}"]`);
-    if (existingReply) {
-        console.log('⚠️ Respuesta ya existe en la UI, omitiendo duplicado');
-        return;
-    }
-
-    const currentUser = getCurrentUser();
-    const userAvatar = currentUser?.avatar || getAvatar(currentUser?.fullName || 'U');
-
-    const replyHtml = `
-        <div class="comment-item" data-comment-id="${reply.id}">
-            <img class="avatar" src="${reply.avatar || userAvatar}" alt="${reply.fullName}" />
-            <div class="comment-body">
-                <div class="comment-user">
-                    ${escapeHtml(reply.fullName)}
-                    <span class="handle">@${reply.username || 'usuario'}</span>
-                    <span class="time">${formatDate(reply.createdAt)}</span>
-                </div>
-                <div class="comment-text">${escapeHtml(reply.content)}</div>
-                <div class="comment-meta">
-                    <button class="btn-like-comment" data-comment-id="${reply.id}">
-                        <i class="fas fa-heart"></i> <span class="like-count">0</span>
-                    </button>
-                    <button class="btn-reply-comment" data-comment-id="${reply.id}">
-                        <i class="fas fa-reply"></i> Responder
-                    </button>
-                </div>
-                <div class="replies" id="replies-${reply.id}"></div>
-                <div class="reply-input-container" id="reply-input-${reply.id}" style="display:none;">
-                    <input type="text" class="reply-input" placeholder="Escribe una respuesta..." maxlength="500" />
-                    <button class="reply-send-btn" data-comment-id="${reply.id}">Enviar</button>
-                </div>
-            </div>
-        </div>
-    `;
-
-    const tempDiv = document.createElement('div');
-    tempDiv.innerHTML = replyHtml;
-    const replyElement = tempDiv.firstElementChild;
-    
-    repliesContainer.appendChild(replyElement);
-    
-    console.log('✅ Respuesta añadida a la UI');
-}
-
-// ============================================================
-// AÑADIR COMENTARIO A LA UI
+// AÑADIR COMENTARIO A LA UI - CON VERIFICACIÓN DE DUPLICADOS
 // ============================================================
 
 function addCommentToUI(comment) {
     const commentsList = document.getElementById('commentsList');
     if (!commentsList) return;
 
+    // 🔥 VERIFICAR SI YA EXISTE EL COMENTARIO POR ID
     const existingComment = commentsList.querySelector(`[data-comment-id="${comment.id}"]`);
     if (existingComment) {
         console.log('⚠️ Comentario ya existe en la UI, omitiendo duplicado');
         return;
+    }
+
+    // 🔥 VERIFICAR TAMBIÉN POR ID DE HISTORIA PARA EVITAR DUPLICADOS ENTRE HISTORIAS
+    const allComments = commentsList.querySelectorAll('.comment-item');
+    for (const el of allComments) {
+        if (el.dataset.commentId === comment.id) {
+            console.log('⚠️ Comentario ya existe en la UI (por data attribute), omitiendo duplicado');
+            return;
+        }
     }
 
     const noComments = commentsList.querySelector('.no-comments');
@@ -731,9 +688,226 @@ function addCommentToUI(comment) {
     tempDiv.innerHTML = commentHtml;
     const commentElement = tempDiv.firstElementChild;
     
+    // 🔥 VERIFICAR NUEVAMENTE ANTES DE AGREGAR
+    if (commentsList.querySelector(`[data-comment-id="${comment.id}"]`)) {
+        console.log('⚠️ Comentario agregado mientras se procesaba, omitiendo');
+        return;
+    }
+    
     commentsList.insertBefore(commentElement, commentsList.firstChild);
     
-    console.log('✅ Comentario añadido a la UI');
+    console.log('✅ Comentario añadido a la UI:', comment.id);
+    
+    // 🔥 RECARGAR LOS EVENTOS DE LOS BOTONES
+    setupCommentEvents();
+}
+
+// ============================================================
+// AÑADIR RESPUESTA A LA UI - CON VERIFICACIÓN DE DUPLICADOS
+// ============================================================
+
+function addReplyToUI(parentCommentId, reply) {
+    const repliesContainer = document.getElementById(`replies-${parentCommentId}`);
+    if (!repliesContainer) {
+        console.log('⚠️ Contenedor de respuestas no encontrado para:', parentCommentId);
+        return;
+    }
+
+    // 🔥 VERIFICAR SI YA EXISTE LA RESPUESTA
+    const existingReply = repliesContainer.querySelector(`[data-comment-id="${reply.id}"]`);
+    if (existingReply) {
+        console.log('⚠️ Respuesta ya existe en la UI, omitiendo duplicado');
+        return;
+    }
+
+    // 🔥 VERIFICAR POR TODOS LOS ELEMENTOS EN EL CONTENEDOR
+    const allReplies = repliesContainer.querySelectorAll('.comment-item');
+    for (const el of allReplies) {
+        if (el.dataset.commentId === reply.id) {
+            console.log('⚠️ Respuesta ya existe (por data attribute), omitiendo duplicado');
+            return;
+        }
+    }
+
+    const currentUser = getCurrentUser();
+    const userAvatar = currentUser?.avatar || getAvatar(currentUser?.fullName || 'U');
+
+    const replyHtml = `
+        <div class="comment-item" data-comment-id="${reply.id}">
+            <img class="avatar" src="${reply.avatar || userAvatar}" alt="${reply.fullName}" />
+            <div class="comment-body">
+                <div class="comment-user">
+                    ${escapeHtml(reply.fullName)}
+                    <span class="handle">@${reply.username || 'usuario'}</span>
+                    <span class="time">${formatDate(reply.createdAt)}</span>
+                </div>
+                <div class="comment-text">${escapeHtml(reply.content)}</div>
+                <div class="comment-meta">
+                    <button class="btn-like-comment" data-comment-id="${reply.id}">
+                        <i class="fas fa-heart"></i> <span class="like-count">0</span>
+                    </button>
+                    <button class="btn-reply-comment" data-comment-id="${reply.id}">
+                        <i class="fas fa-reply"></i> Responder
+                    </button>
+                </div>
+                <div class="replies" id="replies-${reply.id}"></div>
+                <div class="reply-input-container" id="reply-input-${reply.id}" style="display:none;">
+                    <input type="text" class="reply-input" placeholder="Escribe una respuesta..." maxlength="500" />
+                    <button class="reply-send-btn" data-comment-id="${reply.id}">Enviar</button>
+                </div>
+            </div>
+        </div>
+    `;
+
+    const tempDiv = document.createElement('div');
+    tempDiv.innerHTML = replyHtml;
+    const replyElement = tempDiv.firstElementChild;
+    
+    // 🔥 VERIFICAR NUEVAMENTE ANTES DE AGREGAR
+    if (repliesContainer.querySelector(`[data-comment-id="${reply.id}"]`)) {
+        console.log('⚠️ Respuesta agregada mientras se procesaba, omitiendo');
+        return;
+    }
+    
+    repliesContainer.appendChild(replyElement);
+    
+    console.log('✅ Respuesta añadida a la UI:', reply.id);
+    
+    // 🔥 RECARGAR LOS EVENTOS DE LOS BOTONES
+    setupCommentEvents();
+}
+
+// ============================================================
+// CONFIGURAR EVENTOS DE COMENTARIOS Y RESPUESTAS
+// ============================================================
+
+function setupCommentEvents() {
+    // 🔥 EVENTOS PARA LIKES DE COMENTARIOS
+    document.querySelectorAll('.btn-like-comment').forEach(btn => {
+        // Evitar duplicar eventos
+        if (btn.dataset.hasListener === 'true') return;
+        btn.dataset.hasListener = 'true';
+        
+        btn.addEventListener('click', async function(e) {
+            e.stopPropagation();
+            const commentId = this.dataset.commentId;
+            if (!commentId || !currentStoryId) return;
+            
+            const isLiked = this.classList.contains('liked');
+            const method = isLiked ? 'DELETE' : 'POST';
+            const token = getToken();
+            
+            if (!token) {
+                showToast('Inicia sesión para dar like', true);
+                return;
+            }
+            
+            const likeCountSpan = this.querySelector('.like-count');
+            let currentCount = parseInt(likeCountSpan?.textContent || '0');
+            
+            if (isLiked) {
+                currentCount = Math.max(0, currentCount - 1);
+                this.classList.remove('liked');
+            } else {
+                currentCount = currentCount + 1;
+                this.classList.add('liked');
+            }
+            if (likeCountSpan) {
+                likeCountSpan.textContent = currentCount;
+            }
+            
+            try {
+                const res = await fetch(`${API_URL}/api/stories/${currentStoryId}/comments/${commentId}/like`, {
+                    method: method,
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    }
+                });
+                
+                const data = await res.json();
+                if (res.ok && likeCountSpan) {
+                    likeCountSpan.textContent = data.likesCount || 0;
+                    if (data.liked) {
+                        this.classList.add('liked');
+                    } else {
+                        this.classList.remove('liked');
+                    }
+                }
+            } catch (error) {
+                console.error('Error en like de comentario:', error);
+            }
+        });
+    });
+    
+    // 🔥 EVENTOS PARA RESPONDER A COMENTARIOS
+    document.querySelectorAll('.btn-reply-comment').forEach(btn => {
+        if (btn.dataset.hasListener === 'true') return;
+        btn.dataset.hasListener = 'true';
+        
+        btn.addEventListener('click', function(e) {
+            e.stopPropagation();
+            const commentId = this.dataset.commentId;
+            if (!commentId) return;
+            
+            const replyInput = document.getElementById(`reply-input-${commentId}`);
+            if (replyInput) {
+                const isHidden = replyInput.style.display === 'none' || replyInput.style.display === '';
+                replyInput.style.display = isHidden ? 'flex' : 'none';
+                if (isHidden) {
+                    const input = replyInput.querySelector('.reply-input');
+                    if (input) {
+                        input.focus();
+                        input.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    }
+                }
+            }
+        });
+    });
+    
+    // 🔥 EVENTOS PARA ENVIAR RESPUESTAS
+    document.querySelectorAll('.reply-send-btn').forEach(btn => {
+        if (btn.dataset.hasListener === 'true') return;
+        btn.dataset.hasListener = 'true';
+        
+        btn.addEventListener('click', async function(e) {
+            e.stopPropagation();
+            const commentId = this.dataset.commentId;
+            if (!commentId || !currentStoryId) return;
+            
+            const wrapper = document.getElementById(`reply-input-${commentId}`);
+            if (!wrapper) return;
+            
+            const input = wrapper.querySelector('.reply-input');
+            if (!input) return;
+            
+            const content = input.value.trim();
+            if (!content) {
+                showToast('Escribe una respuesta', true);
+                return;
+            }
+            
+            // Llamar a la función handleSendReply que ya existe
+            await handleSendReply(currentStoryId, commentId);
+        });
+    });
+    
+    // 🔥 EVENTOS PARA ENTER EN INPUTS DE RESPUESTA
+    document.querySelectorAll('.reply-input').forEach(input => {
+        if (input.dataset.hasListener === 'true') return;
+        input.dataset.hasListener = 'true';
+        
+        input.addEventListener('keydown', function(e) {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                const wrapper = this.closest('.reply-input-container');
+                if (wrapper) {
+                    const btn = wrapper.querySelector('.reply-send-btn');
+                    if (btn) btn.click();
+                }
+            }
+        });
+    });
 }
 
 // ============================================================
@@ -1075,6 +1249,8 @@ async function loadStoryData(storyId, isNavigation = false) {
                 updateProgress();
                 const highlightCommentId = window._activityCommentId || null;
                 await initComments(storyId, 'commentsList', highlightCommentId);
+                // 🔥 CONFIGURAR EVENTOS DESPUÉS DE CARGAR COMENTARIOS
+                setupCommentEvents();
                 return;
             }
             if (currentStoriesList.length > 0) {
@@ -1085,6 +1261,7 @@ async function loadStoryData(storyId, isNavigation = false) {
                     updateProgress();
                     const highlightCommentId = window._activityCommentId || null;
                     await initComments(storyId, 'commentsList', highlightCommentId);
+                    setupCommentEvents();
                     return;
                 }
             }
@@ -1135,6 +1312,9 @@ async function loadStoryData(storyId, isNavigation = false) {
         
         const highlightCommentId = window._activityCommentId || null;
         await initComments(storyId, 'commentsList', highlightCommentId);
+        
+        // 🔥 CONFIGURAR EVENTOS DE COMENTARIOS
+        setupCommentEvents();
         
         await registerView(storyId);
 
@@ -1446,6 +1626,7 @@ window.openStoryModal = openStoryModal;
 window.closeStoryModal = closeStoryModal;
 window.navigateStory = navigateStory;
 window.deleteStory = deleteStory;
+window.setupCommentEvents = setupCommentEvents;
 
 window.openProfileFromModal = function() {
     const userId = window._modalUserId;
@@ -1478,5 +1659,6 @@ export {
     navigateStory, 
     loadStoryData, 
     handleModalLike,
-    deleteStory
+    deleteStory,
+    setupCommentEvents
 };

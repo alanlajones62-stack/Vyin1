@@ -1,5 +1,6 @@
 /* ============================================================
    STORY MODAL - CON SUBTÍTULOS, COMENTARIOS MEJORADOS Y ELIMINAR
+   SIN BORDES REDONDOS - CORREGIDO
    ============================================================ */
 
 .modal-overlay {
@@ -15,6 +16,7 @@
     display: none;
     flex-direction: column;
     animation: modalFadeIn 0.35s ease;
+    border-radius: 0 !important;
 }
 
 .modal-overlay.active {
@@ -27,12 +29,12 @@
 }
 
 /* ============================================================
-   CONTENEDOR PRINCIPAL
+   CONTENEDOR PRINCIPAL - SIN BORDES REDONDOS
    ============================================================ */
 
 .modal-content {
     background: #12122a;
-    border-radius: 0;
+    border-radius: 0 !important;
     max-width: 100%;
     width: 100%;
     max-height: 100vh;
@@ -156,7 +158,7 @@
 }
 
 /* ============================================================
-   PROGRESS BAR
+   PROGRESS BAR - SIN BORDES REDONDOS
    ============================================================ */
 
 .story-progress {
@@ -169,7 +171,7 @@
 .story-progress .progress-dot {
     flex: 1;
     height: 3px;
-    border-radius: 4px;
+    border-radius: 0;
     background: rgba(255, 255, 255, 0.12);
     transition: all 0.3s ease;
 }
@@ -179,7 +181,7 @@
 }
 
 /* ============================================================
-   BODY
+   BODY - CON MÁS ESPACIO PARA COMENTARIOS
    ============================================================ */
 
 .modal-body {
@@ -189,21 +191,22 @@
     padding: 12px 20px 6px;
     overflow: hidden;
     min-height: 0;
+    max-height: 100vh;
 }
 
 /* ============================================================
-   MEDIA
+   MEDIA - SIN BORDES REDONDOS
    ============================================================ */
 
 .modal-media {
     width: 100%;
-    border-radius: 12px;
+    border-radius: 0 !important;
     overflow: hidden;
     background: #0a0a1a;
     flex-shrink: 0;
-    height: 280px;
-    min-height: 280px;
-    max-height: 280px;
+    height: 260px;
+    min-height: 200px;
+    max-height: 300px;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -230,7 +233,7 @@
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;
     text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.9), 0px 0px 8px rgba(0, 0, 0, 0.5);
     padding: 4px 10px;
-    border-radius: 6px;
+    border-radius: 0;
     line-height: 1.4;
 }
 
@@ -453,7 +456,7 @@
 }
 
 /* ============================================================
-   🔥 BOTÓN ELIMINAR - NUEVO
+   BOTÓN ELIMINAR
    ============================================================ */
 
 .modal-actions .btn-delete-modal {
@@ -484,16 +487,18 @@
 }
 
 /* ============================================================
-   COMENTARIOS
+   COMENTARIOS - CON MÁS ESPACIO
    ============================================================ */
 
 .comments-section {
     flex: 1;
     display: flex;
     flex-direction: column;
-    min-height: 0;
+    min-height: 120px;
     border-top: 1px solid rgba(255, 255, 255, 0.04);
     padding-top: 4px;
+    max-height: 100%;
+    overflow: hidden;
 }
 
 .comments-section .comments-title {
@@ -521,7 +526,10 @@
     flex: 1;
     overflow-y: auto;
     padding-right: 2px;
-    min-height: 20px;
+    min-height: 60px;
+    max-height: 100%;
+    padding-top: 4px;
+    padding-bottom: 4px;
 }
 
 .comments-section .comments-list::-webkit-scrollbar {
@@ -534,14 +542,14 @@
 }
 
 /* ============================================================
-   COMENTARIO ITEM - ESTILOS MEJORADOS
+   COMENTARIO ITEM - SIN BORDES REDONDOS
    ============================================================ */
 
 .comment-item {
     display: flex;
     gap: 10px;
     padding: 10px 12px;
-    border-radius: 10px;
+    border-radius: 0;
     background: rgba(255, 255, 255, 0.02);
     margin-bottom: 2px;
     transition: background 0.2s;
@@ -935,8 +943,8 @@
         padding: 8px 16px 4px;
     }
     .modal-media {
-        height: 220px;
-        min-height: 220px;
+        height: 200px;
+        min-height: 160px;
         max-height: 220px;
     }
     .modal-media .text-content {
@@ -991,9 +999,15 @@
     }
     .comments-section {
         padding-top: 4px;
+        min-height: 100px;
     }
     .comments-section .comments-title {
         font-size: 11px;
+    }
+    .comments-section .comments-list {
+        min-height: 50px;
+        padding-top: 2px;
+        padding-bottom: 2px;
     }
     .comment-item {
         padding: 6px 8px;
@@ -1080,8 +1094,8 @@
         padding: 6px 12px 2px;
     }
     .modal-media {
-        height: 180px;
-        min-height: 180px;
+        height: 160px;
+        min-height: 140px;
         max-height: 180px;
     }
     .modal-media .text-content {
@@ -1128,6 +1142,12 @@
     }
     .modal-stats .stat strong {
         font-size: 12px;
+    }
+    .comments-section {
+        min-height: 80px;
+    }
+    .comments-section .comments-list {
+        min-height: 40px;
     }
     .comment-item .avatar {
         width: 20px;
@@ -1182,8 +1202,8 @@
         padding: 6px 14px 2px;
     }
     .modal-media {
-        height: 160px;
-        min-height: 160px;
+        height: 140px;
+        min-height: 120px;
         max-height: 160px;
     }
     .modal-media .text-content {
@@ -1212,9 +1232,21 @@
         font-size: 11px;
         padding: 3px 0;
     }
+    .comments-section {
+        min-height: 80px;
+    }
+    .comments-section .comments-list {
+        min-height: 40px;
+    }
     .comment-item .avatar {
         width: 20px;
         height: 20px;
+    }
+    .comment-item {
+        padding: 4px 6px;
+    }
+    .comment-item .comment-body .comment-text {
+        font-size: 13px;
     }
     .comment-input-wrapper input {
         min-height: 28px;
@@ -1239,12 +1271,12 @@
 }
 
 /* ============================================================
-   RESPONSIVE - TABLET
+   RESPONSIVE - TABLET - SIN BORDES REDONDOS
    ============================================================ */
 
 @media (min-width: 768px) {
     .modal-content {
-        border-radius: 24px;
+        border-radius: 0 !important;
         max-width: 600px;
         max-height: 90vh;
         height: auto;
@@ -1259,9 +1291,17 @@
     }
     
     .modal-media {
-        height: 340px;
-        min-height: 340px;
+        height: 300px;
+        min-height: 260px;
         max-height: 340px;
+    }
+    
+    .comments-section {
+        min-height: 140px;
+    }
+    
+    .comments-section .comments-list {
+        min-height: 70px;
     }
 }
 
@@ -1272,9 +1312,17 @@
     }
     
     .modal-media {
-        height: 400px;
-        min-height: 400px;
+        height: 360px;
+        min-height: 320px;
         max-height: 400px;
+    }
+    
+    .comments-section {
+        min-height: 160px;
+    }
+    
+    .comments-section .comments-list {
+        min-height: 80px;
     }
     
     .modal-media .text-content {
