@@ -194,7 +194,7 @@
             flex: 1;
             position: relative;
             overflow: hidden;
-            min-height: 0; /* Importante para flex */
+            min-height: 0;
         }
 
         .section {
@@ -263,7 +263,7 @@
         }
 
         /* ============================================================
-           FEED CONTAINER (SECCIÓN INICIO) - CORREGIDO
+           FEED CONTAINER (SECCIÓN INICIO)
         ============================================================ */
         .feed-container {
             height: 100%;
@@ -276,12 +276,13 @@
         .feed-container::-webkit-scrollbar { display: none; }
 
         /* ============================================================
-           STORY CARD - CORREGIDO (ALTURA DINÁMICA)
+           STORY CARD - CORREGIDO
+           La tarjeta ocupa el 100% del contenedor menos la bottom-nav
         ============================================================ */
         .story-card {
-            height: 100%;
-            min-height: 100%;
-            max-height: 100%;
+            height: calc(100% - 66px);
+            min-height: calc(100% - 66px);
+            max-height: calc(100% - 66px);
             scroll-snap-align: start;
             scroll-snap-stop: always;
             display: flex;
@@ -378,17 +379,21 @@
             padding: 30px;
         }
 
+        /* ============================================================
+           CARD FOOTER - CORREGIDO
+           Los botones y contadores quedan VISIBLES encima de la bottom-nav
+        ============================================================ */
         .story-card .card-footer {
-    position: absolute;
-    bottom: 0;
-    left: 0;
-    right: 0;
-    padding: 10px 14px 14px;
-    padding-bottom: 14px;  /* ← Reducido de 58px a 14px */
-    background: linear-gradient(0deg, rgba(0,0,0,0.65) 0%, rgba(0,0,0,0.2) 50%, rgba(0,0,0,0) 100%);
-    z-index: 5;
-    pointer-events: none;
-}
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            padding: 4px 14px 10px;
+            padding-bottom: 10px;
+            background: linear-gradient(0deg, rgba(0,0,0,0.65) 0%, rgba(0,0,0,0.2) 50%, rgba(0,0,0,0) 100%);
+            z-index: 5;
+            pointer-events: none;
+        }
 
         .story-card .card-footer * {
             pointer-events: auto;
@@ -1026,9 +1031,9 @@
                 height: 36px;
             }
             .story-card {
-                height: 100%;
-                min-height: 100%;
-                max-height: 100%;
+                height: calc(100% - 58px);
+                min-height: calc(100% - 58px);
+                max-height: calc(100% - 58px);
             }
             .bottom-nav .create-btn::after {
                 display: none;
@@ -1082,9 +1087,9 @@
                 height: 30px;
             }
             .story-card {
-                height: 100%;
-                min-height: 100%;
-                max-height: 100%;
+                height: calc(100% - 52px);
+                min-height: calc(100% - 52px);
+                max-height: calc(100% - 52px);
             }
             .profile-native .profile-avatar-native {
                 width: 56px;
@@ -1110,6 +1115,11 @@
             }
             .bottom-nav {
                 max-width: 420px;
+            }
+            .story-card {
+                height: calc(100% - 66px);
+                min-height: calc(100% - 66px);
+                max-height: calc(100% - 66px);
             }
         }
 
@@ -1157,9 +1167,9 @@
                 height: 30px;
             }
             .story-card {
-                height: 100%;
-                min-height: 100%;
-                max-height: 100%;
+                height: calc(100% - 48px);
+                min-height: calc(100% - 48px);
+                max-height: calc(100% - 48px);
             }
             .bottom-nav .create-btn::after {
                 display: none;
