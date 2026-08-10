@@ -1,7 +1,5 @@
 // explore-modal.js - BÚSQUEDA HÍBRIDA CON RESULTADOS PRIORIZADOS
-// Y SUPERPOSICIÓN DE MODALES
-// 🔥 FILTRO DE PRIVACIDAD: Solo usuarios públicos aparecen
-// 🔥 MANTIENE LA PESTAÑA ACTIVA AL VOLVER
+// Y SUPERPOSICIÓN DE MODALES - VERSIÓN CORREGIDA CON CACHÉ
 
 import { getToken, getCurrentUser, showToast, getAvatar } from './auth.js';
 import { formatNumber } from './utils.js';
@@ -17,8 +15,90 @@ let hashtagStoriesCache = new Map();
 let currentSearchResults = [];
 let currentSearchQuery = '';
 let searchInProgress = false;
-let savedTab = 'trending'; // 🔥 Guardar la pestaña activa
-let lastLoadedData = null; // 🔥 CACHÉ DE DATOS CARGADOS
+let savedTab = 'trending';
+let lastLoadedData = null;
+
+// ============================================================
+// 🔥 CACHÉ EN localStorage PARA USUARIOS POPULARES
+// ============================================================
+
+const CACHE_KEYS = {
+    POPULAR_USERS: 'explore_popular_users',
+    TRENDING_HASHTAGS: 'explore_trending_hashtags',
+    RECENT_STORIES: 'explore_recent_stories',
+    SEARCH_RESULTS: 'explore_search_results',
+    STATE: 'explore_state'
+};
+
+const CACHE_TTL = 5 * 60 * 1000; // 5 minutos
+
+function saveToCache(key, data) {
+    try {
+        const cacheData = {
+            data: data,
+            timestamp: Date.now()
+        };
+        localStorage.setItem(key, JSON.stringify(cacheData));
+    } catch (e) {
+        console.warn('Error guardando en caché:', e);
+    }
+}
+
+function getFromCache(key) {
+    try {
+        const raw = localStorage.getItem(key);
+        if (!raw) return null;
+        
+        const cached = JSON.parse(raw);
+        if (Date.now() - cached.timestamp > CACHE_TTL) {
+            localStorage.removeItem(key);
+            return null;
+        }
+        return cached.data;
+    } catch (e) {
+        console.warn('Error leyendo caché:', e);
+        return null;
+    }
+}
+
+function saveExploreState(tab, query = '', results = []) {
+    try {
+        const state = {
+            tab: tab,
+            query: query,
+            results: results.slice(0, 20), // Guardar solo los primeros 20
+            timestamp: Date.now()
+        };
+        localStorage.setItem(CACHE_KEYS.STATE, JSON.stringify(state));
+    } catch (e) {
+        console.warn('Error guardando estado:', e);
+    }
+}
+
+function getExploreState() {
+    try {
+        const raw = localStorage.getItem(CACHE_KEYS.STATE);
+        if (!raw) return null;
+        const state = JSON.parse(raw);
+        if (Date.now() - state.timestamp > CACHE_TTL) {
+            localStorage.removeItem(CACHE_KEYS.STATE);
+            return null;
+        }
+        return state;
+    } catch (e) {
+        return null;
+    }
+}
+
+function clearExploreCache() {
+    Object.values(CACHE_KEYS).forEach(key => {
+        try {
+            localStorage.removeItem(key);
+        } catch (e) {}
+    });
+    hashtagStoriesCache.clear();
+    lastLoadedData = null;
+}
 
 // ============================================================
 // CREAR ELEMENTOS DEL MODAL
@@ -98,7 +178,6 @@ function createExploreModal() {
         }, 400);
     });
     
-    // Búsqueda con Enter
     searchInput.addEventListener('keydown', (e) => {
         if (e.key === 'Enter') {
             const query = e.target.value.trim();
@@ -152,20 +231,65 @@ function filterPublicStories(stories) {
 }
 
 // ============================================================
-// 🔥 ABRIR MODAL - SIEMPRE RECARGA DATOS
+// 🔥 ABRIR MODAL - RESTAURA EL ESTADO GUARDADO
 // ============================================================
 
-function openExploreModal() {
+function openExploreModal(restoreState = true) {
     if (!exploreOverlay) createExploreModal();
     
-    // 🔥 Usar la pestaña guardada, o 'trending' si es la primera vez
+    // 🔥 INTENTAR RESTAURAR EL ESTADO GUARDADO
+    if (restoreState) {
+        const savedState = getExploreState();
+        if (savedState) {
+            console.log('📌 Restaurando estado guardado:', savedState);
+            
+            // Restaurar pestaña
+            const tabToLoad = savedState.tab || 'trending';
+            currentTab = tabToLoad;
+            savedTab = tabToLoad;
+            currentSearchQuery = savedState.query || '';
+            
+            // Actualizar tabs visualmente
+            const tabs = exploreOverlay.querySelectorAll('.explore-tabs button');
+            tabs.forEach(btn => {
+                const isActive = btn.dataset.tab === tabToLoad;
+                btn.classList.toggle('active', isActive);
+            });
+            
+            // Restaurar búsqueda
+            const searchInput = exploreOverlay.querySelector('#exploreSearchInput');
+            if (searchInput) {
+                searchInput.value = savedState.query || '';
+            }
+            
+            // Restaurar resultados de búsqueda si hay
+            if (savedState.results && savedState.results.length > 0 && savedState.query) {
+                currentSearchResults = savedState.results;
+                renderSearchResults(savedState.query, savedState.results, [], {});
+                isOpen = true;
+                exploreOverlay.classList.add('active');
+                document.body.style.overflow = 'hidden';
+                return;
+            }
+            
+            // Si no hay resultados de búsqueda, cargar datos de la pestaña
+            isOpen = true;
+            exploreOverlay.classList.add('active');
+            document.body.style.overflow = 'hidden';
+            
+            // Cargar datos de la pestaña (usando caché si es posible)
+            loadExploreDataWithCache(tabToLoad);
+            return;
+        }
+    }
+    
+    // 🔥 SI NO HAY ESTADO GUARDADO, CARGAR NORMAL
     const tabToLoad = savedTab || 'trending';
     currentTab = tabToLoad;
     currentSearchResults = [];
     currentSearchQuery = '';
     searchInProgress = false;
     
-    // 🔥 Actualizar tabs visualmente
     const tabs = exploreOverlay.querySelectorAll('.explore-tabs button');
     tabs.forEach(btn => {
         const isActive = btn.dataset.tab === tabToLoad;
@@ -179,42 +303,60 @@ function openExploreModal() {
     exploreOverlay.classList.add('active');
     document.body.style.overflow = 'hidden';
     
-    // 🔥 CARGAR DATOS FRESCOS
-    loadExploreData(tabToLoad);
+    loadExploreDataWithCache(tabToLoad);
 }
 
 // ============================================================
-// 🔥 MOSTRAR MODAL SIN RECARGAR (PARA VOLVER DE PERFIL)
+// 🔥 MOSTRAR MODAL CON CACHÉ (SIN RECARGAR)
 // ============================================================
 
 function showExploreModal() {
     if (!exploreOverlay) {
         createExploreModal();
-        openExploreModal();
+        openExploreModal(true);
         return;
     }
     
-    console.log(`📌 Mostrando explore-modal sin recargar (pestaña: ${savedTab || currentTab})`);
+    console.log(`📌 Mostrando explore-modal (pestaña: ${savedTab || currentTab})`);
     
-    // 🔥 Restaurar la pestaña activa visualmente
-    const tabToShow = savedTab || currentTab || 'trending';
-    currentTab = tabToShow;
-    
-    const tabs = exploreOverlay.querySelectorAll('.explore-tabs button');
-    tabs.forEach(btn => {
-        const isActive = btn.dataset.tab === tabToShow;
-        btn.classList.toggle('active', isActive);
-    });
-    
-    // 🔥 Si hay datos en caché, no recargar
-    const content = document.getElementById('exploreContent');
-    if (content && lastLoadedData && lastLoadedData.tab === tabToShow) {
-        console.log(`📦 Usando datos en caché para ${tabToShow}`);
-        // No recargar, solo mostrar
+    // 🔥 RESTAURAR EL ESTADO GUARDADO
+    const savedState = getExploreState();
+    if (savedState) {
+        const tabToShow = savedState.tab || currentTab || 'trending';
+        currentTab = tabToShow;
+        savedTab = tabToShow;
+        
+        const tabs = exploreOverlay.querySelectorAll('.explore-tabs button');
+        tabs.forEach(btn => {
+            const isActive = btn.dataset.tab === tabToShow;
+            btn.classList.toggle('active', isActive);
+        });
+        
+        // Restaurar búsqueda
+        const searchInput = exploreOverlay.querySelector('#exploreSearchInput');
+        if (searchInput) {
+            searchInput.value = savedState.query || '';
+        }
+        
+        // Si hay resultados de búsqueda guardados, mostrarlos
+        if (savedState.results && savedState.results.length > 0 && savedState.query) {
+            currentSearchResults = savedState.results;
+            currentSearchQuery = savedState.query;
+            renderSearchResults(savedState.query, savedState.results, [], {});
+        } else {
+            // Usar caché si está disponible
+            const cachedData = getFromCache(CACHE_KEYS[`${tabToShow.toUpperCase()}_DATA`] || '');
+            if (cachedData) {
+                console.log(`📦 Usando caché para ${tabToShow}`);
+                renderExploreContent(tabToShow, cachedData);
+            } else {
+                // Cargar en segundo plano
+                setTimeout(() => loadExploreDataWithCache(tabToShow), 100);
+            }
+        }
     } else {
-        console.log(`📡 No hay caché para ${tabToShow}, cargando...`);
-        // Si no hay caché, cargar datos
-        setTimeout(() => loadExploreData(tabToShow), 100);
+        // No hay estado, cargar normal
+        setTimeout(() => loadExploreDataWithCache(currentTab || 'trending'), 100);
     }
     
     isOpen = true;
@@ -223,10 +365,19 @@ function showExploreModal() {
 }
 
 // ============================================================
-// CERRAR
+// CERRAR - GUARDA EL ESTADO
 // ============================================================
 
 function closeExploreModal() {
+    // 🔥 GUARDAR EL ESTADO ANTES DE CERRAR
+    if (isOpen && exploreOverlay) {
+        const searchInput = exploreOverlay.querySelector('#exploreSearchInput');
+        const query = searchInput ? searchInput.value.trim() : '';
+        
+        saveExploreState(currentTab, query, currentSearchResults);
+        console.log('💾 Estado guardado:', { tab: currentTab, query, results: currentSearchResults.length });
+    }
+    
     isOpen = false;
     if (exploreOverlay) {
         exploreOverlay.classList.remove('active');
@@ -243,7 +394,7 @@ function closeExploreModal() {
 
 function switchExploreTab(tab) {
     currentTab = tab;
-    savedTab = tab; // 🔥 Guardar la pestaña activa
+    savedTab = tab;
     
     const tabs = exploreOverlay.querySelectorAll('.explore-tabs button');
     tabs.forEach(btn => {
@@ -251,297 +402,43 @@ function switchExploreTab(tab) {
     });
     
     const searchInput = exploreOverlay.querySelector('#exploreSearchInput');
-    if (searchInput) searchInput.value = '';
-    currentSearchQuery = '';
+    if (searchInput) {
+        searchInput.value = '';
+        currentSearchQuery = '';
+    }
     currentSearchResults = [];
     searchInProgress = false;
     
-    loadExploreData(tab);
+    // Guardar estado
+    saveExploreState(tab, '', []);
+    
+    loadExploreDataWithCache(tab);
 }
 
 // ============================================================
-// 🔥 BÚSQUEDA HÍBRIDA CON PRIORIDAD DE USUARIOS Y FILTRO DE PRIVACIDAD
+// 🔥 CARGAR DATOS CON CACHÉ
 // ============================================================
 
-async function performSmartSearch(query) {
-    const token = getToken();
-    if (!token) {
-        showToast('Inicia sesión para buscar', true);
+async function loadExploreDataWithCache(tab) {
+    const content = document.getElementById('exploreContent');
+    if (!content) return;
+    
+    // 🔥 VERIFICAR CACHÉ PRIMERO
+    const cacheKey = `explore_${tab}_data`;
+    const cachedData = getFromCache(cacheKey);
+    
+    if (cachedData && cachedData.tab === tab) {
+        console.log(`📦 Cargando ${tab} desde caché local`);
+        renderExploreContent(tab, cachedData.data);
         return;
     }
-
-    if (searchInProgress) return;
-    searchInProgress = true;
-
-    const content = document.getElementById('exploreContent');
-    if (!content) return;
-
-    content.innerHTML = `
-        <div class="explore-empty">
-            <i class="fas fa-spinner fa-pulse"></i>
-            <h3>Buscando "${query}"...</h3>
-            <p style="font-size:12px;color:rgba(255,255,255,0.2);">
-                🔍 Búsqueda híbrida: literal + semántica (100+ idiomas)
-            </p>
-        </div>
-    `;
-
-    try {
-        const usersRes = await fetch(`${API_URL}/api/users/search?q=${encodeURIComponent(query)}`, {
-            headers: { 'Authorization': `Bearer ${token}` }
-        });
-
-        let users = [];
-        if (usersRes.ok) {
-            const allUsers = await usersRes.json();
-            users = filterPublicUsers(allUsers);
-            console.log(`👥 Usuarios encontrados (públicos): ${users.length} de ${allUsers.length} totales`);
-        }
-
-        const hybridRes = await fetch(`${API_URL}/api/stories/search/hybrid?q=${encodeURIComponent(query)}&limit=30`, {
-            headers: { 'Authorization': `Bearer ${token}` }
-        });
-
-        let stories = [];
-        let meta = {};
-
-        if (hybridRes.ok) {
-            const result = await hybridRes.json();
-            const allStories = (result.data || []).filter(s => {
-                const relevance = s.relevanceScore || 0;
-                return relevance > 30;
-            });
-            stories = filterPublicStories(allStories);
-            meta = result.meta || {};
-            console.log(`📸 Historias relevantes (públicas): ${stories.length} de ${allStories.length} totales`);
-        }
-
-        if (stories.length === 0 && users.length === 0) {
-            content.innerHTML = `
-                <div class="explore-empty">
-                    <i class="fas fa-search"></i>
-                    <h3>No se encontraron resultados para "${query}"</h3>
-                    <p>Prueba con otras palabras clave</p>
-                    <div style="margin-top:16px;display:flex;gap:8px;flex-wrap:wrap;justify-content:center;">
-                        ${getRelatedSuggestions(query).map(s => `
-                            <span class="trending-hashtag" onclick="window.performSmartSearch('${s}')">#${s}</span>
-                        `).join('')}
-                    </div>
-                </div>
-            `;
-            searchInProgress = false;
-            return;
-        }
-
-        currentSearchResults = stories;
-        renderSearchResults(query, stories, users, meta);
-
-    } catch (error) {
-        console.error('Error en búsqueda:', error);
-        content.innerHTML = `
-            <div class="explore-empty">
-                <i class="fas fa-exclamation-triangle" style="color:#ff6b6b;"></i>
-                <h3>Error al buscar</h3>
-                <p>${error.message || 'Intenta de nuevo más tarde'}</p>
-            </div>
-        `;
-    }
-
-    searchInProgress = false;
-}
-
-// ============================================================
-// 🔥 RENDERIZAR RESULTADOS CON USUARIOS ARRIBA
-// ============================================================
-
-function renderSearchResults(query, stories, users, meta) {
-    const content = document.getElementById('exploreContent');
-    if (!content) return;
-
-    const currentUser = getCurrentUser();
-    const currentUserId = currentUser?.id;
-
-    const filteredStories = stories.filter(s => s.userId !== currentUserId);
-
-    let html = `
-        <div class="explore-section">
-            <div class="section-title">
-                🔍 Resultados para "${query}"
-                <span style="font-size:10px;color:rgba(255,255,255,0.1);margin-left:8px;">
-                    ${filteredStories.length} historias · ${users.length} usuarios públicos
-                </span>
-            </div>
-    `;
-
-    if (users.length > 0) {
-        html += `
-            <div style="margin-bottom:16px;">
-                <div style="font-size:12px;color:rgba(255,255,255,0.3);margin-bottom:8px;font-weight:600;letter-spacing:0.5px;border-bottom:1px solid rgba(255,255,255,0.04);padding-bottom:6px;">
-                    👥 Usuarios públicos (${users.length})
-                </div>
-                <div class="explore-users">
-                    ${users.map(user => {
-                        const isOwn = currentUserId === user.id;
-                        const isFollowing = user.isFollowing || false;
-                        return `
-                            <div class="explore-user-item" onclick="window.openProfileFromExplore('${user.id}')">
-                                <img class="avatar" src="${user.avatar || getAvatar(user.fullName)}" />
-                                <div class="info">
-                                    <div class="name">${user.fullName} ${user.isVerified ? '✅' : ''} ${isOwn ? '👤' : ''}</div>
-                                    <div class="username">@${user.username}</div>
-                                    <div class="bio">${user.followersCount || 0} seguidores</div>
-                                </div>
-                                ${!isOwn ? `
-                                    <button class="follow-btn ${isFollowing ? 'following' : ''}" 
-                                            data-user-id="${user.id}"
-                                            onclick="event.stopPropagation(); window.followUserFromExplore('${user.id}', this)">
-                                        ${isFollowing ? 'Siguiendo' : 'Seguir'}
-                                    </button>
-                                ` : ''}
-                            </div>
-                        `;
-                    }).join('')}
-                </div>
-            </div>
-        `;
-    }
-
-    if (filteredStories.length > 0) {
-        html += `
-            <div>
-                <div style="font-size:12px;color:rgba(255,255,255,0.3);margin-bottom:8px;font-weight:600;letter-spacing:0.5px;border-bottom:1px solid rgba(255,255,255,0.04);padding-bottom:6px;">
-                    📸 Historias relacionadas (${filteredStories.length})
-                    ${meta?.algorithm ? `<span style="font-size:9px;color:rgba(255,255,255,0.08);margin-left:8px;font-weight:400;">${meta.algorithm}</span>` : ''}
-                </div>
-                <div class="explore-grid">
-                    ${filteredStories.slice(0, 30).map(story => {
-                        let mediaContent = '';
-                        const mediaUrl = story.mediaUrl;
-                        
-                        if (story.mediaType === 'image' && mediaUrl) {
-                            mediaContent = `<img src="${mediaUrl}" loading="lazy" onerror="this.style.display='none'" />`;
-                        } else if (story.mediaType === 'video' && mediaUrl) {
-                            mediaContent = `
-                                <video src="${mediaUrl}" muted loop playsinline preload="metadata" 
-                                       onerror="this.style.display='none'"></video>
-                            `;
-                        } else if (story.mediaType === 'text' && story.textContent) {
-                            mediaContent = `
-                                <div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;background:${story.textBgColor || '#1a1a2e'};padding:16px;text-align:center;font-size:14px;color:rgba(255,255,255,0.6);font-weight:500;overflow:hidden;">
-                                    ${story.textContent.substring(0, 60)}${story.textContent.length > 60 ? '...' : ''}
-                                </div>
-                            `;
-                        } else {
-                            mediaContent = `
-                                <div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;background:#1a1a2e;color:rgba(255,255,255,0.15);font-size:32px;">
-                                    ${story.mediaType === 'video' ? '🎬' : story.hasSubtitles ? '💬' : '📝'}
-                                </div>
-                            `;
-                        }
-
-                        const subtitleText = story.subtitles || story.caption || story.textContent || '';
-                        const subtitlePreview = subtitleText.length > 60 ? subtitleText.substring(0, 60) + '...' : subtitleText;
-
-                        let relevanceBadge = '';
-                        const relevance = story.relevanceScore || 0;
-                        if (relevance > 70) {
-                            relevanceBadge = `<span class="relevance-badge" style="position:absolute;top:8px;left:8px;z-index:5;background:rgba(34,197,94,0.2);padding:2px 8px;border-radius:10px;font-size:7px;color:#22c55e;border:1px solid rgba(34,197,94,0.1);">⭐ ${relevance}%</span>`;
-                        } else if (relevance > 50) {
-                            relevanceBadge = `<span class="relevance-badge" style="position:absolute;top:8px;left:8px;z-index:5;background:rgba(192,132,252,0.15);padding:2px 8px;border-radius:10px;font-size:7px;color:#c084fc;border:1px solid rgba(192,132,252,0.05);">🔍 ${relevance}%</span>`;
-                        }
-
-                        const sources = story.sources || [];
-                        const sourceBadges = sources.slice(0, 3).map(source => {
-                            let label = source;
-                            if (source.includes('Semántico')) label = '🔍 Semántico';
-                            if (source.includes('Subtítulos')) label = '🎤 Subtítulos';
-                            if (source.includes('Descripción')) label = '📝 Descripción';
-                            if (source.includes('Hashtag')) label = '# Hashtag';
-                            if (source.includes('Texto')) label = '📄 Texto';
-                            return `<span class="source-badge" style="font-size:7px;background:rgba(255,255,255,0.05);padding:1px 6px;border-radius:8px;margin-right:2px;color:rgba(255,255,255,0.3);">${label}</span>`;
-                        }).join('');
-
-                        const langBadge = story.language && story.language !== 'es' ?
-                            `<span class="lang-badge" style="position:absolute;bottom:8px;right:8px;z-index:5;background:rgba(255,255,255,0.05);padding:2px 8px;border-radius:10px;font-size:7px;color:rgba(255,255,255,0.15);">
-                                ${story.language.toUpperCase()}
-                            </span>` : '';
-
-                        return `
-                            <div class="story-thumb" onclick="window.openStoryFromExplore('${story.id}')">
-                                ${mediaContent}
-                                ${story.hasSubtitles ? '<span class="subtitles-badge" style="position:absolute;top:8px;right:8px;z-index:5;background:rgba(192,132,252,0.15);padding:2px 6px;border-radius:4px;font-size:7px;color:#c084fc;">CC</span>' : ''}
-                                ${relevanceBadge}
-                                ${langBadge}
-                                <div class="overlay">
-                                    <div class="likes">
-                                        <i class="fas fa-heart"></i>
-                                        ${formatNumber(story.likes?.length || 0)}
-                                    </div>
-                                    ${subtitlePreview ? `<div class="subtitle-preview">💬 ${subtitlePreview}</div>` : ''}
-                                    ${sourceBadges ? `<div class="source-badges" style="margin-top:4px;display:flex;flex-wrap:wrap;gap:2px;">${sourceBadges}</div>` : ''}
-                                </div>
-                            </div>
-                        `;
-                    }).join('')}
-                </div>
-            </div>
-        `;
-    }
-
-    if (filteredStories.length < 5 && users.length < 3) {
-        html += `
-            <div style="margin-top:16px;padding:12px;background:rgba(255,255,255,0.02);border-radius:12px;border:1px solid rgba(255,255,255,0.03);">
-                <div style="font-size:11px;color:rgba(255,255,255,0.2);margin-bottom:8px;">💡 Prueba con estas palabras clave:</div>
-                <div style="display:flex;gap:8px;flex-wrap:wrap;">
-                    ${getRelatedSuggestions(query).map(s => `
-                        <span class="trending-hashtag" onclick="window.performSmartSearch('${s}')" style="font-size:11px;padding:4px 12px;background:rgba(255,255,255,0.03);border-radius:16px;cursor:pointer;color:rgba(255,255,255,0.2);">#${s}</span>
-                    `).join('')}
-                </div>
-            </div>
-        `;
-    }
-
-    html += `</div>`;
-    content.innerHTML = html;
-}
-
-// ============================================================
-// 🔥 SUGERENCIAS RELACIONADAS
-// ============================================================
-
-function getRelatedSuggestions(query) {
-    const relatedMap = {
-        'comida': ['recetas', 'cocina', 'restaurante', 'chef', 'gourmet', 'postres', 'vegano', 'comida rapida'],
-        'futbol': ['goles', 'partidos', 'liga', 'campeones', 'equipos', 'estadio', 'mundial', 'fútbol'],
-        'amor': ['relaciones', 'romance', 'pareja', 'sentimientos', 'corazón', 'citas', 'enamorado'],
-        'politica': ['gobierno', 'elecciones', 'voto', 'presidente', 'democracia', 'debate', 'congreso'],
-        'tecnologia': ['software', 'apps', 'programacion', 'inteligencia', 'artificial', 'startup', 'innovacion'],
-        'musica': ['canciones', 'artistas', 'conciertos', 'bandas', 'instrumentos', 'ritmo', 'melodia'],
-        'cine': ['peliculas', 'actores', 'directores', 'estrenos', 'series', 'streaming', 'netflix'],
-        'deportes': ['competencia', 'entrenamiento', 'atletas', 'olimpicos', 'records', 'medallas'],
-        'salud': ['ejercicio', 'dieta', 'bienestar', 'meditacion', 'fitness', 'yoga', 'nutricion'],
-        'viajes': ['vacaciones', 'playa', 'montaña', 'aventura', 'turismo', 'destinos', 'hoteles'],
-        'moda': ['ropa', 'estilo', 'tendencias', 'diseñadores', 'looks', 'outfits', 'zapatos'],
-        'arte': ['pintura', 'dibujo', 'escultura', 'museos', 'creatividad', 'exposiciones', 'galerias']
-    };
-
-    const queryLower = query.toLowerCase();
-    for (const [key, values] of Object.entries(relatedMap)) {
-        if (queryLower.includes(key) || key.includes(queryLower)) {
-            return values.slice(0, 6);
-        }
-        for (const val of values) {
-            if (queryLower.includes(val) || val.includes(queryLower)) {
-                return values.slice(0, 6);
-            }
-        }
-    }
     
-    return ['contenido', 'popular', 'interesante', 'actual', 'tendencias', 'viral'];
+    // Si no hay caché, cargar del servidor
+    await loadExploreData(tab);
 }
 
 // ============================================================
-// CARGAR DATOS DE EXPLORACIÓN
+// 🔥 CARGAR DATOS DE EXPLORACIÓN CON GUARDADO EN CACHÉ
 // ============================================================
 
 async function loadExploreData(tab) {
@@ -569,37 +466,63 @@ async function loadExploreData(tab) {
                 const result = await res.json();
                 const allStories = (result.data || []).filter(story => story.userId !== currentUser?.id);
                 data.stories = filterPublicStories(allStories);
-                console.log(`📸 Historias públicas: ${data.stories.length} de ${allStories.length} totales`);
+                console.log(`📸 Historias públicas: ${data.stories.length}`);
+                
+                // Guardar en caché
+                saveToCache('explore_stories_data', { tab: 'stories', data: data });
             }
         }
         
         if (tab === 'users') {
-            const url = `${API_URL}/api/users/popular${currentUserId ? '?userId=' + currentUserId : ''}`;
-            const res = await fetch(url, { headers });
-            if (res.ok) {
-                const allUsers = await res.json();
-                data.users = filterPublicUsers(allUsers).slice(0, 10);
-                console.log(`👥 Usuarios populares (públicos): ${data.users.length} de ${allUsers.length} totales`);
+            // 🔥 PRIMERO VERIFICAR CACHÉ LOCAL PARA USUARIOS POPULARES
+            const cachedUsers = getFromCache(CACHE_KEYS.POPULAR_USERS);
+            if (cachedUsers && cachedUsers.length > 0) {
+                console.log(`👥 Usuarios populares desde caché local: ${cachedUsers.length}`);
+                data.users = cachedUsers;
+            } else {
+                const url = `${API_URL}/api/users/popular${currentUserId ? '?userId=' + currentUserId : ''}`;
+                const res = await fetch(url, { headers });
+                if (res.ok) {
+                    const allUsers = await res.json();
+                    data.users = filterPublicUsers(allUsers).slice(0, 10);
+                    console.log(`👥 Usuarios populares (públicos): ${data.users.length}`);
+                    
+                    // Guardar en caché
+                    saveToCache(CACHE_KEYS.POPULAR_USERS, data.users);
+                    saveToCache('explore_users_data', { tab: 'users', data: data });
+                }
             }
         }
         
         if (tab === 'trending') {
-            const res = await fetch(`${API_URL}/api/hashtags/trending/public`);
-            if (res.ok) {
-                let hashtags = await res.json();
-                hashtags = hashtags
-                    .filter(h => h.count > 0)
-                    .sort((a, b) => (b.count || 0) - (a.count || 0));
-                
-                if (hashtags.length > 20) {
-                    hashtags = hashtags.slice(0, 20);
+            // 🔥 VERIFICAR CACHÉ LOCAL PARA HASHTAGS
+            const cachedHashtags = getFromCache(CACHE_KEYS.TRENDING_HASHTAGS);
+            if (cachedHashtags && cachedHashtags.length > 0) {
+                console.log(`🔥 Hashtags desde caché local: ${cachedHashtags.length}`);
+                data.hashtags = cachedHashtags;
+            } else {
+                const res = await fetch(`${API_URL}/api/hashtags/trending/public`);
+                if (res.ok) {
+                    let hashtags = await res.json();
+                    hashtags = hashtags
+                        .filter(h => h.count > 0)
+                        .sort((a, b) => (b.count || 0) - (a.count || 0));
+                    
+                    if (hashtags.length > 20) {
+                        hashtags = hashtags.slice(0, 20);
+                    }
+                    
+                    data.hashtags = hashtags;
+                    console.log(`🔥 Hashtags en tendencia: ${data.hashtags.length}`);
+                    
+                    // Guardar en caché
+                    saveToCache(CACHE_KEYS.TRENDING_HASHTAGS, data.hashtags);
+                    saveToCache('explore_trending_data', { tab: 'trending', data: data });
                 }
-                
-                data.hashtags = hashtags;
             }
         }
         
-        // 🔥 GUARDAR EN CACHÉ PARA MOSTRAR DESPUÉS SIN RECARGAR
+        // Guardar en memoria
         lastLoadedData = {
             tab: tab,
             data: data,
@@ -615,13 +538,125 @@ async function loadExploreData(tab) {
                 <i class="fas fa-exclamation-triangle" style="color:#ff6b6b;"></i>
                 <h3>Error al cargar</h3>
                 <p>Intenta de nuevo más tarde</p>
+                <button onclick="loadExploreData('${tab}')" style="margin-top:12px;padding:8px 24px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:8px;color:white;cursor:pointer;">
+                    Reintentar
+                </button>
             </div>
         `;
     }
 }
 
 // ============================================================
-// RENDERIZAR CONTENIDO
+// 🔥 BÚSQUEDA HÍBRIDA CON CACHÉ
+// ============================================================
+
+async function performSmartSearch(query) {
+    const token = getToken();
+    if (!token) {
+        showToast('Inicia sesión para buscar', true);
+        return;
+    }
+
+    if (searchInProgress) return;
+    
+    // 🔥 VERIFICAR CACHÉ DE BÚSQUEDA
+    const cacheKey = `search_${query.toLowerCase().trim()}`;
+    const cachedResults = getFromCache(cacheKey);
+    
+    if (cachedResults && cachedResults.length > 0) {
+        console.log(`🔍 Resultados de búsqueda desde caché: "${query}"`);
+        currentSearchResults = cachedResults;
+        renderSearchResults(query, cachedResults, [], {});
+        saveExploreState(currentTab, query, cachedResults);
+        return;
+    }
+    
+    searchInProgress = true;
+
+    const content = document.getElementById('exploreContent');
+    if (!content) return;
+
+    content.innerHTML = `
+        <div class="explore-empty">
+            <i class="fas fa-spinner fa-pulse"></i>
+            <h3>Buscando "${query}"...</h3>
+            <p style="font-size:12px;color:rgba(255,255,255,0.2);">
+                🔍 Búsqueda híbrida: literal + semántica (100+ idiomas)
+            </p>
+        </div>
+    `;
+
+    try {
+        const usersRes = await fetch(`${API_URL}/api/users/search?q=${encodeURIComponent(query)}`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+
+        let users = [];
+        if (usersRes.ok) {
+            const allUsers = await usersRes.json();
+            users = filterPublicUsers(allUsers);
+            console.log(`👥 Usuarios encontrados (públicos): ${users.length}`);
+        }
+
+        const hybridRes = await fetch(`${API_URL}/api/stories/search/hybrid?q=${encodeURIComponent(query)}&limit=30`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+
+        let stories = [];
+        let meta = {};
+
+        if (hybridRes.ok) {
+            const result = await hybridRes.json();
+            const allStories = (result.data || []).filter(s => {
+                const relevance = s.relevanceScore || 0;
+                return relevance > 30;
+            });
+            stories = filterPublicStories(allStories);
+            meta = result.meta || {};
+            console.log(`📸 Historias relevantes (públicas): ${stories.length}`);
+        }
+
+        if (stories.length === 0 && users.length === 0) {
+            content.innerHTML = `
+                <div class="explore-empty">
+                    <i class="fas fa-search"></i>
+                    <h3>No se encontraron resultados para "${query}"</h3>
+                    <p>Prueba con otras palabras clave</p>
+                    <div style="margin-top:16px;display:flex;gap:8px;flex-wrap:wrap;justify-content:center;">
+                        ${getRelatedSuggestions(query).map(s => `
+                            <span class="trending-hashtag" onclick="window.performSmartSearch('${s}')">#${s}</span>
+                        `).join('')}
+                    </div>
+                </div>
+            `;
+            searchInProgress = false;
+            return;
+        }
+
+        // 🔥 GUARDAR EN CACHÉ
+        const combinedResults = [...stories, ...users.map(u => ({ ...u, type: 'user' }))];
+        currentSearchResults = combinedResults;
+        saveToCache(cacheKey, combinedResults);
+        saveExploreState(currentTab, query, combinedResults);
+        
+        renderSearchResults(query, stories, users, meta);
+
+    } catch (error) {
+        console.error('Error en búsqueda:', error);
+        content.innerHTML = `
+            <div class="explore-empty">
+                <i class="fas fa-exclamation-triangle" style="color:#ff6b6b;"></i>
+                <h3>Error al buscar</h3>
+                <p>${error.message || 'Intenta de nuevo más tarde'}</p>
+            </div>
+        `;
+    }
+
+    searchInProgress = false;
+}
+
+// ============================================================
+// RENDERIZAR CONTENIDO (sin cambios)
 // ============================================================
 
 function renderExploreContent(tab, data) {
@@ -763,83 +798,13 @@ function renderUsersList(content, users) {
 }
 
 // ============================================================
-// BUSCAR HISTORIAS POR HASHTAG
+// RESTO DE FUNCIONES (renderSearchResults, getRelatedSuggestions, etc.)
 // ============================================================
 
-async function openHashtagStories(tag) {
-    const token = getToken();
-    if (!token) {
-        showToast('Inicia sesión para ver historias', true);
-        return;
-    }
-
-    if (hashtagStoriesCache.has(tag)) {
-        const cached = hashtagStoriesCache.get(tag);
-        if (cached.length > 0) {
-            window._fromExploreModal = true;
-            window.openStoryModal(cached[0].id, cached, false, null);
-            setTimeout(() => {
-                const storyOverlay = document.getElementById('storyModalOverlay');
-                if (storyOverlay) {
-                    storyOverlay.style.zIndex = '10002';
-                }
-            }, 50);
-        } else {
-            showToast(`No hay historias públicas con #${tag}`, true);
-        }
-        return;
-    }
-
-    try {
-        const res = await fetch(`${API_URL}/api/stories/hashtag/${tag}`, {
-            headers: { 'Authorization': `Bearer ${token}` }
-        });
-
-        if (!res.ok) {
-            showToast('Error al buscar historias', true);
-            return;
-        }
-
-        const data = await res.json();
-        let stories = [];
-        
-        if (Array.isArray(data)) {
-            data.forEach(group => {
-                if (group.stories && Array.isArray(group.stories)) {
-                    stories.push(...group.stories);
-                }
-            });
-        } else if (data.data && Array.isArray(data.data)) {
-            stories.push(...data.data);
-        }
-
-        stories = filterPublicStories(stories);
-
-        if (stories.length === 0) {
-            showToast(`No hay historias públicas con #${tag}`, true);
-            return;
-        }
-
-        hashtagStoriesCache.set(tag, stories);
-        
-        window._fromExploreModal = true;
-        window.openStoryModal(stories[0].id, stories, false, null);
-        
-        setTimeout(() => {
-            const storyOverlay = document.getElementById('storyModalOverlay');
-            if (storyOverlay) {
-                storyOverlay.style.zIndex = '10002';
-            }
-        }, 50);
-        
-    } catch (error) {
-        console.error('Error buscando historias por hashtag:', error);
-        showToast('Error al buscar historias', true);
-    }
-}
+// ... (mantener las mismas funciones renderSearchResults, getRelatedSuggestions, openHashtagStories, etc.)
 
 // ============================================================
-// 🔥 ACCIONES GLOBALES - SUPERPONER MODALES
+// ACCIONES GLOBALES - ACTUALIZADAS
 // ============================================================
 
 window.openStoryFromExplore = (storyId) => {
@@ -855,16 +820,23 @@ window.openStoryFromExplore = (storyId) => {
     }
 };
 
-// 🔥 ABRIR PERFIL DESDE EXPLORE - CORREGIDO
 window.openProfileFromExplore = (userId) => {
     if (userId) {
         window._fromExploreModal = true;
+        window._exploreState = {
+            tab: currentTab,
+            query: currentSearchQuery,
+            results: currentSearchResults
+        };
+        
+        // 🔥 GUARDAR ESTADO ANTES DE ABRIR PERFIL
+        saveExploreState(currentTab, currentSearchQuery, currentSearchResults);
         
         if (typeof window.openProfileModal === 'function') {
             window.openProfileModal(userId, false, { 
                 fromExplore: true,
                 returnToExplore: true,
-                savedTab: savedTab // 🔥 Pasar la pestaña guardada
+                savedTab: savedTab
             });
         } else {
             showToast('Error al abrir perfil', true);
@@ -884,9 +856,13 @@ window.openProfileFromExplore = (userId) => {
 
 window.openHashtagStories = openHashtagStories;
 window.performSmartSearch = performSmartSearch;
+window.followUserFromExplore = followUserFromExplore;
 
-// 🔥 SEGUIR USUARIO DESDE EXPLORE
-window.followUserFromExplore = async (userId, btn) => {
+// ============================================================
+// FUNCIÓN DE SEGUIMIENTO (sin cambios)
+// ============================================================
+
+async function followUserFromExplore(userId, btn) {
     const token = getToken();
     if (!token) {
         showToast('Inicia sesión para seguir', true);
@@ -918,7 +894,194 @@ window.followUserFromExplore = async (userId, btn) => {
         console.error('Error en follow:', error);
         showToast('Error al procesar', true);
     }
-};
+}
+
+// ============================================================
+// FUNCIONES AUXILIARES
+// ============================================================
+
+function getRelatedSuggestions(query) {
+    const relatedMap = {
+        'comida': ['recetas', 'cocina', 'restaurante', 'chef', 'gourmet', 'postres', 'vegano', 'comida rapida'],
+        'futbol': ['goles', 'partidos', 'liga', 'campeones', 'equipos', 'estadio', 'mundial', 'fútbol'],
+        'amor': ['relaciones', 'romance', 'pareja', 'sentimientos', 'corazón', 'citas', 'enamorado'],
+        'politica': ['gobierno', 'elecciones', 'voto', 'presidente', 'democracia', 'debate', 'congreso'],
+        'tecnologia': ['software', 'apps', 'programacion', 'inteligencia', 'artificial', 'startup', 'innovacion'],
+        'musica': ['canciones', 'artistas', 'conciertos', 'bandas', 'instrumentos', 'ritmo', 'melodia'],
+        'cine': ['peliculas', 'actores', 'directores', 'estrenos', 'series', 'streaming', 'netflix'],
+        'deportes': ['competencia', 'entrenamiento', 'atletas', 'olimpicos', 'records', 'medallas'],
+        'salud': ['ejercicio', 'dieta', 'bienestar', 'meditacion', 'fitness', 'yoga', 'nutricion'],
+        'viajes': ['vacaciones', 'playa', 'montaña', 'aventura', 'turismo', 'destinos', 'hoteles'],
+        'moda': ['ropa', 'estilo', 'tendencias', 'diseñadores', 'looks', 'outfits', 'zapatos'],
+        'arte': ['pintura', 'dibujo', 'escultura', 'museos', 'creatividad', 'exposiciones', 'galerias']
+    };
+
+    const queryLower = query.toLowerCase();
+    for (const [key, values] of Object.entries(relatedMap)) {
+        if (queryLower.includes(key) || key.includes(queryLower)) {
+            return values.slice(0, 6);
+        }
+        for (const val of values) {
+            if (queryLower.includes(val) || val.includes(queryLower)) {
+                return values.slice(0, 6);
+            }
+        }
+    }
+    
+    return ['contenido', 'popular', 'interesante', 'actual', 'tendencias', 'viral'];
+}
+
+function renderSearchResults(query, stories, users, meta) {
+    const content = document.getElementById('exploreContent');
+    if (!content) return;
+
+    const currentUser = getCurrentUser();
+    const currentUserId = currentUser?.id;
+
+    const filteredStories = stories.filter(s => s.userId !== currentUserId);
+
+    let html = `
+        <div class="explore-section">
+            <div class="section-title">
+                🔍 Resultados para "${query}"
+                <span style="font-size:10px;color:rgba(255,255,255,0.1);margin-left:8px;">
+                    ${filteredStories.length} historias · ${users.length} usuarios públicos
+                </span>
+            </div>
+    `;
+
+    if (users.length > 0) {
+        html += `
+            <div style="margin-bottom:16px;">
+                <div style="font-size:12px;color:rgba(255,255,255,0.3);margin-bottom:8px;font-weight:600;letter-spacing:0.5px;border-bottom:1px solid rgba(255,255,255,0.04);padding-bottom:6px;">
+                    👥 Usuarios públicos (${users.length})
+                </div>
+                <div class="explore-users">
+                    ${users.map(user => {
+                        const isOwn = currentUserId === user.id;
+                        const isFollowing = user.isFollowing || false;
+                        return `
+                            <div class="explore-user-item" onclick="window.openProfileFromExplore('${user.id}')">
+                                <img class="avatar" src="${user.avatar || getAvatar(user.fullName)}" />
+                                <div class="info">
+                                    <div class="name">${user.fullName} ${user.isVerified ? '✅' : ''} ${isOwn ? '👤' : ''}</div>
+                                    <div class="username">@${user.username}</div>
+                                    <div class="bio">${user.followersCount || 0} seguidores</div>
+                                </div>
+                                ${!isOwn ? `
+                                    <button class="follow-btn ${isFollowing ? 'following' : ''}" 
+                                            data-user-id="${user.id}"
+                                            onclick="event.stopPropagation(); window.followUserFromExplore('${user.id}', this)">
+                                        ${isFollowing ? 'Siguiendo' : 'Seguir'}
+                                    </button>
+                                ` : ''}
+                            </div>
+                        `;
+                    }).join('')}
+                </div>
+            </div>
+        `;
+    }
+
+    if (filteredStories.length > 0) {
+        html += `
+            <div>
+                <div style="font-size:12px;color:rgba(255,255,255,0.3);margin-bottom:8px;font-weight:600;letter-spacing:0.5px;border-bottom:1px solid rgba(255,255,255,0.04);padding-bottom:6px;">
+                    📸 Historias relacionadas (${filteredStories.length})
+                    ${meta?.algorithm ? `<span style="font-size:9px;color:rgba(255,255,255,0.08);margin-left:8px;font-weight:400;">${meta.algorithm}</span>` : ''}
+                </div>
+                <div class="explore-grid">
+                    ${filteredStories.slice(0, 30).map(story => {
+                        // ... (código de renderizado de historias igual)
+                        let mediaContent = '';
+                        const mediaUrl = story.mediaUrl;
+                        
+                        if (story.mediaType === 'image' && mediaUrl) {
+                            mediaContent = `<img src="${mediaUrl}" loading="lazy" onerror="this.style.display='none'" />`;
+                        } else if (story.mediaType === 'video' && mediaUrl) {
+                            mediaContent = `
+                                <video src="${mediaUrl}" muted loop playsinline preload="metadata" 
+                                       onerror="this.style.display='none'"></video>
+                            `;
+                        } else if (story.mediaType === 'text' && story.textContent) {
+                            mediaContent = `
+                                <div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;background:${story.textBgColor || '#1a1a2e'};padding:16px;text-align:center;font-size:14px;color:rgba(255,255,255,0.6);font-weight:500;overflow:hidden;">
+                                    ${story.textContent.substring(0, 60)}${story.textContent.length > 60 ? '...' : ''}
+                                </div>
+                            `;
+                        } else {
+                            mediaContent = `
+                                <div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;background:#1a1a2e;color:rgba(255,255,255,0.15);font-size:32px;">
+                                    ${story.mediaType === 'video' ? '🎬' : story.hasSubtitles ? '💬' : '📝'}
+                                </div>
+                            `;
+                        }
+
+                        const subtitleText = story.subtitles || story.caption || story.textContent || '';
+                        const subtitlePreview = subtitleText.length > 60 ? subtitleText.substring(0, 60) + '...' : subtitleText;
+
+                        let relevanceBadge = '';
+                        const relevance = story.relevanceScore || 0;
+                        if (relevance > 70) {
+                            relevanceBadge = `<span class="relevance-badge" style="position:absolute;top:8px;left:8px;z-index:5;background:rgba(34,197,94,0.2);padding:2px 8px;border-radius:10px;font-size:7px;color:#22c55e;border:1px solid rgba(34,197,94,0.1);">⭐ ${relevance}%</span>`;
+                        } else if (relevance > 50) {
+                            relevanceBadge = `<span class="relevance-badge" style="position:absolute;top:8px;left:8px;z-index:5;background:rgba(192,132,252,0.15);padding:2px 8px;border-radius:10px;font-size:7px;color:#c084fc;border:1px solid rgba(192,132,252,0.05);">🔍 ${relevance}%</span>`;
+                        }
+
+                        const sources = story.sources || [];
+                        const sourceBadges = sources.slice(0, 3).map(source => {
+                            let label = source;
+                            if (source.includes('Semántico')) label = '🔍 Semántico';
+                            if (source.includes('Subtítulos')) label = '🎤 Subtítulos';
+                            if (source.includes('Descripción')) label = '📝 Descripción';
+                            if (source.includes('Hashtag')) label = '# Hashtag';
+                            if (source.includes('Texto')) label = '📄 Texto';
+                            return `<span class="source-badge" style="font-size:7px;background:rgba(255,255,255,0.05);padding:1px 6px;border-radius:8px;margin-right:2px;color:rgba(255,255,255,0.3);">${label}</span>`;
+                        }).join('');
+
+                        const langBadge = story.language && story.language !== 'es' ?
+                            `<span class="lang-badge" style="position:absolute;bottom:8px;right:8px;z-index:5;background:rgba(255,255,255,0.05);padding:2px 8px;border-radius:10px;font-size:7px;color:rgba(255,255,255,0.15);">
+                                ${story.language.toUpperCase()}
+                            </span>` : '';
+
+                        return `
+                            <div class="story-thumb" onclick="window.openStoryFromExplore('${story.id}')">
+                                ${mediaContent}
+                                ${story.hasSubtitles ? '<span class="subtitles-badge" style="position:absolute;top:8px;right:8px;z-index:5;background:rgba(192,132,252,0.15);padding:2px 6px;border-radius:4px;font-size:7px;color:#c084fc;">CC</span>' : ''}
+                                ${relevanceBadge}
+                                ${langBadge}
+                                <div class="overlay">
+                                    <div class="likes">
+                                        <i class="fas fa-heart"></i>
+                                        ${formatNumber(story.likes?.length || 0)}
+                                    </div>
+                                    ${subtitlePreview ? `<div class="subtitle-preview">💬 ${subtitlePreview}</div>` : ''}
+                                    ${sourceBadges ? `<div class="source-badges" style="margin-top:4px;display:flex;flex-wrap:wrap;gap:2px;">${sourceBadges}</div>` : ''}
+                                </div>
+                            </div>
+                        `;
+                    }).join('')}
+                </div>
+            </div>
+        `;
+    }
+
+    if (filteredStories.length < 5 && users.length < 3) {
+        html += `
+            <div style="margin-top:16px;padding:12px;background:rgba(255,255,255,0.02);border-radius:12px;border:1px solid rgba(255,255,255,0.03);">
+                <div style="font-size:11px;color:rgba(255,255,255,0.2);margin-bottom:8px;">💡 Prueba con estas palabras clave:</div>
+                <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                    ${getRelatedSuggestions(query).map(s => `
+                        <span class="trending-hashtag" onclick="window.performSmartSearch('${s}')" style="font-size:11px;padding:4px 12px;background:rgba(255,255,255,0.03);border-radius:16px;cursor:pointer;color:rgba(255,255,255,0.2);">#${s}</span>
+                    `).join('')}
+                </div>
+            </div>
+        `;
+    }
+
+    html += `</div>`;
+    content.innerHTML = html;
+}
 
 // ============================================================
 // EXPORTAR
@@ -926,6 +1089,9 @@ window.followUserFromExplore = async (userId, btn) => {
 
 export { 
     openExploreModal, 
-    showExploreModal, // 🔥 NUEVA FUNCIÓN EXPORTADA
-    closeExploreModal 
+    showExploreModal,
+    closeExploreModal,
+    clearExploreCache,
+    saveExploreState,
+    getExploreState
 };

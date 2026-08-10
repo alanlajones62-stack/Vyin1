@@ -2,6 +2,7 @@
 // CON SISTEMA DE BLOQUEO Y PRIVACIDAD COMPLETO
 // 🔥 NAVEGACIÓN: Soporte para followers-modal y explore-modal
 // 🔥 CORREGIDO: Renderizado de historias (petición separada)
+// 🔥 MODIFICADO: Restaura correctamente el estado de explore-modal
 
 import {
     getToken, getCurrentUser, showToast,
@@ -917,7 +918,7 @@ function bringProfileToFront() {
 }
 
 // ============================================================
-// 🔥 CERRAR MODAL DE PERFIL - CORREGIDO
+// 🔥 CERRAR MODAL DE PERFIL - CORREGIDO CON RESTAURACIÓN DE EXPLORE
 // ============================================================
 
 function closeProfileModalInternal(restoreFromStack = true) {
@@ -1003,19 +1004,38 @@ function closeProfileModal() {
         return;
     }
 
-    // 🔥 TERCERO: VERIFICAR SI VIENE DE EXPLORE (SOLO si no hay followersContext)
+    // 🔥 TERCERO: VERIFICAR SI VIENE DE EXPLORE Y RESTAURAR CON ESTADO
     if (window._fromExploreModal) {
-        console.log(`🔄 Volviendo a explore-modal desde profile-modal`);
+        console.log(`🔄 Volviendo a explore-modal desde profile-modal con restauración de estado`);
         window._fromExploreModal = false;
         closeProfileModalInternal(false);
+        
         setTimeout(() => {
-            import('./explore-modal.js').then(({ openExploreModal }) => {
+            import('./explore-modal.js').then(({ openExploreModal, getExploreState }) => {
                 if (typeof openExploreModal === 'function') {
-                    openExploreModal();
+                    // 🔥 VERIFICAR SI HAY ESTADO GUARDADO
+                    const savedState = getExploreState ? getExploreState() : null;
+                    if (savedState) {
+                        console.log('📌 Restaurando estado guardado de explore:', savedState);
+                        // Abrir con restauración de estado
+                        openExploreModal(true);
+                    } else {
+                        // Abrir normal
+                        openExploreModal();
+                    }
+                } else {
+                    console.warn('⚠️ openExploreModal no disponible');
+                    if (typeof window.showProfileNative === 'function') {
+                        window.showProfileNative(getCurrentUser()?.id);
+                    }
                 }
-            }).catch(() => {
+            }).catch((err) => {
+                console.error('❌ Error cargando explore-modal:', err);
+                // Fallback: recargar la página o ir al feed
                 if (typeof window.showProfileNative === 'function') {
                     window.showProfileNative(getCurrentUser()?.id);
+                } else {
+                    window.location.href = '/';
                 }
             });
         }, 150);
