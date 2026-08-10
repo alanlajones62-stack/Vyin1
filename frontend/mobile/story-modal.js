@@ -1,6 +1,6 @@
 // ============================================================
 // story-modal.js - Modal para ver historias con navegación 
-// (VERSIÓN COMPLETA CON ELIMINAR - CORREGIDA - SIN DUPLICADOS)
+// (VERSIÓN COMPLETA - USA story-comments.js PARA COMENTARIOS)
 // ============================================================
 
 import {
@@ -9,7 +9,7 @@ import {
 } from './auth.js';
 
 import { formatNumber } from './utils.js';
-import { loadComments, initComments } from './story-comments.js';
+import { initComments, addComment } from './story-comments.js';
 
 const API_URL = window.location.origin;
 let currentStoryId = null;
@@ -22,9 +22,6 @@ let userLanguage = 'es';
 
 // Caché de traducciones
 let translationCache = {};
-
-// 🔥 SET PARA RASTREAR COMENTARIOS YA AGREGADOS (EVITA DUPLICADOS)
-const addedComments = new Set();
 
 // ============================================================
 // ABRIR MODAL
@@ -72,9 +69,6 @@ async function openStoryModal(storyId, storiesList = null, fromProfile = false, 
 
     currentStoryId = storyId;
     isModalOpen = true;
-    
-    // 🔥 LIMPIAR SET AL ABRIR NUEVO MODAL
-    addedComments.clear();
 
     const overlay = document.getElementById('storyModalOverlay');
     if (!overlay) {
@@ -113,9 +107,6 @@ function closeStoryModal() {
     currentStoriesList = [];
     currentStoryIndex = 0;
     isNavigating = false;
-    
-    // 🔥 LIMPIAR SET AL CERRAR
-    addedComments.clear();
 
     const video = document.getElementById('storyVideo');
     if (video) {
@@ -366,7 +357,7 @@ function setupModalEvents() {
         await deleteStory(currentStoryId);
     });
 
-    // ENVÍO DE COMENTARIO
+    // 🔥 ENVÍO DE COMENTARIO - USA story-comments.js
     document.getElementById('sendCommentBtn')?.addEventListener('click', async () => {
         await handleSendComment();
     });
@@ -487,7 +478,7 @@ async function deleteStory(storyId) {
 }
 
 // ============================================================
-// 🔥 ENVIAR COMENTARIO - CORREGIDO (SIN DUPLICADOS)
+// 🔥 ENVIAR COMENTARIO - USA story-comments.js (SIN DUPLICADOS)
 // ============================================================
 
 async function handleSendComment() {
@@ -519,45 +510,31 @@ async function handleSendComment() {
     }
 
     try {
-        const res = await fetch(`${API_URL}/api/stories/${currentStoryId}/comments`, {
-            method: 'POST',
-            headers: {
-                'Authorization': `Bearer ${token}`,
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({ content })
-        });
-
-        const data = await res.json();
-
-        if (res.ok) {
+        // 🔥 USAR addComment DE story-comments.js
+        const newComment = await addComment(currentStoryId, content);
+        
+        if (newComment) {
             input.value = '';
-            
             updateCommentCount(1);
             
             // ACTUALIZAR DATOS LOCALES
             if (currentStoryData) {
                 if (!currentStoryData.comments) currentStoryData.comments = [];
-                currentStoryData.comments.push(data);
+                currentStoryData.comments.push(newComment);
             }
             
             if (currentStoriesList && currentStoriesList.length > 0) {
                 const idx = currentStoriesList.findIndex(s => s.id === currentStoryId);
                 if (idx !== -1 && currentStoriesList[idx]) {
                     if (!currentStoriesList[idx].comments) currentStoriesList[idx].comments = [];
-                    currentStoriesList[idx].comments.push(data);
+                    currentStoriesList[idx].comments.push(newComment);
                 }
             }
-
-            // 🔥 AGREGAR A LA UI SOLO UNA VEZ
-            addCommentToUI(data);
             
-            // 🔥 NO RECARGAR TODOS LOS COMENTARIOS - ESTO CAUSA DUPLICADOS
-            // NO llamar a initComments o loadComments aquí
+            // 🔥 LA UI SE ACTUALIZA SOLA DESDE story-comments.js
+            // NO hacer nada más aquí
             
             showToast('💬 Comentario enviado');
-        } else {
-            showToast(data.error || 'Error al enviar comentario', true);
         }
     } catch (error) {
         console.error('Error enviando comentario:', error);
@@ -570,397 +547,6 @@ async function handleSendComment() {
         }
         input.focus();
     }
-}
-
-// ============================================================
-// ENVIAR RESPUESTA - CORREGIDO
-// ============================================================
-
-async function handleSendReply(storyId, commentId) {
-    const wrapper = document.getElementById(`reply-input-${commentId}`);
-    if (!wrapper) return;
-
-    const input = wrapper.querySelector('.reply-input');
-    if (!input) return;
-
-    const content = input.value.trim();
-    if (!content) {
-        showToast('Escribe una respuesta', true);
-        return;
-    }
-
-    const token = getToken();
-    if (!token) {
-        showToast('Inicia sesión para responder', true);
-        return;
-    }
-
-    input.disabled = true;
-    const sendBtn = wrapper.querySelector('.reply-send-btn');
-    if (sendBtn) {
-        sendBtn.disabled = true;
-        sendBtn.textContent = 'Enviando...';
-    }
-
-    try {
-        const res = await fetch(`${API_URL}/api/stories/${storyId}/comments/${commentId}/replies`, {
-            method: 'POST',
-            headers: {
-                'Authorization': `Bearer ${token}`,
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({ content })
-        });
-
-        const data = await res.json();
-
-        if (res.ok) {
-            input.value = '';
-            wrapper.style.display = 'none';
-
-            updateCommentCount(1);
-
-            addReplyToUI(commentId, data);
-            
-            showToast('💬 Respuesta enviada');
-        } else {
-            showToast(data.error || 'Error al enviar respuesta', true);
-        }
-    } catch (error) {
-        console.error('Error enviando respuesta:', error);
-        showToast('Error al enviar respuesta', true);
-    } finally {
-        input.disabled = false;
-        if (sendBtn) {
-            sendBtn.disabled = false;
-            sendBtn.textContent = 'Enviar';
-        }
-        input.focus();
-    }
-}
-
-// ============================================================
-// 🔥 AÑADIR COMENTARIO A LA UI - CON SET PARA EVITAR DUPLICADOS
-// ============================================================
-
-function addCommentToUI(comment) {
-    const commentsList = document.getElementById('commentsList');
-    if (!commentsList) return;
-
-    // 🔥 VERIFICAR CON SET
-    if (addedComments.has(comment.id)) {
-        console.log('⚠️ Comentario ya fue agregado (SET), omitiendo duplicado:', comment.id);
-        return;
-    }
-
-    // 🔥 VERIFICAR SI YA EXISTE EN EL DOM
-    const existingComment = commentsList.querySelector(`[data-comment-id="${comment.id}"]`);
-    if (existingComment) {
-        console.log('⚠️ Comentario ya existe en la UI, omitiendo duplicado:', comment.id);
-        addedComments.add(comment.id);
-        return;
-    }
-
-    const noComments = commentsList.querySelector('.no-comments');
-    if (noComments) {
-        noComments.remove();
-    }
-
-    const currentUser = getCurrentUser();
-    const userAvatar = currentUser?.avatar || getAvatar(currentUser?.fullName || 'U');
-
-    const commentHtml = `
-        <div class="comment-item" data-comment-id="${comment.id}">
-            <img class="avatar" src="${comment.avatar || userAvatar}" alt="${comment.fullName}" />
-            <div class="comment-body">
-                <div class="comment-user">
-                    ${escapeHtml(comment.fullName)}
-                    <span class="handle">@${comment.username || 'usuario'}</span>
-                    <span class="time">${formatDate(comment.createdAt)}</span>
-                </div>
-                <div class="comment-text">${escapeHtml(comment.content)}</div>
-                <div class="comment-meta">
-                    <button class="btn-like-comment" data-comment-id="${comment.id}">
-                        <i class="fas fa-heart"></i> <span class="like-count">0</span>
-                    </button>
-                    <button class="btn-reply-comment" data-comment-id="${comment.id}">
-                        <i class="fas fa-reply"></i> Responder
-                    </button>
-                    <button class="btn-delete-comment" data-comment-id="${comment.id}" style="display:${comment.userId === currentUser?.id ? 'inline-flex' : 'none'}">
-                        <i class="fas fa-trash-alt"></i>
-                    </button>
-                </div>
-                <div class="replies" id="replies-${comment.id}"></div>
-                <div class="reply-input-container" id="reply-input-${comment.id}" style="display:none;">
-                    <input type="text" class="reply-input" placeholder="Escribe una respuesta..." maxlength="500" />
-                    <button class="reply-send-btn" data-comment-id="${comment.id}">Enviar</button>
-                </div>
-            </div>
-        </div>
-    `;
-
-    const tempDiv = document.createElement('div');
-    tempDiv.innerHTML = commentHtml;
-    const commentElement = tempDiv.firstElementChild;
-    
-    // 🔥 VERIFICAR FINAL
-    if (commentsList.querySelector(`[data-comment-id="${comment.id}"]`)) {
-        console.log('⚠️ Comentario agregado mientras se procesaba, omitiendo');
-        return;
-    }
-    
-    // 🔥 AGREGAR AL SET
-    addedComments.add(comment.id);
-    
-    commentsList.insertBefore(commentElement, commentsList.firstChild);
-    
-    console.log('✅ Comentario añadido a la UI:', comment.id);
-    
-    // CONFIGURAR EVENTOS
-    setupCommentEvents();
-}
-
-// ============================================================
-// 🔥 AÑADIR RESPUESTA A LA UI - CON SET PARA EVITAR DUPLICADOS
-// ============================================================
-
-function addReplyToUI(parentCommentId, reply) {
-    const repliesContainer = document.getElementById(`replies-${parentCommentId}`);
-    if (!repliesContainer) {
-        console.log('⚠️ Contenedor de respuestas no encontrado para:', parentCommentId);
-        return;
-    }
-
-    // 🔥 VERIFICAR CON SET
-    if (addedComments.has(reply.id)) {
-        console.log('⚠️ Respuesta ya fue agregada (SET), omitiendo duplicado:', reply.id);
-        return;
-    }
-
-    // 🔥 VERIFICAR SI YA EXISTE EN EL DOM
-    const existingReply = repliesContainer.querySelector(`[data-comment-id="${reply.id}"]`);
-    if (existingReply) {
-        console.log('⚠️ Respuesta ya existe en la UI, omitiendo duplicado:', reply.id);
-        addedComments.add(reply.id);
-        return;
-    }
-
-    const currentUser = getCurrentUser();
-    const userAvatar = currentUser?.avatar || getAvatar(currentUser?.fullName || 'U');
-
-    const replyHtml = `
-        <div class="comment-item" data-comment-id="${reply.id}">
-            <img class="avatar" src="${reply.avatar || userAvatar}" alt="${reply.fullName}" />
-            <div class="comment-body">
-                <div class="comment-user">
-                    ${escapeHtml(reply.fullName)}
-                    <span class="handle">@${reply.username || 'usuario'}</span>
-                    <span class="time">${formatDate(reply.createdAt)}</span>
-                </div>
-                <div class="comment-text">${escapeHtml(reply.content)}</div>
-                <div class="comment-meta">
-                    <button class="btn-like-comment" data-comment-id="${reply.id}">
-                        <i class="fas fa-heart"></i> <span class="like-count">0</span>
-                    </button>
-                    <button class="btn-reply-comment" data-comment-id="${reply.id}">
-                        <i class="fas fa-reply"></i> Responder
-                    </button>
-                    <button class="btn-delete-comment" data-comment-id="${reply.id}" style="display:${reply.userId === currentUser?.id ? 'inline-flex' : 'none'}">
-                        <i class="fas fa-trash-alt"></i>
-                    </button>
-                </div>
-                <div class="replies" id="replies-${reply.id}"></div>
-                <div class="reply-input-container" id="reply-input-${reply.id}" style="display:none;">
-                    <input type="text" class="reply-input" placeholder="Escribe una respuesta..." maxlength="500" />
-                    <button class="reply-send-btn" data-comment-id="${reply.id}">Enviar</button>
-                </div>
-            </div>
-        </div>
-    `;
-
-    const tempDiv = document.createElement('div');
-    tempDiv.innerHTML = replyHtml;
-    const replyElement = tempDiv.firstElementChild;
-    
-    // 🔥 VERIFICAR FINAL
-    if (repliesContainer.querySelector(`[data-comment-id="${reply.id}"]`)) {
-        console.log('⚠️ Respuesta agregada mientras se procesaba, omitiendo');
-        return;
-    }
-    
-    // 🔥 AGREGAR AL SET
-    addedComments.add(reply.id);
-    
-    repliesContainer.appendChild(replyElement);
-    
-    console.log('✅ Respuesta añadida a la UI:', reply.id);
-    
-    // CONFIGURAR EVENTOS
-    setupCommentEvents();
-}
-
-// ============================================================
-// CONFIGURAR EVENTOS DE COMENTARIOS Y RESPUESTAS
-// ============================================================
-
-function setupCommentEvents() {
-    // EVENTOS PARA LIKES DE COMENTARIOS
-    document.querySelectorAll('.btn-like-comment').forEach(btn => {
-        if (btn.dataset.hasListener === 'true') return;
-        btn.dataset.hasListener = 'true';
-        
-        btn.addEventListener('click', async function(e) {
-            e.stopPropagation();
-            const commentId = this.dataset.commentId;
-            if (!commentId || !currentStoryId) return;
-            
-            const isLiked = this.classList.contains('liked');
-            const method = isLiked ? 'DELETE' : 'POST';
-            const token = getToken();
-            
-            if (!token) {
-                showToast('Inicia sesión para dar like', true);
-                return;
-            }
-            
-            const likeCountSpan = this.querySelector('.like-count');
-            let currentCount = parseInt(likeCountSpan?.textContent || '0');
-            
-            if (isLiked) {
-                currentCount = Math.max(0, currentCount - 1);
-                this.classList.remove('liked');
-            } else {
-                currentCount = currentCount + 1;
-                this.classList.add('liked');
-            }
-            if (likeCountSpan) {
-                likeCountSpan.textContent = currentCount;
-            }
-            
-            try {
-                const res = await fetch(`${API_URL}/api/stories/${currentStoryId}/comments/${commentId}/like`, {
-                    method: method,
-                    headers: {
-                        'Authorization': `Bearer ${token}`,
-                        'Content-Type': 'application/json'
-                    }
-                });
-                
-                const data = await res.json();
-                if (res.ok && likeCountSpan) {
-                    likeCountSpan.textContent = data.likesCount || 0;
-                    if (data.liked) {
-                        this.classList.add('liked');
-                    } else {
-                        this.classList.remove('liked');
-                    }
-                }
-            } catch (error) {
-                console.error('Error en like de comentario:', error);
-            }
-        });
-    });
-    
-    // EVENTOS PARA RESPONDER A COMENTARIOS
-    document.querySelectorAll('.btn-reply-comment').forEach(btn => {
-        if (btn.dataset.hasListener === 'true') return;
-        btn.dataset.hasListener = 'true';
-        
-        btn.addEventListener('click', function(e) {
-            e.stopPropagation();
-            const commentId = this.dataset.commentId;
-            if (!commentId) return;
-            
-            const replyInput = document.getElementById(`reply-input-${commentId}`);
-            if (replyInput) {
-                const isHidden = replyInput.style.display === 'none' || replyInput.style.display === '';
-                replyInput.style.display = isHidden ? 'flex' : 'none';
-                if (isHidden) {
-                    const input = replyInput.querySelector('.reply-input');
-                    if (input) {
-                        input.focus();
-                        input.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                    }
-                }
-            }
-        });
-    });
-    
-    // EVENTOS PARA ENVIAR RESPUESTAS
-    document.querySelectorAll('.reply-send-btn').forEach(btn => {
-        if (btn.dataset.hasListener === 'true') return;
-        btn.dataset.hasListener = 'true';
-        
-        btn.addEventListener('click', async function(e) {
-            e.stopPropagation();
-            const commentId = this.dataset.commentId;
-            if (!commentId || !currentStoryId) return;
-            await handleSendReply(currentStoryId, commentId);
-        });
-    });
-    
-    // EVENTOS PARA ENTER EN INPUTS DE RESPUESTA
-    document.querySelectorAll('.reply-input').forEach(input => {
-        if (input.dataset.hasListener === 'true') return;
-        input.dataset.hasListener = 'true';
-        
-        input.addEventListener('keydown', function(e) {
-            if (e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault();
-                const wrapper = this.closest('.reply-input-container');
-                if (wrapper) {
-                    const btn = wrapper.querySelector('.reply-send-btn');
-                    if (btn) btn.click();
-                }
-            }
-        });
-    });
-    
-    // EVENTOS PARA ELIMINAR COMENTARIOS
-    document.querySelectorAll('.btn-delete-comment').forEach(btn => {
-        if (btn.dataset.hasListener === 'true') return;
-        btn.dataset.hasListener = 'true';
-        
-        btn.addEventListener('click', async function(e) {
-            e.stopPropagation();
-            const commentId = this.dataset.commentId;
-            if (!commentId || !currentStoryId) return;
-            
-            if (!confirm('¿Eliminar este comentario?')) return;
-            
-            const token = getToken();
-            if (!token) {
-                showToast('Inicia sesión para eliminar', true);
-                return;
-            }
-            
-            try {
-                const res = await fetch(`${API_URL}/api/stories/${currentStoryId}/comments/${commentId}`, {
-                    method: 'DELETE',
-                    headers: {
-                        'Authorization': `Bearer ${token}`,
-                        'Content-Type': 'application/json'
-                    }
-                });
-                
-                if (res.ok) {
-                    const commentEl = document.querySelector(`[data-comment-id="${commentId}"]`);
-                    if (commentEl) {
-                        commentEl.remove();
-                        // 🔥 ELIMINAR DEL SET
-                        addedComments.delete(commentId);
-                        showToast('🗑️ Comentario eliminado');
-                        updateCommentCount(-1);
-                    }
-                } else {
-                    showToast('Error al eliminar comentario', true);
-                }
-            } catch (error) {
-                console.error('Error eliminando comentario:', error);
-                showToast('Error al eliminar comentario', true);
-            }
-        });
-    });
 }
 
 // ============================================================
@@ -1301,8 +887,8 @@ async function loadStoryData(storyId, isNavigation = false) {
                 updateModalUI(currentStoryData);
                 updateProgress();
                 const highlightCommentId = window._activityCommentId || null;
+                // 🔥 INICIAR COMENTARIOS CON story-comments.js
                 await initComments(storyId, 'commentsList', highlightCommentId);
-                setupCommentEvents();
                 return;
             }
             if (currentStoriesList.length > 0) {
@@ -1313,7 +899,6 @@ async function loadStoryData(storyId, isNavigation = false) {
                     updateProgress();
                     const highlightCommentId = window._activityCommentId || null;
                     await initComments(storyId, 'commentsList', highlightCommentId);
-                    setupCommentEvents();
                     return;
                 }
             }
@@ -1363,9 +948,8 @@ async function loadStoryData(storyId, isNavigation = false) {
         updateProgress();
         
         const highlightCommentId = window._activityCommentId || null;
+        // 🔥 INICIAR COMENTARIOS CON story-comments.js
         await initComments(storyId, 'commentsList', highlightCommentId);
-        
-        setupCommentEvents();
         
         await registerView(storyId);
 
@@ -1677,7 +1261,6 @@ window.openStoryModal = openStoryModal;
 window.closeStoryModal = closeStoryModal;
 window.navigateStory = navigateStory;
 window.deleteStory = deleteStory;
-window.setupCommentEvents = setupCommentEvents;
 
 window.openProfileFromModal = function() {
     const userId = window._modalUserId;
@@ -1710,6 +1293,5 @@ export {
     navigateStory, 
     loadStoryData, 
     handleModalLike,
-    deleteStory,
-    setupCommentEvents
+    deleteStory
 };
