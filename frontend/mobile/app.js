@@ -1,4 +1,4 @@
-// app.js - VERSIÓN CORREGIDA COMPLETA
+// app.js - VERSIÓN CON BOTONES EN EL CENTRO
 // ============================================================
 
 import {
@@ -1063,7 +1063,7 @@ function showEmptyState(message) {
 }
 
 // ============================================================
-// 🔥 RENDER FEED - CORREGIDO (ALTURA DINÁMICA)
+// 🔥 RENDER FEED - CON BOTONES EN EL CENTRO
 // ============================================================
 
 function renderFeed(storiesData) {
@@ -1110,7 +1110,7 @@ function renderFeed(storiesData) {
         if (contentLanguage && contentLanguage !== userLanguage) {
             const langInfo = getLanguageInfo(contentLanguage);
             langBadge = `
-                <span class="lang-badge" style="font-size:8px;color:rgba(255,255,255,0.15);margin-left:4px;">
+                <span class="lang-badge">
                     ${langInfo?.flag || '🌐'} ${langInfo?.name || contentLanguage}
                 </span>
             `;
@@ -1119,7 +1119,7 @@ function renderFeed(storiesData) {
         let translationBadge = '';
         if (isTranslated && isDifferentLanguage) {
             translationBadge = `
-                <span class="translation-badge" style="font-size:9px; color:rgba(192,132,252,0.5); margin-left:4px;">
+                <span class="translation-badge">
                     <i class="fas fa-language"></i> Traducido
                 </span>
             `;
@@ -1130,8 +1130,7 @@ function renderFeed(storiesData) {
             const btnText = isTranslated ? 'Mostrar original' : 'Traducir';
             const btnIcon = isTranslated ? 'fa-undo' : 'fa-language';
             translateBtn = `
-                <button class="btn-translate" data-story-id="${story.id}" 
-                        style="background:rgba(192,132,252,0.08);border:none;color:#c084fc;font-size:10px;padding:2px 10px;border-radius:12px;cursor:pointer;transition:all 0.2s;">
+                <button class="btn-translate" data-story-id="${story.id}">
                     <i class="fas ${btnIcon}"></i> ${btnText}
                 </button>
             `;
@@ -1140,7 +1139,7 @@ function renderFeed(storiesData) {
         let subtitlesBadge = '';
         if (story.hasSubtitles && story.subtitles) {
             subtitlesBadge = `
-                <span class="subtitles-badge" style="font-size:8px;color:rgba(192,132,252,0.3);margin-left:4px;">
+                <span class="subtitles-badge">
                     <i class="fas fa-closed-captioning"></i> CC
                 </span>
             `;
@@ -1155,7 +1154,7 @@ function renderFeed(storiesData) {
             else if (storyRegion !== 'other') locationText = `📍 ${storyRegion}`;
             if (locationText) {
                 locationBadge = `
-                    <span class="location-badge" style="font-size:8px;color:rgba(255,255,255,0.1);margin-left:4px;">
+                    <span class="location-badge">
                         ${locationText}
                     </span>
                 `;
@@ -1185,6 +1184,7 @@ function renderFeed(storiesData) {
         const captionHtml = story.caption ? 
             story.caption.replace(/#([a-zA-Z0-9_]+)/g, '<span class="hashtag">#$1</span>') : '';
 
+        // 🔥 NUEVA ESTRUCTURA: Botones en el centro
         html += `
             <div class="story-card" data-index="${index}" data-story-id="${story.id}">
                 <div class="card-header">
@@ -1202,31 +1202,39 @@ function renderFeed(storiesData) {
                     </div>
                     <div class="time">${formatDate(story.createdAt)}</div>
                 </div>
+                
                 <div class="card-media" onclick="window.handleStoryView('${story.id}')">
                     ${mediaHtml}
                 </div>
-                <div class="card-footer">
+                
+                <!-- 🔥 BOTONES EN EL CENTRO (sobre el media) -->
+                <div class="card-actions-center">
                     ${captionHtml ? `<div class="caption">${captionHtml}</div>` : ''}
-                    <div class="actions">
-                        <div class="stats">
-                            <span><i class="fas fa-eye"></i> <span id="view-count-${story.id}">${formatNumber(viewsCount)}</span></span>
-                            <span><i class="fas fa-heart" id="heart-icon-${story.id}" style="color:${isLiked ? '#ff6b6b' : 'inherit'}"></i> <span id="like-count-${story.id}">${formatNumber(likesCount)}</span></span>
-                            <span><i class="fas fa-comment"></i> <span id="comment-count-${story.id}">${formatNumber(commentsCount)}</span></span>
-                            ${translateBtn}
+                    <div class="actions-box">
+                        <div class="actions">
+                            <div class="stats">
+                                <span><i class="fas fa-eye"></i> <span id="view-count-${story.id}">${formatNumber(viewsCount)}</span></span>
+                                <span><i class="fas fa-heart" id="heart-icon-${story.id}" style="color:${isLiked ? '#ff6b6b' : 'inherit'}"></i> <span id="like-count-${story.id}">${formatNumber(likesCount)}</span></span>
+                                <span><i class="fas fa-comment"></i> <span id="comment-count-${story.id}">${formatNumber(commentsCount)}</span></span>
+                            </div>
+                            <div class="btns">
+                                <button class="btn-like ${isLiked ? 'liked' : ''}" data-story-id="${story.id}">
+                                    <i class="fas fa-heart"></i> ${isLiked ? 'Quitar' : 'Like'}
+                                </button>
+                                <button class="btn-comment" data-story-id="${story.id}">
+                                    <i class="fas fa-comment"></i>
+                                </button>
+                                <button class="btn-share" data-story-id="${story.id}">
+                                    <i class="fas fa-share-alt"></i>
+                                </button>
+                            </div>
                         </div>
-                        <div class="btns">
-                            <button class="btn-like ${isLiked ? 'liked' : ''}" data-story-id="${story.id}">
-                                <i class="fas fa-heart"></i> ${isLiked ? 'Quitar' : 'Like'}
-                            </button>
-                            <button class="btn-comment" data-story-id="${story.id}">
-                                <i class="fas fa-comment"></i>
-                            </button>
-                            <button class="btn-share" data-story-id="${story.id}">
-                                <i class="fas fa-share-alt"></i>
-                            </button>
-                        </div>
+                        ${translateBtn ? `<div style="text-align:center;margin-top:4px;">${translateBtn}</div>` : ''}
                     </div>
                 </div>
+                
+                <!-- 🔥 FOOTER SOLO DECORATIVO -->
+                <div class="card-footer"></div>
             </div>
         `;
     });
@@ -1264,6 +1272,7 @@ function renderFeed(storiesData) {
 
     window._viewObserver = observer;
 
+    // Event listeners para los botones en el centro
     container.querySelectorAll('.btn-like').forEach(btn => {
         btn.addEventListener('click', (e) => {
             e.stopPropagation();
@@ -1314,12 +1323,6 @@ function renderFeed(storiesData) {
             }
         });
     });
-
-    // 🔥 CORREGIDO: Ya no hacemos scrollTop = 0 aquí porque rompe la navegación
-    // Solo hacemos scroll al inicio si es la primera carga
-    if (container.scrollTop > 0 && !isLoading) {
-        // No forzar scroll
-    }
 }
 
 // ============================================================
@@ -1544,7 +1547,7 @@ function updateStoryCard(storyId, updatedStory) {
     const card = document.querySelector(`.story-card[data-story-id="${storyId}"]`);
     if (!card) return;
     
-    const captionEl = card.querySelector('.caption');
+    const captionEl = card.querySelector('.card-actions-center .caption');
     if (captionEl && updatedStory.caption) {
         const captionHtml = updatedStory.caption.replace(/#([a-zA-Z0-9_]+)/g, '<span class="hashtag">#$1</span>');
         captionEl.innerHTML = captionHtml;
