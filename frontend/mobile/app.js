@@ -242,7 +242,7 @@ function restoreFeedCursor() {
 }
 
 // ============================================================
-// 🔥 ACTUALIZAR CONTADORES - CORREGIDO (PRESERVA VIEWS Y COMMENTS)
+// 🔥 ACTUALIZAR CONTADORES - CORREGIDO (CADA CONTADOR ES INDEPENDIENTE)
 // ============================================================
 
 function updateStoryCounters(storyId, data) {
@@ -256,50 +256,54 @@ function updateStoryCounters(storyId, data) {
     const heartIcon = document.getElementById(`heart-icon-${storyId}`);
     const likeBtn = document.querySelector(`.btn-like[data-story-id="${storyId}"]`);
     
-    // 🔥 Actualizar contador de vistas (SOLO si viene en data)
+    // 🔥 ACTUALIZAR SOLO SI VIENE EL DATO - NO SOBRESCRIBIR CON undefined
     if (data.viewsCount !== undefined && viewCountEl) {
         viewCountEl.textContent = formatNumber(data.viewsCount);
     }
     
-    // 🔥 Actualizar contador de likes (SIEMPRE usar data.likesCount si viene)
     if (data.likesCount !== undefined && likeCountEl) {
         likeCountEl.textContent = formatNumber(data.likesCount);
     }
     
-    // 🔥 Actualizar contador de comentarios (SOLO si viene en data)
     if (data.commentsCount !== undefined && commentCountEl) {
         commentCountEl.textContent = formatNumber(data.commentsCount);
     }
     
-    // 🔥 Determinar si el usuario actual dio like
-    let isLikedByMe = false;
-    
+    // 🔥 Determinar si el usuario actual dio like (SOLO si viene data de likes)
     if (data.likes !== undefined && userId) {
-        // Usar la lista completa de likes del backend
-        isLikedByMe = data.likes.includes(userId);
+        const isLikedByMe = data.likes.includes(userId);
+        
+        if (likeBtn) {
+            if (isLikedByMe) {
+                likeBtn.classList.add('liked');
+                likeBtn.innerHTML = '<i class="fas fa-heart"></i> Quitar';
+            } else {
+                likeBtn.classList.remove('liked');
+                likeBtn.innerHTML = '<i class="fas fa-heart"></i> Like';
+            }
+        }
+        
+        if (heartIcon) {
+            heartIcon.style.color = isLikedByMe ? '#ff6b6b' : 'inherit';
+        }
     } else if (data.liked !== undefined) {
         // Fallback: si solo viene el estado del usuario que hizo clic
         const senderId = data.senderId || data.userId;
-        isLikedByMe = data.liked && senderId === userId;
-    } else {
-        // Último recurso: usar localStorage
-        isLikedByMe = isStoryLiked(storyId);
-    }
-    
-    // 🔥 Actualizar el botón de like según el estado del usuario actual
-    if (likeBtn) {
-        if (isLikedByMe) {
-            likeBtn.classList.add('liked');
-            likeBtn.innerHTML = '<i class="fas fa-heart"></i> Quitar';
-        } else {
-            likeBtn.classList.remove('liked');
-            likeBtn.innerHTML = '<i class="fas fa-heart"></i> Like';
+        const isLikedByMe = data.liked && senderId === userId;
+        
+        if (likeBtn) {
+            if (isLikedByMe) {
+                likeBtn.classList.add('liked');
+                likeBtn.innerHTML = '<i class="fas fa-heart"></i> Quitar';
+            } else {
+                likeBtn.classList.remove('liked');
+                likeBtn.innerHTML = '<i class="fas fa-heart"></i> Like';
+            }
         }
-    }
-    
-    // 🔥 Actualizar el ícono del corazón
-    if (heartIcon) {
-        heartIcon.style.color = isLikedByMe ? '#ff6b6b' : 'inherit';
+        
+        if (heartIcon) {
+            heartIcon.style.color = isLikedByMe ? '#ff6b6b' : 'inherit';
+        }
     }
 }
 
@@ -613,41 +617,42 @@ function initSocket() {
         }
     });
 
-    // 🔥 CORRECCIÓN: Evento story_liked - ahora envía la lista completa de likes
+    // 🔥 CORRECCIÓN: Evento story_liked - SOLO actualiza likes, NO toca views/comments
     socket.on('story_liked', (data) => {
         const story = allStories.find(s => s.id === data.storyId);
         if (story) {
             // Actualizar la lista de likes en memoria
             story.likes = data.likes || [];
             
-            // 🔥 PASAR LA LISTA COMPLETA para que cada usuario determine su estado
-            // 🔥 PRESERVAR viewsCount y commentsCount desde la historia en memoria
+            // 🔥 SOLO actualizar likes, NO tocar views ni comments
             updateStoryCounters(data.storyId, {
                 likesCount: data.likes?.length || 0,
-                likes: data.likes, // <- LISTA COMPLETA DE USUARIOS
-                viewsCount: story.views?.length || 0, // <- PRESERVAR VIEWS
-                commentsCount: story.comments?.length || 0, // <- PRESERVAR COMMENTS
-                senderId: data.userId, // <- QUIÉN DIO EL LIKE
-                liked: data.liked // <- ESTADO DEL USUARIO QUE DIO CLIC
+                likes: data.likes,
+                senderId: data.userId,
+                liked: data.liked
             });
         }
     });
 
+    // 🔥 CORRECCIÓN: Evento story_viewed - SOLO actualiza vistas
     socket.on('story_viewed', (data) => {
         const story = allStories.find(s => s.id === data.storyId);
         if (story) {
             story.views = data.views || [];
+            // 🔥 SOLO actualizar vistas
             updateStoryCounters(data.storyId, {
                 viewsCount: data.viewsCount || 0
             });
         }
     });
 
+    // 🔥 CORRECCIÓN: Evento new_comment - SOLO actualiza comentarios
     socket.on('new_comment', (data) => {
         const story = allStories.find(s => s.id === data.storyId);
         if (story) {
             if (!story.comments) story.comments = [];
             story.comments.push(data.comment);
+            // 🔥 SOLO actualizar comentarios
             updateStoryCounters(data.storyId, {
                 commentsCount: story.comments.length
             });
@@ -1214,7 +1219,6 @@ function renderFeed(storiesData) {
         const captionHtml = story.caption ? 
             story.caption.replace(/#([a-zA-Z0-9_]+)/g, '<span class="hashtag">#$1</span>') : '';
 
-        // 🔥 NUEVA ESTRUCTURA: Botones en el centro (bottom: 125px en CSS)
         html += `
             <div class="story-card" data-index="${index}" data-story-id="${story.id}">
                 <div class="card-header">
@@ -1428,9 +1432,18 @@ async function registerView(storyId) {
             const data = await res.json();
             console.log(`✅ [VIEW] Vista registrada para ${storyId}`);
             
+            // 🔥 SOLO actualizar el contador de vistas
             const viewCountEl = document.getElementById(`view-count-${storyId}`);
             if (viewCountEl && data.viewsCount !== undefined) {
                 viewCountEl.textContent = formatNumber(data.viewsCount);
+            }
+            
+            // 🔥 Actualizar en memoria
+            const story = allStories.find(s => s.id === storyId);
+            if (story && data.viewsCount !== undefined) {
+                story.views = story.views || [];
+                // No sabemos exactamente quién más ha visto, pero podemos actualizar el conteo
+                // La próxima vez que se cargue el feed, vendrá con los datos actualizados
             }
         }
     } catch (error) {
@@ -1631,7 +1644,7 @@ async function handleStoryView(storyId) {
 }
 
 // ============================================================
-// HANDLE LIKE - CORREGIDO (PRESERVA VIEWS Y COMMENTS)
+// HANDLE LIKE - CORREGIDO (SOLO ACTUALIZA LIKES)
 // ============================================================
 
 async function handleLike(storyId, btn) {
@@ -1645,10 +1658,6 @@ async function handleLike(storyId, btn) {
     const method = isLiked ? 'DELETE' : 'POST';
 
     try {
-        if (!isStoryViewed(storyId)) {
-            await registerView(storyId);
-        }
-
         const res = await fetch(`${API_URL}/api/stories/${storyId}/like`, {
             method: method,
             headers: {
@@ -1668,19 +1677,16 @@ async function handleLike(storyId, btn) {
                 } catch (e) {}
             }
 
-            // 🔥 OBTENER LA HISTORIA EN MEMORIA PARA PRESERVAR VIEWS Y COMMENTS
-            const story = allStories.find(s => s.id === storyId);
-            
-            // 🔥 Actualizar con la lista completa de likes + preservar views y comments
+            // 🔥 SOLO actualizar likes, NO tocar views ni comments
             updateStoryCounters(storyId, {
                 likesCount: data.likesCount || 0,
                 liked: data.liked,
-                likes: data.likes || [], // <- LISTA COMPLETA
-                viewsCount: story?.views?.length || 0, // <- PRESERVAR VIEWS
-                commentsCount: story?.comments?.length || 0, // <- PRESERVAR COMMENTS
+                likes: data.likes || [],
                 senderId: (await getCurrentUser())?.id
             });
 
+            // Actualizar en memoria
+            const story = allStories.find(s => s.id === storyId);
             if (story && data.likes) {
                 story.likes = data.likes;
             }
