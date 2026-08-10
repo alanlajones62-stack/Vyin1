@@ -1,4 +1,4 @@
-// app.js - VERSIÓN CON BOTONES EN EL CENTRO
+// app.js - VERSIÓN COMPLETA CON BOTONES EN EL CENTRO (125px) Y LIKES CORREGIDOS
 // ============================================================
 
 import {
@@ -242,10 +242,14 @@ function restoreFeedCursor() {
 }
 
 // ============================================================
-// 🔥 ACTUALIZAR CONTADORES
+// 🔥 ACTUALIZAR CONTADORES - CORREGIDO PARA LIKES INDEPENDIENTES
 // ============================================================
 
 function updateStoryCounters(storyId, data) {
+    const currentUser = getCurrentUser();
+    const userId = currentUser?.id;
+    
+    // Actualizar contador de vistas
     if (data.viewsCount !== undefined) {
         const viewCountEl = document.getElementById(`view-count-${storyId}`);
         if (viewCountEl) {
@@ -253,27 +257,49 @@ function updateStoryCounters(storyId, data) {
         }
     }
     
+    // Actualizar contador de likes
     if (data.likesCount !== undefined) {
         const likeCountEl = document.getElementById(`like-count-${storyId}`);
         if (likeCountEl) {
             likeCountEl.textContent = formatNumber(data.likesCount);
         }
-        const heartIcon = document.getElementById(`heart-icon-${storyId}`);
-        if (heartIcon && data.liked !== undefined) {
-            heartIcon.style.color = data.liked ? '#ff6b6b' : 'inherit';
-        }
-        const likeBtn = document.querySelector(`.btn-like[data-story-id="${storyId}"]`);
-        if (likeBtn && data.liked !== undefined) {
-            if (data.liked) {
-                likeBtn.classList.add('liked');
-                likeBtn.innerHTML = '<i class="fas fa-heart"></i> Quitar';
-            } else {
-                likeBtn.classList.remove('liked');
-                likeBtn.innerHTML = '<i class="fas fa-heart"></i> Like';
-            }
+    }
+    
+    // 🔥 CORRECCIÓN: Determinar si el usuario actual dio like
+    let isLikedByMe = false;
+    
+    if (data.likes !== undefined && userId) {
+        // Usar la lista completa de likes del backend
+        isLikedByMe = data.likes.includes(userId);
+    } else if (data.liked !== undefined) {
+        // Fallback: si solo viene el estado del usuario que hizo clic
+        // SOLO aplicar si es el usuario actual
+        const senderId = data.senderId || data.userId;
+        isLikedByMe = data.liked && senderId === userId;
+    } else {
+        // Último recurso: usar localStorage
+        isLikedByMe = isStoryLiked(storyId);
+    }
+    
+    // 🔥 Actualizar el botón de like según el estado del usuario actual
+    const likeBtn = document.querySelector(`.btn-like[data-story-id="${storyId}"]`);
+    if (likeBtn) {
+        if (isLikedByMe) {
+            likeBtn.classList.add('liked');
+            likeBtn.innerHTML = '<i class="fas fa-heart"></i> Quitar';
+        } else {
+            likeBtn.classList.remove('liked');
+            likeBtn.innerHTML = '<i class="fas fa-heart"></i> Like';
         }
     }
     
+    // 🔥 Actualizar el ícono del corazón
+    const heartIcon = document.getElementById(`heart-icon-${storyId}`);
+    if (heartIcon) {
+        heartIcon.style.color = isLikedByMe ? '#ff6b6b' : 'inherit';
+    }
+    
+    // Actualizar contador de comentarios
     if (data.commentsCount !== undefined) {
         const commentCountEl = document.getElementById(`comment-count-${storyId}`);
         if (commentCountEl) {
@@ -592,14 +618,20 @@ function initSocket() {
         }
     });
 
+    // 🔥 CORRECCIÓN: Evento story_liked - ahora envía la lista completa de likes
     socket.on('story_liked', (data) => {
         const story = allStories.find(s => s.id === data.storyId);
         if (story) {
+            // Actualizar la lista de likes en memoria
             story.likes = data.likes || [];
+            
+            // 🔥 PASAR LA LISTA COMPLETA para que cada usuario determine su estado
             updateStoryCounters(data.storyId, {
                 likesCount: data.likes?.length || 0,
-                liked: data.liked,
-                viewsCount: story.views?.length || 0
+                likes: data.likes, // <- LISTA COMPLETA DE USUARIOS
+                viewsCount: story.views?.length || 0,
+                senderId: data.userId, // <- QUIÉN DIO EL LIKE
+                liked: data.liked // <- ESTADO DEL USUARIO QUE DIO CLIC
             });
         }
     });
@@ -1063,7 +1095,7 @@ function showEmptyState(message) {
 }
 
 // ============================================================
-// 🔥 RENDER FEED - CON BOTONES EN EL CENTRO
+// 🔥 RENDER FEED - CON BOTONES EN EL CENTRO (125px)
 // ============================================================
 
 function renderFeed(storiesData) {
@@ -1097,6 +1129,7 @@ function renderFeed(storiesData) {
             avatar: story.avatar || getAvatar(story.fullName || 'U')
         };
 
+        // 🔥 CORRECCIÓN: Determinar si el usuario actual dio like
         const isLiked = story.likes?.includes(userId) || false;
         const likesCount = story.likes?.length || 0;
         const viewsCount = story.views?.length || 0;
@@ -1184,7 +1217,7 @@ function renderFeed(storiesData) {
         const captionHtml = story.caption ? 
             story.caption.replace(/#([a-zA-Z0-9_]+)/g, '<span class="hashtag">#$1</span>') : '';
 
-        // 🔥 NUEVA ESTRUCTURA: Botones en el centro
+        // 🔥 NUEVA ESTRUCTURA: Botones en el centro (bottom: 125px en CSS)
         html += `
             <div class="story-card" data-index="${index}" data-story-id="${story.id}">
                 <div class="card-header">
@@ -1601,7 +1634,7 @@ async function handleStoryView(storyId) {
 }
 
 // ============================================================
-// HANDLE LIKE
+// HANDLE LIKE - CORREGIDO
 // ============================================================
 
 async function handleLike(storyId, btn) {
@@ -1638,9 +1671,12 @@ async function handleLike(storyId, btn) {
                 } catch (e) {}
             }
 
+            // 🔥 Actualizar con la lista completa de likes
             updateStoryCounters(storyId, {
                 likesCount: data.likesCount || 0,
-                liked: data.liked
+                liked: data.liked,
+                likes: data.likes || [], // <- LISTA COMPLETA
+                senderId: (await getCurrentUser())?.id
             });
 
             const story = allStories.find(s => s.id === storyId);
