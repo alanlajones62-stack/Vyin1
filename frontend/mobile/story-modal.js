@@ -517,23 +517,7 @@ async function handleSendComment() {
             input.value = '';
             updateCommentCount(1);
             
-            // ACTUALIZAR DATOS LOCALES
-            if (currentStoryData) {
-                if (!currentStoryData.comments) currentStoryData.comments = [];
-                currentStoryData.comments.push(newComment);
-            }
-            
-            if (currentStoriesList && currentStoriesList.length > 0) {
-                const idx = currentStoriesList.findIndex(s => s.id === currentStoryId);
-                if (idx !== -1 && currentStoriesList[idx]) {
-                    if (!currentStoriesList[idx].comments) currentStoriesList[idx].comments = [];
-                    currentStoriesList[idx].comments.push(newComment);
-                }
-            }
-            
-            // 🔥 LA UI SE ACTUALIZA SOLA DESDE story-comments.js
-            // NO hacer nada más aquí
-            
+            // ✅ SOLO mostrar toast - story-comments.js maneja TODO lo demás
             showToast('💬 Comentario enviado');
         }
     } catch (error) {
@@ -887,7 +871,6 @@ async function loadStoryData(storyId, isNavigation = false) {
                 updateModalUI(currentStoryData);
                 updateProgress();
                 const highlightCommentId = window._activityCommentId || null;
-                // 🔥 INICIAR COMENTARIOS CON story-comments.js
                 await initComments(storyId, 'commentsList', highlightCommentId);
                 return;
             }
@@ -948,7 +931,6 @@ async function loadStoryData(storyId, isNavigation = false) {
         updateProgress();
         
         const highlightCommentId = window._activityCommentId || null;
-        // 🔥 INICIAR COMENTARIOS CON story-comments.js
         await initComments(storyId, 'commentsList', highlightCommentId);
         
         await registerView(storyId);
