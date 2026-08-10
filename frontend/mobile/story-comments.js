@@ -657,7 +657,7 @@ window.handleReplySubmit = async function(storyId, parentCommentId) {
 };
 
 // ============================================================
-// 🔥 TOGGLE VISIBILIDAD DE RESPUESTAS (CORREGIDO)
+// TOGGLE VISIBILIDAD DE RESPUESTAS
 // ============================================================
 
 window.toggleRepliesVisibility = function(commentId) {
@@ -665,7 +665,6 @@ window.toggleRepliesVisibility = function(commentId) {
     const newState = !currentState;
     repliesVisibility.set(commentId, newState);
     
-    // Actualizar la UI
     const container = document.getElementById('commentsList');
     if (container) {
         const storyId = container.dataset.storyId || window._currentStoryId;
@@ -685,7 +684,6 @@ export async function initComments(storyId, containerId = 'commentsList', highli
     const container = document.getElementById(containerId);
     if (!container) return;
     
-    // Guardar storyId en el container para referencia
     container.dataset.storyId = storyId;
     window._currentStoryId = storyId;
 
@@ -693,27 +691,22 @@ export async function initComments(storyId, containerId = 'commentsList', highli
     const comments = await loadComments(storyId, true);
     const currentUser = getCurrentUser();
     
-    // 🔥 SI HAY UN COMENTARIO DESTACADO, EXPANDIR LA CADENA DE PADRES
+    // SI HAY UN COMENTARIO DESTACADO, EXPANDIR LA CADENA DE PADRES
     if (highlightCommentId) {
-        // Buscar la cadena de padres para expandir todas las respuestas necesarias
         const parentChain = getParentChain(comments, highlightCommentId);
         if (parentChain) {
-            // Expandir todos los padres
             parentChain.forEach(parentId => {
                 repliesVisibility.set(parentId, true);
             });
-            // También expandir el comentario padre directo
             const parentComment = findParentComment(comments, highlightCommentId);
             if (parentComment) {
                 repliesVisibility.set(parentComment.id, true);
             }
-            // Expandir el comentario destacado si tiene respuestas
             const highlightedComment = findCommentById(comments, highlightCommentId);
             if (highlightedComment && highlightedComment.replies && highlightedComment.replies.length > 0) {
                 repliesVisibility.set(highlightCommentId, true);
             }
         } else {
-            // Si no tiene padres (es un comentario principal), solo expandirlo si tiene respuestas
             const comment = findCommentById(comments, highlightCommentId);
             if (comment && comment.replies && comment.replies.length > 0) {
                 repliesVisibility.set(highlightCommentId, true);
@@ -751,9 +744,7 @@ export async function initComments(storyId, containerId = 'commentsList', highli
     
     if (highlightCommentId) {
         setTimeout(() => {
-            // Buscar en comentarios principales
             let highlighted = container.querySelector(`.comment-item[data-comment-id="${highlightCommentId}"]`);
-            // Si no está en comentarios principales, buscar en respuestas
             if (!highlighted) {
                 highlighted = container.querySelector(`.comment-item[data-reply-id="${highlightCommentId}"]`);
             }
@@ -777,19 +768,16 @@ export async function initComments(storyId, containerId = 'commentsList', highli
 export function expandRepliesForComment(commentId) {
     if (!commentId) return;
     
-    // Buscar el comentario en el caché
     let found = false;
     for (const [storyId, comments] of commentsCache) {
         const comment = findCommentById(comments, commentId);
         if (comment) {
-            // Encontrar la cadena de padres
             const parentChain = getParentChain(comments, commentId);
             if (parentChain) {
                 parentChain.forEach(parentId => {
                     repliesVisibility.set(parentId, true);
                 });
             }
-            // Expandir el comentario si tiene respuestas
             if (comment.replies && comment.replies.length > 0) {
                 repliesVisibility.set(commentId, true);
             }
