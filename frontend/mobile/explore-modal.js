@@ -66,7 +66,7 @@ function saveExploreState(tab, query = '', results = []) {
         const state = {
             tab: tab,
             query: query,
-            results: results.slice(0, 20), // Guardar solo los primeros 20
+            results: results.slice(0, 20),
             timestamp: Date.now()
         };
         localStorage.setItem(CACHE_KEYS.STATE, JSON.stringify(state));
@@ -173,7 +173,7 @@ function createExploreModal() {
                 performSmartSearch(query);
             } else if (query.length === 0) {
                 currentSearchResults = [];
-                loadExploreData(currentTab);
+                loadExploreDataWithCache(currentTab);
             }
         }, 400);
     });
@@ -237,32 +237,27 @@ function filterPublicStories(stories) {
 function openExploreModal(restoreState = true) {
     if (!exploreOverlay) createExploreModal();
     
-    // 🔥 INTENTAR RESTAURAR EL ESTADO GUARDADO
     if (restoreState) {
         const savedState = getExploreState();
         if (savedState) {
             console.log('📌 Restaurando estado guardado:', savedState);
             
-            // Restaurar pestaña
             const tabToLoad = savedState.tab || 'trending';
             currentTab = tabToLoad;
             savedTab = tabToLoad;
             currentSearchQuery = savedState.query || '';
             
-            // Actualizar tabs visualmente
             const tabs = exploreOverlay.querySelectorAll('.explore-tabs button');
             tabs.forEach(btn => {
                 const isActive = btn.dataset.tab === tabToLoad;
                 btn.classList.toggle('active', isActive);
             });
             
-            // Restaurar búsqueda
             const searchInput = exploreOverlay.querySelector('#exploreSearchInput');
             if (searchInput) {
                 searchInput.value = savedState.query || '';
             }
             
-            // Restaurar resultados de búsqueda si hay
             if (savedState.results && savedState.results.length > 0 && savedState.query) {
                 currentSearchResults = savedState.results;
                 renderSearchResults(savedState.query, savedState.results, [], {});
@@ -272,18 +267,14 @@ function openExploreModal(restoreState = true) {
                 return;
             }
             
-            // Si no hay resultados de búsqueda, cargar datos de la pestaña
             isOpen = true;
             exploreOverlay.classList.add('active');
             document.body.style.overflow = 'hidden';
-            
-            // Cargar datos de la pestaña (usando caché si es posible)
             loadExploreDataWithCache(tabToLoad);
             return;
         }
     }
     
-    // 🔥 SI NO HAY ESTADO GUARDADO, CARGAR NORMAL
     const tabToLoad = savedTab || 'trending';
     currentTab = tabToLoad;
     currentSearchResults = [];
@@ -302,7 +293,6 @@ function openExploreModal(restoreState = true) {
     isOpen = true;
     exploreOverlay.classList.add('active');
     document.body.style.overflow = 'hidden';
-    
     loadExploreDataWithCache(tabToLoad);
 }
 
@@ -319,7 +309,6 @@ function showExploreModal() {
     
     console.log(`📌 Mostrando explore-modal (pestaña: ${savedTab || currentTab})`);
     
-    // 🔥 RESTAURAR EL ESTADO GUARDADO
     const savedState = getExploreState();
     if (savedState) {
         const tabToShow = savedState.tab || currentTab || 'trending';
@@ -332,30 +321,26 @@ function showExploreModal() {
             btn.classList.toggle('active', isActive);
         });
         
-        // Restaurar búsqueda
         const searchInput = exploreOverlay.querySelector('#exploreSearchInput');
         if (searchInput) {
             searchInput.value = savedState.query || '';
         }
         
-        // Si hay resultados de búsqueda guardados, mostrarlos
         if (savedState.results && savedState.results.length > 0 && savedState.query) {
             currentSearchResults = savedState.results;
             currentSearchQuery = savedState.query;
             renderSearchResults(savedState.query, savedState.results, [], {});
         } else {
-            // Usar caché si está disponible
-            const cachedData = getFromCache(CACHE_KEYS[`${tabToShow.toUpperCase()}_DATA`] || '');
-            if (cachedData) {
+            const cacheKey = `explore_${tabToShow}_data`;
+            const cachedData = getFromCache(cacheKey);
+            if (cachedData && cachedData.tab === tabToShow) {
                 console.log(`📦 Usando caché para ${tabToShow}`);
-                renderExploreContent(tabToShow, cachedData);
+                renderExploreContent(tabToShow, cachedData.data);
             } else {
-                // Cargar en segundo plano
                 setTimeout(() => loadExploreDataWithCache(tabToShow), 100);
             }
         }
     } else {
-        // No hay estado, cargar normal
         setTimeout(() => loadExploreDataWithCache(currentTab || 'trending'), 100);
     }
     
@@ -369,11 +354,9 @@ function showExploreModal() {
 // ============================================================
 
 function closeExploreModal() {
-    // 🔥 GUARDAR EL ESTADO ANTES DE CERRAR
     if (isOpen && exploreOverlay) {
         const searchInput = exploreOverlay.querySelector('#exploreSearchInput');
         const query = searchInput ? searchInput.value.trim() : '';
-        
         saveExploreState(currentTab, query, currentSearchResults);
         console.log('💾 Estado guardado:', { tab: currentTab, query, results: currentSearchResults.length });
     }
@@ -409,9 +392,7 @@ function switchExploreTab(tab) {
     currentSearchResults = [];
     searchInProgress = false;
     
-    // Guardar estado
     saveExploreState(tab, '', []);
-    
     loadExploreDataWithCache(tab);
 }
 
@@ -423,7 +404,6 @@ async function loadExploreDataWithCache(tab) {
     const content = document.getElementById('exploreContent');
     if (!content) return;
     
-    // 🔥 VERIFICAR CACHÉ PRIMERO
     const cacheKey = `explore_${tab}_data`;
     const cachedData = getFromCache(cacheKey);
     
@@ -433,7 +413,6 @@ async function loadExploreDataWithCache(tab) {
         return;
     }
     
-    // Si no hay caché, cargar del servidor
     await loadExploreData(tab);
 }
 
@@ -467,14 +446,11 @@ async function loadExploreData(tab) {
                 const allStories = (result.data || []).filter(story => story.userId !== currentUser?.id);
                 data.stories = filterPublicStories(allStories);
                 console.log(`📸 Historias públicas: ${data.stories.length}`);
-                
-                // Guardar en caché
                 saveToCache('explore_stories_data', { tab: 'stories', data: data });
             }
         }
         
         if (tab === 'users') {
-            // 🔥 PRIMERO VERIFICAR CACHÉ LOCAL PARA USUARIOS POPULARES
             const cachedUsers = getFromCache(CACHE_KEYS.POPULAR_USERS);
             if (cachedUsers && cachedUsers.length > 0) {
                 console.log(`👥 Usuarios populares desde caché local: ${cachedUsers.length}`);
@@ -486,8 +462,6 @@ async function loadExploreData(tab) {
                     const allUsers = await res.json();
                     data.users = filterPublicUsers(allUsers).slice(0, 10);
                     console.log(`👥 Usuarios populares (públicos): ${data.users.length}`);
-                    
-                    // Guardar en caché
                     saveToCache(CACHE_KEYS.POPULAR_USERS, data.users);
                     saveToCache('explore_users_data', { tab: 'users', data: data });
                 }
@@ -495,7 +469,6 @@ async function loadExploreData(tab) {
         }
         
         if (tab === 'trending') {
-            // 🔥 VERIFICAR CACHÉ LOCAL PARA HASHTAGS
             const cachedHashtags = getFromCache(CACHE_KEYS.TRENDING_HASHTAGS);
             if (cachedHashtags && cachedHashtags.length > 0) {
                 console.log(`🔥 Hashtags desde caché local: ${cachedHashtags.length}`);
@@ -514,15 +487,12 @@ async function loadExploreData(tab) {
                     
                     data.hashtags = hashtags;
                     console.log(`🔥 Hashtags en tendencia: ${data.hashtags.length}`);
-                    
-                    // Guardar en caché
                     saveToCache(CACHE_KEYS.TRENDING_HASHTAGS, data.hashtags);
                     saveToCache('explore_trending_data', { tab: 'trending', data: data });
                 }
             }
         }
         
-        // Guardar en memoria
         lastLoadedData = {
             tab: tab,
             data: data,
@@ -559,7 +529,6 @@ async function performSmartSearch(query) {
 
     if (searchInProgress) return;
     
-    // 🔥 VERIFICAR CACHÉ DE BÚSQUEDA
     const cacheKey = `search_${query.toLowerCase().trim()}`;
     const cachedResults = getFromCache(cacheKey);
     
@@ -633,7 +602,6 @@ async function performSmartSearch(query) {
             return;
         }
 
-        // 🔥 GUARDAR EN CACHÉ
         const combinedResults = [...stories, ...users.map(u => ({ ...u, type: 'user' }))];
         currentSearchResults = combinedResults;
         saveToCache(cacheKey, combinedResults);
@@ -656,7 +624,83 @@ async function performSmartSearch(query) {
 }
 
 // ============================================================
-// RENDERIZAR CONTENIDO (sin cambios)
+// 🔥 BUSCAR HISTORIAS POR HASHTAG
+// ============================================================
+
+async function openHashtagStories(tag) {
+    const token = getToken();
+    if (!token) {
+        showToast('Inicia sesión para ver historias', true);
+        return;
+    }
+
+    if (hashtagStoriesCache.has(tag)) {
+        const cached = hashtagStoriesCache.get(tag);
+        if (cached.length > 0) {
+            window._fromExploreModal = true;
+            window.openStoryModal(cached[0].id, cached, false, null);
+            setTimeout(() => {
+                const storyOverlay = document.getElementById('storyModalOverlay');
+                if (storyOverlay) {
+                    storyOverlay.style.zIndex = '10002';
+                }
+            }, 50);
+        } else {
+            showToast(`No hay historias públicas con #${tag}`, true);
+        }
+        return;
+    }
+
+    try {
+        const res = await fetch(`${API_URL}/api/stories/hashtag/${tag}`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+
+        if (!res.ok) {
+            showToast('Error al buscar historias', true);
+            return;
+        }
+
+        const data = await res.json();
+        let stories = [];
+        
+        if (Array.isArray(data)) {
+            data.forEach(group => {
+                if (group.stories && Array.isArray(group.stories)) {
+                    stories.push(...group.stories);
+                }
+            });
+        } else if (data.data && Array.isArray(data.data)) {
+            stories.push(...data.data);
+        }
+
+        stories = filterPublicStories(stories);
+
+        if (stories.length === 0) {
+            showToast(`No hay historias públicas con #${tag}`, true);
+            return;
+        }
+
+        hashtagStoriesCache.set(tag, stories);
+        
+        window._fromExploreModal = true;
+        window.openStoryModal(stories[0].id, stories, false, null);
+        
+        setTimeout(() => {
+            const storyOverlay = document.getElementById('storyModalOverlay');
+            if (storyOverlay) {
+                storyOverlay.style.zIndex = '10002';
+            }
+        }, 50);
+        
+    } catch (error) {
+        console.error('Error buscando historias por hashtag:', error);
+        showToast('Error al buscar historias', true);
+    }
+}
+
+// ============================================================
+// RENDERIZAR CONTENIDO
 // ============================================================
 
 function renderExploreContent(tab, data) {
@@ -798,105 +842,6 @@ function renderUsersList(content, users) {
 }
 
 // ============================================================
-// RESTO DE FUNCIONES (renderSearchResults, getRelatedSuggestions, etc.)
-// ============================================================
-
-// ... (mantener las mismas funciones renderSearchResults, getRelatedSuggestions, openHashtagStories, etc.)
-
-// ============================================================
-// ACCIONES GLOBALES - ACTUALIZADAS
-// ============================================================
-
-window.openStoryFromExplore = (storyId) => {
-    if (storyId) {
-        window._fromExploreModal = true;
-        window.openStoryModal(storyId, null, false, null);
-        setTimeout(() => {
-            const storyOverlay = document.getElementById('storyModalOverlay');
-            if (storyOverlay) {
-                storyOverlay.style.zIndex = '10002';
-            }
-        }, 50);
-    }
-};
-
-window.openProfileFromExplore = (userId) => {
-    if (userId) {
-        window._fromExploreModal = true;
-        window._exploreState = {
-            tab: currentTab,
-            query: currentSearchQuery,
-            results: currentSearchResults
-        };
-        
-        // 🔥 GUARDAR ESTADO ANTES DE ABRIR PERFIL
-        saveExploreState(currentTab, currentSearchQuery, currentSearchResults);
-        
-        if (typeof window.openProfileModal === 'function') {
-            window.openProfileModal(userId, false, { 
-                fromExplore: true,
-                returnToExplore: true,
-                savedTab: savedTab
-            });
-        } else {
-            showToast('Error al abrir perfil', true);
-            closeExploreModal();
-            setTimeout(() => {
-                import('./profile-modal.js').then(({ openProfileModal }) => {
-                    openProfileModal(userId);
-                }).catch(() => {
-                    if (typeof window.openProfileModal === 'function') {
-                        window.openProfileModal(userId);
-                    }
-                });
-            }, 300);
-        }
-    }
-};
-
-window.openHashtagStories = openHashtagStories;
-window.performSmartSearch = performSmartSearch;
-window.followUserFromExplore = followUserFromExplore;
-
-// ============================================================
-// FUNCIÓN DE SEGUIMIENTO (sin cambios)
-// ============================================================
-
-async function followUserFromExplore(userId, btn) {
-    const token = getToken();
-    if (!token) {
-        showToast('Inicia sesión para seguir', true);
-        return;
-    }
-    
-    const isFollowing = btn.classList.contains('following');
-    const action = isFollowing ? 'unfollow' : 'follow';
-    
-    try {
-        const res = await fetch(`${API_URL}/api/follows/${action}`, {
-            method: isFollowing ? 'DELETE' : 'POST',
-            headers: {
-                'Authorization': `Bearer ${token}`,
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({ userId })
-        });
-        
-        const data = await res.json();
-        if (res.ok) {
-            btn.classList.toggle('following');
-            btn.textContent = isFollowing ? 'Seguir' : 'Siguiendo';
-            showToast(isFollowing ? 'Dejaste de seguir' : 'Ahora sigues a este usuario');
-        } else {
-            showToast(data.error || 'Error', true);
-        }
-    } catch (error) {
-        console.error('Error en follow:', error);
-        showToast('Error al procesar', true);
-    }
-}
-
-// ============================================================
 // FUNCIONES AUXILIARES
 // ============================================================
 
@@ -992,7 +937,6 @@ function renderSearchResults(query, stories, users, meta) {
                 </div>
                 <div class="explore-grid">
                     ${filteredStories.slice(0, 30).map(story => {
-                        // ... (código de renderizado de historias igual)
                         let mediaContent = '';
                         const mediaUrl = story.mediaUrl;
                         
@@ -1084,6 +1028,104 @@ function renderSearchResults(query, stories, users, meta) {
 }
 
 // ============================================================
+// 🔥 SEGUIR USUARIO DESDE EXPLORE
+// ============================================================
+
+async function followUserFromExplore(userId, btn) {
+    const token = getToken();
+    if (!token) {
+        showToast('Inicia sesión para seguir', true);
+        return;
+    }
+    
+    const isFollowing = btn.classList.contains('following');
+    const action = isFollowing ? 'unfollow' : 'follow';
+    
+    try {
+        const res = await fetch(`${API_URL}/api/follows/${action}`, {
+            method: isFollowing ? 'DELETE' : 'POST',
+            headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ userId })
+        });
+        
+        const data = await res.json();
+        if (res.ok) {
+            btn.classList.toggle('following');
+            btn.textContent = isFollowing ? 'Seguir' : 'Siguiendo';
+            showToast(isFollowing ? 'Dejaste de seguir' : 'Ahora sigues a este usuario');
+        } else {
+            showToast(data.error || 'Error', true);
+        }
+    } catch (error) {
+        console.error('Error en follow:', error);
+        showToast('Error al procesar', true);
+    }
+}
+
+// ============================================================
+// 🔥 ACCIONES GLOBALES - SUPERPONER MODALES
+// ============================================================
+
+// Definir funciones globales ANTES de usarlas en el HTML
+window.openStoryFromExplore = (storyId) => {
+    if (storyId) {
+        window._fromExploreModal = true;
+        window.openStoryModal(storyId, null, false, null);
+        setTimeout(() => {
+            const storyOverlay = document.getElementById('storyModalOverlay');
+            if (storyOverlay) {
+                storyOverlay.style.zIndex = '10002';
+            }
+        }, 50);
+    }
+};
+
+window.openProfileFromExplore = (userId) => {
+    if (userId) {
+        window._fromExploreModal = true;
+        window._exploreState = {
+            tab: currentTab,
+            query: currentSearchQuery,
+            results: currentSearchResults
+        };
+        
+        saveExploreState(currentTab, currentSearchQuery, currentSearchResults);
+        
+        if (typeof window.openProfileModal === 'function') {
+            window.openProfileModal(userId, false, { 
+                fromExplore: true,
+                returnToExplore: true,
+                savedTab: savedTab
+            });
+        } else {
+            showToast('Error al abrir perfil', true);
+            closeExploreModal();
+            setTimeout(() => {
+                import('./profile-modal.js').then(({ openProfileModal }) => {
+                    openProfileModal(userId);
+                }).catch(() => {
+                    if (typeof window.openProfileModal === 'function') {
+                        window.openProfileModal(userId);
+                    }
+                });
+            }, 300);
+        }
+    }
+};
+
+// 🔥 ASIGNAR openHashtagStories A window ANTES DE QUE EL HTML LA USE
+window.openHashtagStories = openHashtagStories;
+
+// 🔥 ASIGNAR performSmartSearch A window
+window.performSmartSearch = performSmartSearch;
+
+// 🔥 ASIGNAR followUserFromExplore A window
+window.followUserFromExplore = followUserFromExplore;
+
+// ============================================================
 // EXPORTAR
 // ============================================================
 
@@ -1093,5 +1135,6 @@ export {
     closeExploreModal,
     clearExploreCache,
     saveExploreState,
-    getExploreState
+    getExploreState,
+    openHashtagStories
 };
