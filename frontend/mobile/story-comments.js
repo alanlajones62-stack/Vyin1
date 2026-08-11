@@ -1019,6 +1019,5 @@ export {
     setCommentsCache,
     deleteComment,
     likeComment,
-    renderComments,
     initComments
 };
