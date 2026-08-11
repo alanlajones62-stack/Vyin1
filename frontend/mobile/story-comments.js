@@ -962,4 +962,8 @@ window.toggleRepliesVisibility = function(commentId) {
     }
 };
 
-export { repliesVisibility };
+// En story-comments.js, al final del archivo, en la sección de exportaciones
+export { 
+    repliesVisibility,
+    addReplyToUI  // <-- AGREGAR ESTA LÍNEA
+};
