@@ -1,6 +1,6 @@
 // ============================================================
 // story-comments.js - Sistema de comentarios para historias
-// CON FILTRADO DE COMENTARIO DESTACADO AL PRINCIPIO
+// CON RENDERIZADO EFICIENTE Y CORRECCIÓN DE RESPUESTAS
 // ============================================================
 
 import { getToken, getCurrentUser, showToast, getAvatar, formatDate, escapeHtml } from './auth.js';
@@ -11,6 +11,7 @@ const API_URL = window.location.origin;
 let commentsCache = new Map();
 let commentLikes = new Map();
 let repliesVisibility = new Map();
+let isRendering = false;
 
 // ============================================================
 // FUNCIÓN PARA BUSCAR COMENTARIO POR ID (RECURSIVA)
@@ -230,7 +231,7 @@ export async function loadComments(storyId, forceReload = false) {
 }
 
 // ============================================================
-// AGREGAR COMENTARIO
+// AGREGAR COMENTARIO - SIN RE-RENDER COMPLETO
 // ============================================================
 
 export async function addComment(storyId, content, parentCommentId = null) {
@@ -402,10 +403,10 @@ function appendReplyToDOM(storyId, parentCommentId, reply, currentUserId, contai
     }
     if (!parentElement) return;
     
-    let repliesContainer = parentElement.querySelector('.replies');
+    let repliesContainer = parentElement.querySelector('.replies-container');
     if (!repliesContainer) {
         const tempDiv = document.createElement('div');
-        tempDiv.innerHTML = `<div class="replies" id="replies-${parentCommentId}" style="margin-left: 40px; margin-top: 8px; display: flex; flex-direction: column; gap: 8px; border-left: 2px solid rgba(192,132,252,0.08); padding-left: 12px;"></div>`;
+        tempDiv.innerHTML = `<div class="replies-container" id="replies-${parentCommentId}" style="margin-left: 40px; margin-top: 8px; display: ${repliesVisibility.get(parentCommentId) ? 'flex' : 'none'}; flex-direction: column; gap: 8px; border-left: 2px solid rgba(192,132,252,0.08); padding-left: 12px;"></div>`;
         repliesContainer = tempDiv.firstElementChild;
         
         const replyInput = parentElement.querySelector('.reply-input-container');
@@ -422,6 +423,7 @@ function appendReplyToDOM(storyId, parentCommentId, reply, currentUserId, contai
             }
         }
         
+        // Asegurar que el botón "Ver respuestas" exista
         let showBtn = parentElement.querySelector('.show-replies-btn');
         if (!showBtn) {
             const newShowBtn = document.createElement('div');
@@ -429,16 +431,16 @@ function appendReplyToDOM(storyId, parentCommentId, reply, currentUserId, contai
             newShowBtn.style.cssText = 'font-size:12px; color:rgba(192,132,252,0.4); cursor:pointer; margin-top:4px;';
             const parentComment = findCommentById(commentsCache.get(storyId) || [], parentCommentId);
             const count = parentComment ? getAllReplies(parentComment).length : 0;
-            newShowBtn.innerHTML = `<i class="fas fa-chevron-up"></i> Ocultar ${count} respuestas`;
+            newShowBtn.innerHTML = `<i class="fas fa-chevron-${repliesVisibility.get(parentCommentId) ? 'up' : 'down'}"></i> ${repliesVisibility.get(parentCommentId) ? 'Ocultar' : 'Ver'} ${count} respuestas`;
             newShowBtn.onclick = () => window.toggleRepliesVisibility(storyId, parentCommentId);
             
             if (repliesContainer) {
                 repliesContainer.after(newShowBtn);
             }
         }
-        repliesVisibility.set(parentCommentId, true);
     }
     
+    // Si está oculto, mostrarlo
     if (repliesContainer.style.display === 'none') {
         repliesContainer.style.display = 'flex';
         const showBtn = parentElement.querySelector('.show-replies-btn');
@@ -461,7 +463,7 @@ function appendReplyToDOM(storyId, parentCommentId, reply, currentUserId, contai
         <div class="comment-item reply-item" data-reply-id="${reply.id}">
             <img class="avatar" src="${reply.avatar || getAvatar(reply.fullName)}" 
                  alt="${reply.fullName}" 
-                 style="width:32px;height:32px;border-radius:50%;object-fit:cover;flex-shrink:0;margin-right:10px;"
+                 style="width:32px;height:32px;border-radius:50%;object-fit:cover;flex-shrink:0;margin-right:10px;cursor:pointer;"
                  onclick="window.goToProfileUser('${reply.userId}')" />
             <div class="comment-body" style="flex:1;min-width:0;">
                 <div class="comment-user" onclick="window.goToProfileUser('${reply.userId}')" style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-size:13px;">
@@ -511,11 +513,13 @@ function appendReplyToDOM(storyId, parentCommentId, reply, currentUserId, contai
     const newReplyElement = tempDiv.firstElementChild;
     repliesContainer.appendChild(newReplyElement);
     
+    // Actualizar contador del botón
     const showBtn = parentElement.querySelector('.show-replies-btn');
     if (showBtn) {
         const parentCommentData = findCommentById(commentsCache.get(storyId) || [], parentCommentId);
         const count = parentCommentData ? getAllReplies(parentCommentData).length : 0;
-        showBtn.innerHTML = `<i class="fas fa-chevron-up"></i> Ocultar ${count} respuestas`;
+        const isExpanded = repliesVisibility.get(parentCommentId) || false;
+        showBtn.innerHTML = `<i class="fas fa-chevron-${isExpanded ? 'up' : 'down'}"></i> ${isExpanded ? 'Ocultar' : 'Ver'} ${count} respuestas`;
     }
 }
 
@@ -575,7 +579,8 @@ export async function deleteComment(storyId, commentId, parentCommentId = null) 
                         const parentCommentData = findCommentById(commentsCache.get(storyId) || [], parentCommentId);
                         const count = parentCommentData ? getAllReplies(parentCommentData).length : 0;
                         if (count > 0) {
-                            showBtn.innerHTML = `<i class="fas fa-chevron-down"></i> Ver ${count} respuestas`;
+                            const isExpanded = repliesVisibility.get(parentCommentId) || false;
+                            showBtn.innerHTML = `<i class="fas fa-chevron-${isExpanded ? 'up' : 'down'}"></i> ${isExpanded ? 'Ocultar' : 'Ver'} ${count} respuestas`;
                             showBtn.style.display = 'block';
                         } else {
                             showBtn.style.display = 'none';
@@ -664,6 +669,7 @@ window.handleCommentDelete = async function(storyId, commentId, parentCommentId 
 };
 
 window.toggleReplyInput = function(storyId, commentId) {
+    // Cerrar otros inputs
     document.querySelectorAll('.reply-input-container').forEach(el => {
         if (el.id !== `reply-input-${commentId}`) {
             el.style.display = 'none';
@@ -678,7 +684,11 @@ window.toggleReplyInput = function(storyId, commentId) {
         container.style.alignItems = 'center';
         if (!isVisible) {
             const input = document.getElementById(`replyInput-${commentId}`);
-            if (input) input.focus();
+            if (input) {
+                input.focus();
+                // Scroll al input
+                input.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }
         }
     }
 };
@@ -701,6 +711,10 @@ window.handleReplySubmit = async function(storyId, parentCommentId) {
     }
 };
 
+// ============================================================
+// 🔥 TOGGLE VISIBILIDAD DE RESPUESTAS - CORREGIDO
+// ============================================================
+
 window.toggleRepliesVisibility = function(storyId, commentId) {
     const currentState = repliesVisibility.get(commentId) || false;
     const newState = !currentState;
@@ -715,15 +729,17 @@ window.toggleRepliesVisibility = function(storyId, commentId) {
     const commentElement = container.querySelector(`.comment-item[data-comment-id="${commentId}"]`);
     if (!commentElement) return;
     
-    let repliesContainer = commentElement.querySelector('.replies');
+    let repliesContainer = commentElement.querySelector('.replies-container');
     const showRepliesBtn = commentElement.querySelector('.show-replies-btn');
     const allReplies = getAllReplies(comment);
     const replyCount = allReplies.length;
     
     if (newState) {
+        // Mostrar respuestas
         if (!repliesContainer) {
+            // Crear el contenedor
             const tempDiv = document.createElement('div');
-            tempDiv.innerHTML = `<div class="replies" id="replies-${commentId}" style="margin-left: 40px; margin-top: 8px; display: flex; flex-direction: column; gap: 8px; border-left: 2px solid rgba(192,132,252,0.08); padding-left: 12px;"></div>`;
+            tempDiv.innerHTML = `<div class="replies-container" id="replies-${commentId}" style="margin-left: 40px; margin-top: 8px; display: flex; flex-direction: column; gap: 8px; border-left: 2px solid rgba(192,132,252,0.08); padding-left: 12px;"></div>`;
             repliesContainer = tempDiv.firstElementChild;
             
             const replyInput = commentElement.querySelector('.reply-input-container');
@@ -736,11 +752,13 @@ window.toggleRepliesVisibility = function(storyId, commentId) {
                 }
             }
             
+            // Renderizar todas las respuestas
             const currentUser = getCurrentUser();
             allReplies.forEach(reply => {
                 appendReplyToDOM(storyId, commentId, reply, currentUser?.id, container);
             });
             
+            // Asegurar que el botón exista
             let showBtn = commentElement.querySelector('.show-replies-btn');
             if (!showBtn) {
                 const newShowBtn = document.createElement('div');
@@ -748,7 +766,6 @@ window.toggleRepliesVisibility = function(storyId, commentId) {
                 newShowBtn.style.cssText = 'font-size:12px; color:rgba(192,132,252,0.4); cursor:pointer; margin-top:4px;';
                 newShowBtn.innerHTML = `<i class="fas fa-chevron-up"></i> Ocultar ${replyCount} respuestas`;
                 newShowBtn.onclick = () => window.toggleRepliesVisibility(storyId, commentId);
-                
                 if (repliesContainer) {
                     repliesContainer.after(newShowBtn);
                 }
@@ -761,6 +778,7 @@ window.toggleRepliesVisibility = function(storyId, commentId) {
             showRepliesBtn.innerHTML = `<i class="fas fa-chevron-up"></i> Ocultar ${replyCount} respuestas`;
         }
     } else {
+        // Ocultar respuestas
         if (repliesContainer) {
             repliesContainer.style.display = 'none';
         }
@@ -771,11 +789,15 @@ window.toggleRepliesVisibility = function(storyId, commentId) {
 };
 
 // ============================================================
-// 🔥 RENDER INICIAL DE COMENTARIOS CON FILTRADO
+// 🔥 RENDER INICIAL DE COMENTARIOS - SIN PARPADEOS
 // ============================================================
 
 export function renderComments(comments, storyId, currentUserId, container, highlightCommentId = null) {
     if (!container) return;
+    
+    // Evitar re-renderizados múltiples
+    if (isRendering) return;
+    isRendering = true;
 
     if (!comments || comments.length === 0) {
         container.innerHTML = `
@@ -785,15 +807,17 @@ export function renderComments(comments, storyId, currentUserId, container, high
             </div>
         `;
         updateModalCommentCount(storyId);
+        isRendering = false;
         return;
     }
 
     let commentsList = [...comments];
-    
-    // 🔥 SI HAY UN COMENTARIO DESTACADO, MOVERLO AL PRINCIPIO
     let highlightedComment = null;
     let highlightedIndex = -1;
+    let isReplyHighlight = false;
+    let parentCommentIdForHighlight = null;
     
+    // 🔥 BUSCAR COMENTARIO DESTACADO
     if (highlightCommentId) {
         for (let i = 0; i < commentsList.length; i++) {
             if (commentsList[i].id === highlightCommentId) {
@@ -803,30 +827,35 @@ export function renderComments(comments, storyId, currentUserId, container, high
             }
         }
         
-        // Si el comentario está en la lista, moverlo al principio
-        if (highlightedComment && highlightedIndex > 0) {
-            commentsList.splice(highlightedIndex, 1);
-            commentsList.unshift(highlightedComment);
-            
-            // Expandir respuestas del comentario padre si es una respuesta
-            let parentCommentId = null;
-            for (const comment of comments) {
+        // Si no se encontró en nivel 1, buscar en respuestas
+        if (!highlightedComment) {
+            for (const comment of commentsList) {
                 const allReplies = getAllReplies(comment);
                 for (const reply of allReplies) {
                     if (reply.id === highlightCommentId) {
-                        parentCommentId = comment.id;
+                        highlightedComment = reply;
+                        isReplyHighlight = true;
+                        parentCommentIdForHighlight = comment.id;
                         break;
                     }
                 }
-                if (parentCommentId) break;
+                if (highlightedComment) break;
             }
-            
-            if (parentCommentId) {
-                repliesVisibility.set(parentCommentId, true);
-            }
+        }
+        
+        // Si es una respuesta, expandir el padre
+        if (isReplyHighlight && parentCommentIdForHighlight) {
+            repliesVisibility.set(parentCommentIdForHighlight, true);
+        }
+        
+        // Mover el comentario destacado al principio si es nivel 1
+        if (highlightedComment && !isReplyHighlight && highlightedIndex > 0) {
+            commentsList.splice(highlightedIndex, 1);
+            commentsList.unshift(highlightedComment);
         }
     }
 
+    // Construir HTML sin re-renderizar todo el DOM
     let html = '';
     
     commentsList.forEach(comment => {
@@ -883,13 +912,96 @@ export function renderComments(comments, storyId, currentUserId, container, high
                             ${isExpanded ? `Ocultar ${replyCount} respuestas` : `Ver ${replyCount} respuestas`}
                         </div>
                     ` : ''}
+                    
+                    ${isExpanded && hasReplies ? `
+                        <div class="replies-container" id="replies-${comment.id}" style="margin-left: 40px; margin-top: 8px; display: flex; flex-direction: column; gap: 8px; border-left: 2px solid rgba(192,132,252,0.08); padding-left: 12px;">
+                            ${allReplies.map(reply => {
+                                const rLiked = reply.likes?.includes(currentUserId) || false;
+                                const rLikesCount = reply.likes?.length || 0;
+                                const rOwn = reply.userId === currentUserId;
+                                const rContext = getReplyContext(reply, currentUserId, comment);
+                                const isReplyHighlighted = highlightCommentId && reply.id === highlightCommentId;
+                                
+                                return `
+                                    <div class="comment-item reply-item ${isReplyHighlighted ? 'highlighted' : ''}" data-reply-id="${reply.id}" style="${isReplyHighlighted ? 'background:rgba(192,132,252,0.08);border-left:3px solid #c084fc;padding-left:10px;' : ''}">
+                                        <img class="avatar" src="${reply.avatar || getAvatar(reply.fullName)}" 
+                                             alt="${reply.fullName}" 
+                                             style="width:32px;height:32px;border-radius:50%;object-fit:cover;flex-shrink:0;margin-right:10px;cursor:pointer;"
+                                             onclick="window.goToProfileUser('${reply.userId}')" />
+                                        <div class="comment-body" style="flex:1;min-width:0;">
+                                            <div class="comment-user" onclick="window.goToProfileUser('${reply.userId}')" style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-size:13px;">
+                                                <span style="font-weight:600;color:#fff;">${escapeHtml(reply.fullName)}</span>
+                                                <span style="font-size:11px;color:rgba(255,255,255,0.2);">@${escapeHtml(reply.username)}</span>
+                                                <span style="font-size:10px;color:rgba(255,255,255,0.15);">${formatDate(reply.createdAt)}</span>
+                                            </div>
+                                            ${rContext.text ? `
+                                                <div class="reply-context" style="font-size:11px; color:${rContext.color}; margin:2px 0 4px 0;">
+                                                    <i class="fas fa-reply" style="font-size:8px; margin-right:4px;"></i>
+                                                    <span>${rContext.text}</span>
+                                                </div>
+                                            ` : ''}
+                                            <div class="comment-text" style="font-size:15px; line-height:1.5; color:rgba(255,255,255,0.85);">${escapeHtml(reply.content)}</div>
+                                            <div class="comment-meta" style="display:flex;align-items:center;gap:12px;margin-top:4px;flex-wrap:wrap;">
+                                                <button class="btn-like-comment ${rLiked ? 'liked' : ''}" 
+                                                        data-comment-id="${reply.id}"
+                                                        onclick="window.handleCommentLike('${storyId}', '${reply.id}')"
+                                                        style="background:transparent;border:none;color:rgba(255,255,255,0.3);font-size:11px;cursor:pointer;display:flex;align-items:center;gap:4px;padding:2px 6px;border-radius:4px;transition:all 0.2s;">
+                                                    <i class="fas fa-heart" style="font-size:10px;color:${rLiked ? '#ff6b6b' : 'inherit'};"></i> <span>${formatNumber(rLikesCount)}</span>
+                                                </button>
+                                                <button class="btn-reply-comment" onclick="window.toggleReplyInput('${storyId}', '${reply.id}')"
+                                                        style="background:transparent;border:none;color:rgba(255,255,255,0.2);font-size:11px;cursor:pointer;display:flex;align-items:center;gap:4px;padding:2px 6px;border-radius:4px;">
+                                                    <i class="fas fa-reply" style="font-size:9px;"></i> Responder
+                                                </button>
+                                                ${rOwn ? `
+                                                    <button class="btn-delete-comment" onclick="window.handleCommentDelete('${storyId}', '${reply.id}', '${comment.id}')"
+                                                            style="background:transparent;border:none;color:rgba(255,107,107,0.3);font-size:11px;cursor:pointer;display:flex;align-items:center;gap:4px;padding:2px 6px;border-radius:4px;">
+                                                        <i class="fas fa-trash" style="font-size:9px;"></i>
+                                                    </button>
+                                                ` : ''}
+                                            </div>
+                                            <div class="reply-input-container" id="reply-input-${reply.id}" style="display:none;margin-top:6px;">
+                                                <input type="text" class="reply-input" id="replyInput-${reply.id}" 
+                                                       placeholder="Escribe una respuesta..." maxlength="500"
+                                                       style="flex:1;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);border-radius:12px;padding:6px 12px;font-size:13px;color:#fff;outline:none;" />
+                                                <button class="reply-send-btn" onclick="window.handleReplySubmit('${storyId}', '${reply.id}')"
+                                                        style="background:rgba(192,132,252,0.15);border:1px solid rgba(192,132,252,0.2);border-radius:12px;color:#c084fc;padding:6px 14px;font-size:12px;cursor:pointer;transition:all 0.2s;">
+                                                    <i class="fas fa-paper-plane"></i>
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                `;
+                            }).join('')}
+                        </div>
+                    ` : ''}
                 </div>
             </div>
         `;
     });
 
+    // Reemplazar el contenido de una vez (solo un reflow)
     container.innerHTML = html;
     updateModalCommentCount(storyId);
+    isRendering = false;
+    
+    // 🔥 SCROLL AL COMENTARIO DESTACADO
+    if (highlightCommentId) {
+        setTimeout(() => {
+            let highlighted = container.querySelector(`.comment-item[data-comment-id="${highlightCommentId}"]`);
+            if (!highlighted) {
+                highlighted = container.querySelector(`.comment-item[data-reply-id="${highlightCommentId}"]`);
+            }
+            if (highlighted) {
+                highlighted.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                highlighted.style.background = 'rgba(192,132,252,0.1)';
+                highlighted.style.borderLeft = '3px solid #c084fc';
+                setTimeout(() => {
+                    highlighted.style.background = '';
+                    highlighted.style.borderLeft = '';
+                }, 3000);
+            }
+        }, 400);
+    }
 }
 
 // ============================================================
@@ -908,7 +1020,7 @@ export async function initComments(storyId, containerId = 'commentsList', highli
     const comments = await loadComments(storyId, true);
     const currentUser = getCurrentUser();
     
-    // 🔥 SI HAY UN COMENTARIO DESTACADO, EXPANDIR SUS RESPUESTAS
+    // Si hay un comentario destacado, expandir sus respuestas
     if (highlightCommentId) {
         let parentCommentId = null;
         for (const comment of comments) {
@@ -933,6 +1045,7 @@ export async function initComments(storyId, containerId = 'commentsList', highli
     
     renderComments(comments, storyId, currentUser?.id, container, highlightCommentId);
 
+    // Configurar input
     const input = document.getElementById('commentInput');
     const sendBtn = document.getElementById('sendCommentBtn');
 
@@ -981,25 +1094,6 @@ export async function initComments(storyId, containerId = 'commentsList', highli
                 }
             };
         }
-    }
-    
-    // 🔥 SCROLL AL COMENTARIO DESTACADO
-    if (highlightCommentId) {
-        setTimeout(() => {
-            let highlighted = container.querySelector(`.comment-item[data-comment-id="${highlightCommentId}"]`);
-            if (!highlighted) {
-                highlighted = container.querySelector(`.comment-item[data-reply-id="${highlightCommentId}"]`);
-            }
-            if (highlighted) {
-                highlighted.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                highlighted.style.background = 'rgba(192,132,252,0.1)';
-                highlighted.style.borderLeft = '3px solid #c084fc';
-                setTimeout(() => {
-                    highlighted.style.background = '';
-                    highlighted.style.borderLeft = '';
-                }, 3000);
-            }
-        }, 600);
     }
 }
 
