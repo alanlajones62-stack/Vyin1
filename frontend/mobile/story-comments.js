@@ -1008,16 +1008,3 @@ export async function initComments(storyId, containerId = 'commentsList', highli
         }
     }
 }
-
-// ============================================================
-// EXPORTACIONES
-// ============================================================
-
-export { 
-    clearCommentsCache,
-    getCommentsFromCache,
-    setCommentsCache,
-    deleteComment,
-    likeComment,
-    initComments
-};
