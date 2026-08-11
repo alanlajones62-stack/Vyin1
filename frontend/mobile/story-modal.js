@@ -2,6 +2,7 @@
 // story-modal.js - Modal para ver historias con navegación 
 // (VERSIÓN COMPLETA - DELEGA COMENTARIOS A story-comments.js)
 // 🔥 CORREGIDO: Input de comentarios visible en móviles
+// 🔥 ELIMINADO: Botón de perfil (ya se accede desde el header)
 // ============================================================
 
 import {
@@ -260,9 +261,6 @@ function createModalHTML() {
                             <button class="btn-share-modal" id="modalShareBtn">
                                 <i class="fas fa-share-alt"></i>
                             </button>
-                            <button class="btn-profile-modal" id="modalProfileBtn">
-                                <i class="fas fa-user"></i> Perfil
-                            </button>
                             <button class="btn-translate-modal" id="modalTranslateBtn" style="display:none;">
                                 <i class="fas fa-language"></i> Traducir
                             </button>
@@ -384,27 +382,6 @@ function setupModalEvents() {
             navigator.clipboard?.writeText(url).then(() => {
                 showToast('📋 Enlace copiado');
             });
-        }
-    });
-
-    document.getElementById('modalProfileBtn')?.addEventListener('click', () => {
-        const userId = window._modalUserId;
-        if (userId) {
-            closeStoryModal();
-            window._fromProfileModal = false;
-            window._profileContextUserId = null;
-            
-            setTimeout(() => {
-                import('./profile-modal.js').then(({ openProfileModal }) => {
-                    openProfileModal(userId);
-                }).catch(() => {
-                    if (typeof window.openProfileModal === 'function') {
-                        window.openProfileModal(userId);
-                    } else {
-                        showToast('Error al abrir perfil', true);
-                    }
-                });
-            }, 50);
         }
     });
 
