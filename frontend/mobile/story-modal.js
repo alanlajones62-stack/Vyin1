@@ -1,5 +1,5 @@
 // ============================================================
-// story-modal.js - Modal para ver historias (VERSIÓN CORREGIDA)
+// story-modal.js - Modal para ver historias (VERSIÓN COMPLETA CORREGIDA)
 // ============================================================
 
 import {
@@ -8,7 +8,20 @@ import {
 } from './auth.js';
 
 import { formatNumber } from './utils.js';
-import { loadComments, initComments, getTotalCommentsCount, addCommentToCache, getCachedComments, addCommentToUI } from './story-comments.js';
+import { 
+    loadComments, 
+    initComments, 
+    getTotalCommentsCount, 
+    addCommentToCache, 
+    getCachedComments, 
+    addCommentToUI,
+    addReplyToUI,
+    replaceTempComment,
+    replaceTempReply,
+    updateCommentCounter,
+    renderComments,
+    repliesVisibility
+} from './story-comments.js';
 
 const API_URL = window.location.origin;
 let currentStoryId = null;
@@ -19,7 +32,7 @@ let currentStoryIndex = 0;
 let isNavigating = false;
 let userLanguage = 'es';
 let isFirstLoad = true;
-let isCommenting = false; // 🔥 Prevenir envíos duplicados
+let isCommenting = false;
 
 // Caché de traducciones
 let translationCache = {};
@@ -39,10 +52,9 @@ export async function openStoryModal(storyId, storiesList = null, fromProfile = 
     const currentUser = getCurrentUser();
     userLanguage = currentUser?.language || 'es';
 
-    // 🔥 CERRAR MODAL ANTERIOR COMPLETAMENTE
     if (isModalOpen) {
         console.log('📱 [STORY-MODAL] Cerrando modal anterior...');
-        await closeStoryModal(true); // Forzar limpieza
+        await closeStoryModal(true);
         await new Promise(resolve => setTimeout(resolve, 200));
     }
 
@@ -105,11 +117,9 @@ export async function openStoryModal(storyId, storiesList = null, fromProfile = 
 export function closeStoryModal(skipCleanup = false) {
     console.log('📱 [STORY-MODAL] Cerrando modal...');
     
-    // 🔥 LIMPIAR ESTADO
     isModalOpen = false;
     isCommenting = false;
     
-    // Limpiar video
     const video = document.getElementById('storyVideo');
     if (video) {
         video.pause();
@@ -117,13 +127,11 @@ export function closeStoryModal(skipCleanup = false) {
         video.load();
     }
 
-    // Limpiar subtítulos
     if (window._vttUrl) {
         URL.revokeObjectURL(window._vttUrl);
         window._vttUrl = null;
     }
 
-    // 🔥 LIMPIAR INPUT DE COMENTARIO
     const commentInput = document.getElementById('commentInput');
     if (commentInput) {
         commentInput.value = '';
@@ -131,18 +139,14 @@ export function closeStoryModal(skipCleanup = false) {
         commentInput.blur();
     }
 
-    // 🔥 LIMPIAR BOTÓN DE ENVÍO
     const sendBtn = document.getElementById('sendCommentBtn');
     if (sendBtn) {
         sendBtn.disabled = false;
         sendBtn.textContent = 'Enviar';
     }
 
-    // 🔥 LIMPIAR CONTENEDOR DE COMENTARIOS
     const commentsList = document.getElementById('commentsList');
     if (commentsList) {
-        // Guardar referencia al storyId actual para limpiar caché
-        const storyId = currentStoryId;
         commentsList.innerHTML = `
             <div class="no-comments">
                 <i class="fas fa-spinner fa-pulse"></i>
@@ -152,7 +156,6 @@ export function closeStoryModal(skipCleanup = false) {
         commentsList.dataset.storyId = '';
     }
 
-    // Limpiar contadores
     const commentsCountEl = document.getElementById('commentsCount');
     if (commentsCountEl) commentsCountEl.textContent = '0';
     const modalCommentsEl = document.getElementById('modalComments');
@@ -163,14 +166,12 @@ export function closeStoryModal(skipCleanup = false) {
     const viewsEl = document.getElementById('modalViews');
     if (viewsEl) viewsEl.textContent = '0';
 
-    // 🔥 LIMPIAR ESTADO DE RESPUESTAS
     document.querySelectorAll('.reply-input-container').forEach(el => {
         el.style.display = 'none';
         const input = el.querySelector('input');
         if (input) input.value = '';
     });
 
-    // Ocultar overlay
     const overlay = document.getElementById('storyModalOverlay');
     if (overlay) {
         overlay.classList.remove('active');
@@ -182,7 +183,6 @@ export function closeStoryModal(skipCleanup = false) {
         document.body.style.overflow = '';
     }
 
-    // 🔥 LIMPIAR variables después de un tiempo
     setTimeout(() => {
         if (!isModalOpen) {
             currentStoryId = null;
@@ -237,7 +237,6 @@ export async function navigateStory(direction) {
 function createModalHTML() {
     console.log('📱 [STORY-MODAL] createModalHTML() ejecutado');
     
-    // 🔥 ELIMINAR MODAL EXISTENTE PRIMERO
     const existingOverlay = document.getElementById('storyModalOverlay');
     if (existingOverlay) {
         existingOverlay.remove();
@@ -334,7 +333,6 @@ function createModalHTML() {
     document.body.appendChild(div.firstElementChild);
     console.log('📱 [STORY-MODAL] HTML creado e insertado');
 
-    // 🔥 EVENTOS GLOBALES
     document.addEventListener('keydown', (e) => {
         if (e.key === 'Escape' && isModalOpen) {
             closeStoryModal();
@@ -362,15 +360,12 @@ function setupModalEvents() {
         await handleModalLike();
     });
 
-    // 🔥 BOTÓN DE COMENTARIO - ENFOCAR INPUT Y ABRIR TECLADO
     document.getElementById('modalCommentBtn')?.addEventListener('click', () => {
         const input = document.getElementById('commentInput');
         if (input) {
             input.focus();
-            // 🔥 Forzar que el teclado se abra en móvil
             if ('ontouchstart' in window) {
                 input.click();
-                // Algunos navegadores necesitan esto
                 setTimeout(() => input.focus(), 100);
             }
             input.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -394,7 +389,6 @@ function setupModalEvents() {
         await toggleTranslation();
     });
 
-    // 🔥 ENVIAR COMENTARIO - CON PREVENCIÓN DE DUPLICADOS
     document.getElementById('sendCommentBtn')?.addEventListener('click', async (e) => {
         e.preventDefault();
         await handleSendComment();
@@ -407,7 +401,6 @@ function setupModalEvents() {
         }
     });
 
-    // 🔥 LIKES DE COMENTARIOS
     document.getElementById('commentsList')?.addEventListener('click', async (e) => {
         const likeBtn = e.target.closest('.btn-like-comment');
         if (likeBtn) {
@@ -420,7 +413,6 @@ function setupModalEvents() {
         }
     });
 
-    // 🔥 RESPONDER - CON ENFOQUE AUTOMÁTICO Y TECLADO
     document.getElementById('commentsList')?.addEventListener('click', (e) => {
         const replyBtn = e.target.closest('.btn-reply-comment');
         if (replyBtn) {
@@ -428,13 +420,11 @@ function setupModalEvents() {
             e.stopPropagation();
             const commentId = replyBtn.dataset.commentId;
             if (commentId && currentStoryId) {
-                // 🔥 PASAR EL STORY ID PARA EL CONTEXTO
                 window.toggleReplyInput(currentStoryId, commentId);
             }
         }
     });
 
-    // Touch para navegación
     let touchStartX = 0;
     let touchStartY = 0;
     const modalContent = document.querySelector('.modal-content');
@@ -462,11 +452,10 @@ function setupModalEvents() {
 }
 
 // ============================================================
-// 🔥 ENVIAR COMENTARIO - VERSIÓN CORREGIDA (CON PREVENCIÓN DE DUPLICADOS)
+// 🔥 ENVIAR COMENTARIO - VERSIÓN COMPLETA CORREGIDA (SIN RE-RENDER)
 // ============================================================
 
 async function handleSendComment() {
-    // 🔥 PREVENIR ENVÍOS DUPLICADOS
     if (isCommenting) {
         console.log('⚠️ Ya hay un comentario en proceso, ignorando...');
         return;
@@ -492,7 +481,6 @@ async function handleSendComment() {
         return;
     }
 
-    // 🔥 BLOQUEAR PARA PREVENIR DUPLICADOS
     isCommenting = true;
     input.disabled = true;
     const sendBtn = document.getElementById('sendCommentBtn');
@@ -501,7 +489,6 @@ async function handleSendComment() {
         sendBtn.textContent = 'Enviando...';
     }
 
-    // 🔥 CREAR COMENTARIO LOCAL PARA RESPUESTA RÁPIDA
     const currentUser = getCurrentUser();
     const userAvatar = currentUser?.avatar || getAvatar(currentUser?.fullName || 'U');
     
@@ -518,19 +505,22 @@ async function handleSendComment() {
         _isTemp: true
     };
 
-    // 🔥 1. AGREGAR LOCALMENTE (RESPUESTA INMEDIATA) - USANDO LA FUNCIÓN EXPORTADA
     input.value = '';
     console.log('📝 Añadiendo comentario temporal al DOM:', tempComment);
     
-    // 🔥 USAR LA FUNCIÓN EXPORTADA DE story-comments.js
     const added = addCommentToUI(tempComment);
     if (!added) {
         console.warn('⚠️ No se pudo añadir el comentario al DOM, intentando directamente...');
-        // Fallback: añadir directamente
         const commentsList = document.getElementById('commentsList');
         if (commentsList) {
             const noComments = commentsList.querySelector('.no-comments');
             if (noComments) noComments.remove();
+            
+            const loadingSpinner = commentsList.querySelector('.fa-spinner');
+            if (loadingSpinner) {
+                const loadingContainer = loadingSpinner.closest('.no-comments');
+                if (loadingContainer) loadingContainer.remove();
+            }
             
             const div = document.createElement('div');
             div.className = 'comment-item';
@@ -568,11 +558,11 @@ async function handleSendComment() {
         }
     }
     
-    // 🔥 2. ACTUALIZAR CONTADOR LOCAL
     const currentTotal = getTotalCommentsCount(currentStoryId);
     updateCommentCount(currentTotal + 1);
     
-    // 🔥 3. ACTUALIZAR currentStoryData LOCALMENTE
+    addCommentToCache(currentStoryId, tempComment);
+    
     if (currentStoryData) {
         if (!currentStoryData.comments) currentStoryData.comments = [];
         currentStoryData.comments.unshift(tempComment);
@@ -586,11 +576,7 @@ async function handleSendComment() {
         }
     }
 
-    // 🔥 4. AGREGAR AL CACHÉ
-    addCommentToCache(currentStoryId, tempComment);
-
     try {
-        // 🔥 5. ENVIAR AL SERVIDOR
         const res = await fetch(`${API_URL}/api/stories/${currentStoryId}/comments`, {
             method: 'POST',
             headers: {
@@ -603,20 +589,99 @@ async function handleSendComment() {
         const data = await res.json();
 
         if (res.ok) {
-            // 🔥 6. REEMPLAZAR COMENTARIO TEMPORAL CON EL REAL
-            await replaceTempCommentWithReal(currentStoryId, tempComment.id, data);
+            const replaced = replaceTempComment(currentStoryId, tempComment.id, data);
+            if (!replaced) {
+                const tempElement = document.querySelector(`[data-temp-id="${tempComment.id}"]`);
+                if (tempElement) {
+                    tempElement.remove();
+                    addCommentToUI(data);
+                }
+            }
+            
+            const cached = getCachedComments(currentStoryId);
+            if (cached) {
+                const idx = cached.findIndex(c => c.id === tempComment.id);
+                if (idx !== -1) {
+                    cached[idx] = data;
+                    commentsCache.set(currentStoryId, {
+                        comments: cached,
+                        timestamp: Date.now()
+                    });
+                }
+            }
+            
+            if (currentStoryData && currentStoryData.comments) {
+                const idx = currentStoryData.comments.findIndex(c => c.id === tempComment.id);
+                if (idx !== -1) {
+                    currentStoryData.comments[idx] = data;
+                }
+            }
+            
+            if (currentStoriesList && currentStoriesList.length > 0) {
+                const storyIdx = currentStoriesList.findIndex(s => s.id === currentStoryId);
+                if (storyIdx !== -1 && currentStoriesList[storyIdx] && currentStoriesList[storyIdx].comments) {
+                    const idx = currentStoriesList[storyIdx].comments.findIndex(c => c.id === tempComment.id);
+                    if (idx !== -1) {
+                        currentStoriesList[storyIdx].comments[idx] = data;
+                    }
+                }
+            }
+            
             showToast('💬 Comentario enviado');
         } else {
-            // 🔥 7. SI FALLA, REVERTIR
-            revertTempComment(currentStoryId, tempComment.id);
+            const tempElement = document.querySelector(`[data-temp-id="${tempComment.id}"]`);
+            if (tempElement) tempElement.remove();
+            
+            const cached = getCachedComments(currentStoryId);
+            if (cached) {
+                const idx = cached.findIndex(c => c.id === tempComment.id);
+                if (idx !== -1) cached.splice(idx, 1);
+            }
+            
+            if (currentStoryData && currentStoryData.comments) {
+                currentStoryData.comments = currentStoryData.comments.filter(c => c.id !== tempComment.id);
+            }
+            
+            if (currentStoriesList && currentStoriesList.length > 0) {
+                const storyIdx = currentStoriesList.findIndex(s => s.id === currentStoryId);
+                if (storyIdx !== -1 && currentStoriesList[storyIdx] && currentStoriesList[storyIdx].comments) {
+                    currentStoriesList[storyIdx].comments = currentStoriesList[storyIdx].comments.filter(c => c.id !== tempComment.id);
+                }
+            }
+            
+            const total = getTotalCommentsCount(currentStoryId);
+            updateCommentCount(total);
+            
             showToast(data.error || 'Error al enviar comentario', true);
         }
     } catch (error) {
         console.error('Error enviando comentario:', error);
-        revertTempComment(currentStoryId, tempComment.id);
+        
+        const tempElement = document.querySelector(`[data-temp-id="${tempComment.id}"]`);
+        if (tempElement) tempElement.remove();
+        
+        const cached = getCachedComments(currentStoryId);
+        if (cached) {
+            const idx = cached.findIndex(c => c.id === tempComment.id);
+            if (idx !== -1) cached.splice(idx, 1);
+        }
+        
+        if (currentStoryData && currentStoryData.comments) {
+            currentStoryData.comments = currentStoryData.comments.filter(c => c.id !== tempComment.id);
+        }
+        
+        if (currentStoriesList && currentStoriesList.length > 0) {
+            const storyIdx = currentStoriesList.findIndex(s => s.id === currentStoryId);
+            if (storyIdx !== -1 && currentStoriesList[storyIdx] && currentStoriesList[storyIdx].comments) {
+                currentStoriesList[storyIdx].comments = currentStoriesList[storyIdx].comments.filter(c => c.id !== tempComment.id);
+            }
+        }
+        
+        const total = getTotalCommentsCount(currentStoryId);
+        updateCommentCount(total);
+        
         showToast('Error al enviar comentario', true);
     } finally {
-        // 🔥 DESBLOQUEAR
         isCommenting = false;
         input.disabled = false;
         if (sendBtn) {
@@ -625,171 +690,6 @@ async function handleSendComment() {
         }
         input.focus();
     }
-}
-
-// ============================================================
-// REEMPLAZAR COMENTARIO TEMPORAL CON REAL
-// ============================================================
-
-async function replaceTempCommentWithReal(storyId, tempId, realComment) {
-    // 🔥 1. Buscar y reemplazar en la UI
-    const commentsList = document.getElementById('commentsList');
-    if (commentsList) {
-        const tempElement = commentsList.querySelector(`[data-temp-id="${tempId}"]`);
-        if (tempElement) {
-            // Crear elemento real
-            const div = document.createElement('div');
-            div.className = 'comment-item';
-            div.setAttribute('data-comment-id', realComment.id);
-            div.innerHTML = `
-                <img class="avatar" src="${realComment.avatar || getAvatar(realComment.fullName)}" alt="${realComment.fullName}" onclick="window.goToProfileUser('${realComment.userId}')" />
-                <div class="comment-body">
-                    <div class="comment-user" onclick="window.goToProfileUser('${realComment.userId}')">
-                        ${escapeHtml(realComment.fullName)}
-                        <span class="handle">@${realComment.username || 'usuario'}</span>
-                        <span class="time">${formatDate(realComment.createdAt)}</span>
-                    </div>
-                    <div class="comment-text">${escapeHtml(realComment.content)}</div>
-                    <div class="comment-meta">
-                        <button class="btn-like-comment" data-comment-id="${realComment.id}">
-                            <i class="fas fa-heart"></i> <span class="like-count">0</span>
-                        </button>
-                        <button class="btn-reply-comment" data-comment-id="${realComment.id}">
-                            <i class="fas fa-reply"></i> Responder
-                        </button>
-                    </div>
-                    <div class="replies" id="replies-${realComment.id}"></div>
-                    <div class="reply-input-container" id="reply-input-${realComment.id}" style="display:none;">
-                        <input type="text" class="reply-input" id="replyInput-${realComment.id}" placeholder="Escribe una respuesta..." maxlength="500" />
-                        <button class="reply-send-btn" data-comment-id="${realComment.id}">Enviar</button>
-                    </div>
-                </div>
-            `;
-            tempElement.replaceWith(div);
-            console.log('✅ Comentario temporal reemplazado por real');
-        }
-    }
-
-    // 🔥 2. Actualizar caché de comentarios
-    const cached = getCachedComments(storyId);
-    if (cached) {
-        const idx = cached.findIndex(c => c.id === tempId);
-        if (idx !== -1) {
-            cached[idx] = realComment;
-        }
-    }
-
-    // 🔥 3. Actualizar currentStoryData
-    if (currentStoryData && currentStoryData.comments) {
-        const idx = currentStoryData.comments.findIndex(c => c.id === tempId);
-        if (idx !== -1) {
-            currentStoryData.comments[idx] = realComment;
-        }
-    }
-
-    // 🔥 4. Actualizar currentStoriesList
-    if (currentStoriesList && currentStoriesList.length > 0) {
-        const storyIdx = currentStoriesList.findIndex(s => s.id === storyId);
-        if (storyIdx !== -1 && currentStoriesList[storyIdx].comments) {
-            const idx = currentStoriesList[storyIdx].comments.findIndex(c => c.id === tempId);
-            if (idx !== -1) {
-                currentStoriesList[storyIdx].comments[idx] = realComment;
-            }
-        }
-    }
-
-    console.log('✅ Comentario reemplazado:', tempId, '→', realComment.id);
-}
-
-// ============================================================
-// REVERTIR COMENTARIO TEMPORAL
-// ============================================================
-
-function revertTempComment(storyId, tempId) {
-    // 🔥 1. Eliminar de la UI
-    const commentsList = document.getElementById('commentsList');
-    if (commentsList) {
-        const tempElement = commentsList.querySelector(`[data-temp-id="${tempId}"]`);
-        if (tempElement) {
-            tempElement.remove();
-            console.log('🗑️ Comentario temporal eliminado de la UI');
-        }
-    }
-
-    // 🔥 2. Eliminar del caché
-    const cached = getCachedComments(storyId);
-    if (cached) {
-        const idx = cached.findIndex(c => c.id === tempId);
-        if (idx !== -1) {
-            cached.splice(idx, 1);
-        }
-    }
-
-    // 🔥 3. Eliminar de currentStoryData
-    if (currentStoryData && currentStoryData.comments) {
-        currentStoryData.comments = currentStoryData.comments.filter(c => c.id !== tempId);
-    }
-
-    // 🔥 4. Eliminar de currentStoriesList
-    if (currentStoriesList && currentStoriesList.length > 0) {
-        const storyIdx = currentStoriesList.findIndex(s => s.id === storyId);
-        if (storyIdx !== -1 && currentStoriesList[storyIdx].comments) {
-            currentStoriesList[storyIdx].comments = currentStoriesList[storyIdx].comments.filter(c => c.id !== tempId);
-        }
-    }
-
-    // 🔥 5. Actualizar contador
-    const total = getTotalCommentsCount(storyId);
-    updateCommentCount(total);
-
-    console.log('🗑️ Comentario temporal revertido:', tempId);
-}
-
-// ============================================================
-// CREAR ELEMENTO DE COMENTARIO PARA LA UI
-// ============================================================
-
-function createCommentElement(comment) {
-    const isTemp = comment._isTemp || false;
-    const div = document.createElement('div');
-    div.className = 'comment-item';
-    div.setAttribute('data-comment-id', comment.id);
-    if (isTemp) {
-        div.setAttribute('data-temp-id', comment.id);
-        div.style.opacity = '0.6';
-        div.style.borderLeft = '2px solid rgba(192,132,252,0.3)';
-    }
-    
-    const currentUser = getCurrentUser();
-    const userAvatar = currentUser?.avatar || getAvatar(currentUser?.fullName || 'U');
-
-    div.innerHTML = `
-        <img class="avatar" src="${comment.avatar || userAvatar}" alt="${comment.fullName}" onclick="window.goToProfileUser('${comment.userId}')" />
-        <div class="comment-body">
-            <div class="comment-user" onclick="window.goToProfileUser('${comment.userId}')">
-                ${escapeHtml(comment.fullName)}
-                <span class="handle">@${comment.username || 'usuario'}</span>
-                <span class="time">${formatDate(comment.createdAt)}</span>
-                ${isTemp ? '<span style="font-size:10px;color:rgba(192,132,252,0.5);margin-left:8px;">⏳ Enviando...</span>' : ''}
-            </div>
-            <div class="comment-text">${escapeHtml(comment.content)}</div>
-            <div class="comment-meta">
-                <button class="btn-like-comment" data-comment-id="${comment.id}">
-                    <i class="fas fa-heart"></i> <span class="like-count">0</span>
-                </button>
-                <button class="btn-reply-comment" data-comment-id="${comment.id}">
-                    <i class="fas fa-reply"></i> Responder
-                </button>
-            </div>
-            <div class="replies" id="replies-${comment.id}"></div>
-            <div class="reply-input-container" id="reply-input-${comment.id}" style="display:none;">
-                <input type="text" class="reply-input" id="replyInput-${comment.id}" placeholder="Escribe una respuesta..." maxlength="500" />
-                <button class="reply-send-btn" data-comment-id="${comment.id}">Enviar</button>
-            </div>
-        </div>
-    `;
-    
-    return div;
 }
 
 // ============================================================
@@ -1104,7 +1004,7 @@ function updateTextContentOnly(updatedData) {
 }
 
 // ============================================================
-// 🔥 CARGAR DATOS DE LA HISTORIA - CON FORCE RELOAD DE COMENTARIOS
+// 🔥 CARGAR DATOS DE LA HISTORIA
 // ============================================================
 
 async function loadStoryData(storyId, isNavigation = false) {
@@ -1126,7 +1026,6 @@ async function loadStoryData(storyId, isNavigation = false) {
                 updateModalUI(currentStoryData);
                 updateProgress();
                 const highlightCommentId = window._activityCommentId || null;
-                // 🔥 FORZAR RECARGA DE COMENTARIOS DESDE EL SERVIDOR
                 await initComments(storyId, 'commentsList', highlightCommentId, true);
                 isFirstLoad = false;
                 const totalComments = getTotalCommentsCount(storyId);
@@ -1140,7 +1039,6 @@ async function loadStoryData(storyId, isNavigation = false) {
                     updateModalUI(currentStoryData);
                     updateProgress();
                     const highlightCommentId = window._activityCommentId || null;
-                    // 🔥 FORZAR RECARGA DE COMENTARIOS DESDE EL SERVIDOR
                     await initComments(storyId, 'commentsList', highlightCommentId, true);
                     isFirstLoad = false;
                     const totalComments = getTotalCommentsCount(storyId);
@@ -1195,10 +1093,7 @@ async function loadStoryData(storyId, isNavigation = false) {
         
         const highlightCommentId = window._activityCommentId || null;
         
-        // 🔥 SIEMPRE FORZAR RECARGA DE COMENTARIOS AL ABRIR EL MODAL
-        // Esto asegura que siempre veas los comentarios más recientes
-        const forceReload = true;
-        await initComments(storyId, 'commentsList', highlightCommentId, forceReload);
+        await initComments(storyId, 'commentsList', highlightCommentId, true);
         isFirstLoad = false;
         
         const totalComments = getTotalCommentsCount(storyId);
@@ -1521,7 +1416,6 @@ window.openProfileFromModal = function() {
     }
 };
 
-// 🔥 FUNCIÓN PARA ABRIR PERFIL DE USUARIO DESDE COMENTARIO
 window.goToProfileUser = function(userId) {
     if (!userId) return;
     closeStoryModal();
