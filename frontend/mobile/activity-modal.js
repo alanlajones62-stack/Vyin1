@@ -2,7 +2,6 @@
 
 import { getToken, getCurrentUser, showToast, getAvatar } from './auth.js';
 import { formatNumber } from './utils.js';
-// 🔥 IMPORTAR DIRECTAMENTE EN LUGAR DE DINÁMICO
 import { openStoryModal } from './story-modal.js';
 
 const API_URL = window.location.origin;
@@ -50,7 +49,6 @@ function createActivityModal() {
     document.body.appendChild(overlay);
     activityOverlay = overlay;
     
-    // Eventos
     overlay.querySelector('#closeActivity').addEventListener('click', closeActivityModal);
     overlay.addEventListener('click', (e) => {
         if (e.target === overlay) closeActivityModal();
@@ -199,7 +197,43 @@ async function loadActivityData() {
 }
 
 // ============================================================
-// RENDERIZAR ACTIVIDAD (CON MENSAJES UNIFICADOS)
+// MARCAR NOTIFICACIÓN COMO LEÍDA
+// ============================================================
+
+async function markNotificationRead(notificationId) {
+    const token = getToken();
+    if (!token) return;
+    
+    try {
+        const res = await fetch(`${API_URL}/api/notifications/${notificationId}/read`, {
+            method: 'PUT',
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+        
+        if (res.ok) {
+            // Actualizar localmente
+            const notif = notifications.find(n => n.id === notificationId);
+            if (notif) {
+                notif.read = true;
+                unreadCount = Math.max(0, unreadCount - 1);
+                updateBadge();
+                
+                // Actualizar UI
+                const item = document.querySelector(`.activity-item[data-id="${notificationId}"]`);
+                if (item) {
+                    item.classList.remove('unread');
+                    const dot = item.querySelector('.unread-dot');
+                    if (dot) dot.remove();
+                }
+            }
+        }
+    } catch (error) {
+        console.error('Error marcando notificación como leída:', error);
+    }
+}
+
+// ============================================================
+// RENDERIZAR ACTIVIDAD
 // ============================================================
 
 function renderActivity(container) {
@@ -214,7 +248,6 @@ function renderActivity(container) {
         return;
     }
     
-    // Mapeo de tipos a emojis y colores
     const typeConfig = {
         'like': { icon: '❤️', color: '#ff6b6b', label: 'Like' },
         'comment': { icon: '💬', color: '#c084fc', label: 'Comentario' },
@@ -237,25 +270,16 @@ function renderActivity(container) {
         const username = notif.fromUsername || 'usuario';
         const avatar = notif.fromAvatar || getAvatar(fullName);
         
-        // Icono con color
         const iconHtml = `<span style="font-size:18px;">${config.icon}</span>`;
-        
-        // Badge de tipo
         const typeBadge = `<span class="type-badge" style="font-size:8px;background:${config.color}20;color:${config.color};padding:2px 8px;border-radius:8px;margin-left:6px;">${config.label}</span>`;
-        
-        // Badge de traducción
         const translatedBadge = isTranslated ? 
             `<span class="translated-badge" style="font-size:8px;color:rgba(192,132,252,0.4);margin-left:6px;">🌐 Traducido</span>` : '';
         
-        // 🔥 MENSAJE UNIFICADO
         let messageHtml = notif.message || 'Actividad';
-        
-        // Si es un like, agregar corazón
         if (notif.type === 'like') {
             messageHtml = `❤️ ${messageHtml}`;
         }
         
-        // 🔥 Si es una respuesta (reply o reply_to_reply), unificar el mensaje
         if (notif.type === 'reply' || notif.type === 'reply_to_reply') {
             const fromName = notif.fromName || 'Usuario';
             const preview = notif.replyPreview || notif.data?.replyPreview || '';
@@ -263,7 +287,6 @@ function renderActivity(container) {
             messageHtml = `${fromName} respondió a tu comentario: "${previewText}"`;
         }
         
-        // 🔥 PREVIEW DEL COMENTARIO - TRUNCADO
         let previewHtml = '';
         let commentText = '';
         
@@ -284,7 +307,6 @@ function renderActivity(container) {
             }
         }
         
-        // Acciones para solicitudes de follow
         let actionHtml = '';
         if (notif.type === 'follow_request') {
             actionHtml = `
@@ -301,30 +323,22 @@ function renderActivity(container) {
             `;
         }
         
-        // 🔥 Enlace a historia con datos del comentario
         let storyLink = '';
         if (notif.storyId) {
             storyLink = `
                 <span class="story-link" data-story-id="${notif.storyId}" 
                       data-comment-id="${notif.commentId || ''}"
+                      data-notification-id="${notif.id}"
                       style="font-size:9px;color:rgba(192,132,252,0.3);cursor:pointer;margin-top:2px;display:inline-block;">
                     <i class="fas fa-book-open"></i> Ver historia
                 </span>
             `;
         }
         
-        let onClick = '';
-        if (notif.storyId) {
-            onClick = `onclick="window.openStoryFromActivityOverlay('${notif.storyId}', '${notif.commentId || ''}')"`;
-        } else if (notif.fromUserId && notif.type !== 'follow_request') {
-            onClick = `onclick="window.openProfileFromActivity('${notif.fromUserId}')"`;
-        }
-        
         html += `
             <div class="activity-item ${isUnread ? 'unread' : ''}" 
                  data-id="${notif.id}" 
-                 data-index="${index}" 
-                 ${onClick}
+                 data-index="${index}"
                  style="position:relative;display:flex;align-items:flex-start;padding:12px 14px;border-bottom:1px solid rgba(255,255,255,0.02);cursor:pointer;transition:background 0.2s;${isUnread ? 'background:rgba(192,132,252,0.02);' : ''}">
                 
                 <img class="avatar" src="${avatar}" alt="${fullName}" 
@@ -358,7 +372,6 @@ function renderActivity(container) {
     
     container.innerHTML = html;
     
-    // Event listeners para botones de follow
     container.querySelectorAll('.accept-follow').forEach(btn => {
         btn.addEventListener('click', (e) => {
             e.stopPropagation();
@@ -375,14 +388,43 @@ function renderActivity(container) {
         });
     });
     
-    // Event listeners para enlaces de historias
+    // 🔥 EVENTOS PARA ENLACES DE HISTORIAS - MARCA LA NOTIFICACIÓN COMO LEÍDA
     container.querySelectorAll('.story-link').forEach(el => {
-        el.addEventListener('click', (e) => {
+        el.addEventListener('click', async (e) => {
             e.stopPropagation();
             const storyId = el.dataset.storyId;
             const commentId = el.dataset.commentId || '';
+            const notificationId = el.dataset.notificationId || '';
+            
             if (storyId) {
-                window.openStoryFromActivityOverlay(storyId, commentId);
+                // 🔥 MARCAR NOTIFICACIÓN COMO LEÍDA
+                if (notificationId) {
+                    await markNotificationRead(notificationId);
+                }
+                
+                // 🔥 ABRIR HISTORIA CON COMENTARIO DESTACADO
+                window.openStoryFromActivityOverlay(storyId, commentId, notificationId);
+            }
+        });
+    });
+    
+    // 🔥 CLICK EN TODA LA NOTIFICACIÓN
+    container.querySelectorAll('.activity-item').forEach(item => {
+        item.addEventListener('click', async () => {
+            const notificationId = item.dataset.id;
+            const storyLink = item.querySelector('.story-link');
+            
+            if (storyLink) {
+                const storyId = storyLink.dataset.storyId;
+                const commentId = storyLink.dataset.commentId || '';
+                const notifId = storyLink.dataset.notificationId || '';
+                
+                if (storyId) {
+                    if (notifId) {
+                        await markNotificationRead(notifId);
+                    }
+                    window.openStoryFromActivityOverlay(storyId, commentId, notifId);
+                }
             }
         });
     });
@@ -392,7 +434,7 @@ function renderActivity(container) {
 // 🔥 ABRIR HISTORIA SUPERPUESTA DESDE ACTIVIDAD (CORREGIDO)
 // ============================================================
 
-window.openStoryFromActivityOverlay = function(storyId, commentId = '') {
+window.openStoryFromActivityOverlay = function(storyId, commentId = '', notificationId = '') {
     if (!storyId) return;
     
     console.log('📱 Abriendo historia desde actividad:', storyId, 'comentario:', commentId);
@@ -400,6 +442,7 @@ window.openStoryFromActivityOverlay = function(storyId, commentId = '') {
     // 🔥 MARCAR QUE VIENE DE ACTIVIDAD
     window._fromActivityModal = true;
     window._activityCommentId = commentId;
+    window._activityNotificationId = notificationId;
     
     // 🔥 ABRIR HISTORIA SUPERPUESTA
     openStoryModal(storyId, null, false, null);
@@ -418,7 +461,6 @@ window.openStoryFromActivityOverlay = function(storyId, commentId = '') {
                     commentElement.style.borderLeft = '';
                 }, 3000);
             } else {
-                // Buscar en respuestas
                 const replyElement = document.querySelector(`.comment-item[data-reply-id="${commentId}"]`);
                 if (replyElement) {
                     replyElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -600,5 +642,6 @@ window.openStoryFromActivity = (storyId) => {
 export { 
     openActivityModal, 
     closeActivityModal,
-    updateBadge
+    updateBadge,
+    markNotificationRead
 };

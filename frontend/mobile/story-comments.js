@@ -1,7 +1,6 @@
 // ============================================================
 // story-comments.js - Sistema de comentarios para historias
-// SOLO DOS NIVELES: Comentarios principales (N1) y Respuestas (N2)
-// TODAS las respuestas van al mismo nivel (sin anidación)
+// CON FILTRADO DE COMENTARIO DESTACADO AL PRINCIPIO
 // ============================================================
 
 import { getToken, getCurrentUser, showToast, getAvatar, formatDate, escapeHtml } from './auth.js';
@@ -9,16 +8,12 @@ import { formatNumber } from './utils.js';
 
 const API_URL = window.location.origin;
 
-// ============================================================
-// ESTADO DE COMENTARIOS
-// ============================================================
-
-let commentsCache = new Map(); // storyId -> [comments]
-let commentLikes = new Map(); // commentId -> Set de userIds
-let repliesVisibility = new Map(); // commentId -> boolean
+let commentsCache = new Map();
+let commentLikes = new Map();
+let repliesVisibility = new Map();
 
 // ============================================================
-// FUNCIÓN PARA BUSCAR COMENTARIO POR ID (RECURSIVA - PARA EL BACKEND)
+// FUNCIÓN PARA BUSCAR COMENTARIO POR ID (RECURSIVA)
 // ============================================================
 
 function findCommentById(comments, commentId) {
@@ -36,18 +31,12 @@ function findCommentById(comments, commentId) {
     return null;
 }
 
-// ============================================================
-// FUNCIÓN PARA OBTENER TODAS LAS RESPUESTAS DE UN COMENTARIO (APLANADAS)
-// ============================================================
-
 function getAllReplies(comment) {
     if (!comment || !comment.replies || comment.replies.length === 0) {
         return [];
     }
     
     let allReplies = [];
-    
-    // Función recursiva para aplanar todas las respuestas
     const flatten = (replies) => {
         for (const reply of replies) {
             allReplies.push(reply);
@@ -56,14 +45,9 @@ function getAllReplies(comment) {
             }
         }
     };
-    
     flatten(comment.replies);
     return allReplies;
 }
-
-// ============================================================
-// FUNCIÓN PARA CONTAR TODOS LOS COMENTARIOS (INCLUYENDO RESPUESTAS)
-// ============================================================
 
 function countAllComments(comments) {
     if (!comments) return 0;
@@ -74,10 +58,6 @@ function countAllComments(comments) {
     return count;
 }
 
-// ============================================================
-// FUNCIÓN PARA OBTENER CONTEXTO DE RESPUESTA (QUIÉN RESPONDIÓ A QUIÉN)
-// ============================================================
-
 function getReplyContext(reply, currentUserId, parentComment) {
     if (!parentComment) {
         return { text: '', color: 'rgba(255,255,255,0.25)', isTarget: false };
@@ -85,8 +65,6 @@ function getReplyContext(reply, currentUserId, parentComment) {
     
     const parentAuthorName = parentComment.fullName || parentComment.username || 'usuario';
     const parentAuthorId = parentComment.userId || null;
-    
-    // Verificar si esta respuesta es a otro usuario (replyToUserId)
     const replyToUserId = reply.replyToUserId || parentAuthorId;
     const replyToName = reply.replyToName || parentAuthorName;
     
@@ -94,7 +72,6 @@ function getReplyContext(reply, currentUserId, parentComment) {
     let contextColor = 'rgba(255,255,255,0.25)';
     let isTarget = false;
     
-    // Si el usuario actual es el que respondió
     if (reply.userId === currentUserId) {
         if (replyToUserId && replyToUserId !== currentUserId) {
             contextText = `Respondiste a @${replyToName}`;
@@ -107,21 +84,15 @@ function getReplyContext(reply, currentUserId, parentComment) {
             contextColor = 'rgba(52,211,153,0.6)';
         }
         isTarget = false;
-    } 
-    // Si el usuario actual es el destinatario
-    else if (replyToUserId && replyToUserId === currentUserId) {
+    } else if (replyToUserId && replyToUserId === currentUserId) {
         contextText = `Te respondió`;
         contextColor = 'rgba(192,132,252,0.7)';
         isTarget = true;
-    } 
-    // Si es una respuesta a otro usuario
-    else if (replyToUserId) {
+    } else if (replyToUserId) {
         contextText = `Respondió a @${replyToName}`;
         contextColor = 'rgba(255,255,255,0.25)';
         isTarget = false;
-    } 
-    // Si el autor del comentario padre es diferente
-    else if (parentAuthorId && parentAuthorId !== currentUserId) {
+    } else if (parentAuthorId && parentAuthorId !== currentUserId) {
         contextText = `Respondió a @${parentAuthorName}`;
         contextColor = 'rgba(255,255,255,0.25)';
         isTarget = false;
@@ -139,10 +110,6 @@ function getReplyContext(reply, currentUserId, parentComment) {
     };
 }
 
-// ============================================================
-// ACTUALIZAR SOLO EL CONTADOR DE LIKES DE UN COMENTARIO
-// ============================================================
-
 function updateCommentLikeUI(commentId, isLiked, likesCount) {
     const container = document.getElementById('commentsList');
     if (!container) return;
@@ -157,12 +124,10 @@ function updateCommentLikeUI(commentId, isLiked, likesCount) {
         } else {
             likeBtn.classList.remove('liked');
         }
-        
         const span = likeBtn.querySelector('span');
         if (span) {
             span.textContent = formatNumber(likesCount);
         }
-        
         const heart = likeBtn.querySelector('.fa-heart');
         if (heart) {
             heart.style.color = isLiked ? '#ff6b6b' : 'inherit';
@@ -170,23 +135,13 @@ function updateCommentLikeUI(commentId, isLiked, likesCount) {
     }
 }
 
-// ============================================================
-// BUSCAR ELEMENTO EN DOM POR ID
-// ============================================================
-
 function findCommentElement(container, commentId) {
     let element = container.querySelector(`.comment-item[data-comment-id="${commentId}"]`);
     if (element) return element;
-    
     element = container.querySelector(`.comment-item[data-reply-id="${commentId}"]`);
     if (element) return element;
-    
     return null;
 }
-
-// ============================================================
-// ACTUALIZAR CONTADOR DEL MODAL
-// ============================================================
 
 function updateModalCommentCount(storyId) {
     const comments = commentsCache.get(storyId) || [];
@@ -196,7 +151,6 @@ function updateModalCommentCount(storyId) {
     if (modalComments) {
         modalComments.textContent = formatNumber(total);
     }
-    
     const commentsCount = document.getElementById('commentsCount');
     if (commentsCount) {
         commentsCount.textContent = formatNumber(total);
@@ -230,10 +184,8 @@ export async function loadComments(storyId, forceReload = false) {
 
         const comments = await res.json();
         
-        // Ordenar: nuevos primero
         comments.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
         
-        // Ordenar respuestas: viejas primero (recursivo)
         const sortReplies = (items) => {
             if (!items) return;
             items.sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
@@ -252,19 +204,16 @@ export async function loadComments(storyId, forceReload = false) {
         
         commentsCache.set(storyId, comments);
         
-        // Inicializar visibilidad de respuestas (ocultas por defecto)
         comments.forEach(comment => {
             if (comment.replies && comment.replies.length > 0) {
                 repliesVisibility.set(comment.id, false);
             }
         });
         
-        // Inicializar likes
         comments.forEach(comment => {
             if (comment.likes) {
                 commentLikes.set(comment.id, new Set(comment.likes));
             }
-            // Todas las respuestas
             const allReplies = getAllReplies(comment);
             allReplies.forEach(reply => {
                 if (reply.likes) {
@@ -281,7 +230,7 @@ export async function loadComments(storyId, forceReload = false) {
 }
 
 // ============================================================
-// AGREGAR COMENTARIO (SIN RE-RENDER COMPLETO)
+// AGREGAR COMENTARIO
 // ============================================================
 
 export async function addComment(storyId, content, parentCommentId = null) {
@@ -322,12 +271,10 @@ export async function addComment(storyId, content, parentCommentId = null) {
 
         const newComment = await res.json();
         
-        // ACTUALIZAR CACHÉ LOCAL
         if (commentsCache.has(storyId)) {
             const comments = commentsCache.get(storyId);
             
             if (parentCommentId) {
-                // Buscar el comentario padre (en cualquier nivel)
                 const parentComment = findCommentById(comments, parentCommentId);
                 if (parentComment) {
                     if (!parentComment.replies) parentComment.replies = [];
@@ -349,18 +296,14 @@ export async function addComment(storyId, content, parentCommentId = null) {
             commentsCache.set(storyId, [newComment]);
         }
 
-        // 🔥 ACTUALIZAR UI SELECTIVAMENTE (sin re-render)
         const container = document.getElementById('commentsList');
         if (container) {
             const currentUser = getCurrentUser();
             if (parentCommentId) {
-                // Es una respuesta - agregar al DOM dentro del comentario padre
                 appendReplyToDOM(storyId, parentCommentId, newComment, currentUser?.id, container);
             } else {
-                // Es un comentario nuevo - agregar al principio
                 prependCommentToDOM(storyId, newComment, currentUser?.id, container);
             }
-            
             updateModalCommentCount(storyId);
         }
 
@@ -374,18 +317,12 @@ export async function addComment(storyId, content, parentCommentId = null) {
     }
 }
 
-// ============================================================
-// AGREGAR COMENTARIO AL DOM (AL PRINCIPIO - NIVEL 1)
-// ============================================================
-
 function prependCommentToDOM(storyId, comment, currentUserId, container) {
     if (!container) return;
-    
     const existing = container.querySelector(`.comment-item[data-comment-id="${comment.id}"]`);
     if (existing) return;
     
     const firstChild = container.firstChild;
-    
     const tempDiv = document.createElement('div');
     const isLiked = comment.likes?.includes(currentUserId) || false;
     const likesCount = comment.likes?.length || 0;
@@ -448,23 +385,15 @@ function prependCommentToDOM(storyId, comment, currentUserId, container) {
     }
 }
 
-// ============================================================
-// AGREGAR RESPUESTA AL DOM (NIVEL 2 - DENTRO DEL COMENTARIO PADRE)
-// ============================================================
-
 function appendReplyToDOM(storyId, parentCommentId, reply, currentUserId, container) {
     if (!container) return;
-    
     const existing = container.querySelector(`.comment-item[data-reply-id="${reply.id}"]`);
     if (existing) return;
     
-    // Buscar el comentario padre en el DOM (Nivel 1)
     let parentElement = container.querySelector(`.comment-item[data-comment-id="${parentCommentId}"]`);
     if (!parentElement) {
-        // Si no se encuentra, buscar por data-reply-id (en caso de que sea respuesta a respuesta)
         parentElement = container.querySelector(`.comment-item[data-reply-id="${parentCommentId}"]`);
         if (parentElement) {
-            // Si es respuesta a respuesta, subir al comentario padre raíz
             const parentCommentItem = parentElement.closest('.comment-item[data-comment-id]');
             if (parentCommentItem) {
                 parentElement = parentCommentItem;
@@ -473,7 +402,6 @@ function appendReplyToDOM(storyId, parentCommentId, reply, currentUserId, contai
     }
     if (!parentElement) return;
     
-    // Buscar o crear el contenedor de respuestas (Nivel 2)
     let repliesContainer = parentElement.querySelector('.replies');
     if (!repliesContainer) {
         const tempDiv = document.createElement('div');
@@ -494,8 +422,7 @@ function appendReplyToDOM(storyId, parentCommentId, reply, currentUserId, contai
             }
         }
         
-        // Asegurar que el botón "Ver respuestas" esté visible
-        const showBtn = parentElement.querySelector('.show-replies-btn');
+        let showBtn = parentElement.querySelector('.show-replies-btn');
         if (!showBtn) {
             const newShowBtn = document.createElement('div');
             newShowBtn.className = 'show-replies-btn';
@@ -509,11 +436,9 @@ function appendReplyToDOM(storyId, parentCommentId, reply, currentUserId, contai
                 repliesContainer.after(newShowBtn);
             }
         }
-        
         repliesVisibility.set(parentCommentId, true);
     }
     
-    // Asegurar que el contenedor esté visible
     if (repliesContainer.style.display === 'none') {
         repliesContainer.style.display = 'flex';
         const showBtn = parentElement.querySelector('.show-replies-btn');
@@ -524,11 +449,9 @@ function appendReplyToDOM(storyId, parentCommentId, reply, currentUserId, contai
         }
     }
     
-    // Obtener contexto
     const parentComment = findCommentById(commentsCache.get(storyId) || [], parentCommentId);
     const context = getReplyContext(reply, currentUserId, parentComment);
     
-    // Crear el HTML de la respuesta
     const tempDiv = document.createElement('div');
     const isLiked = reply.likes?.includes(currentUserId) || false;
     const likesCount = reply.likes?.length || 0;
@@ -588,7 +511,6 @@ function appendReplyToDOM(storyId, parentCommentId, reply, currentUserId, contai
     const newReplyElement = tempDiv.firstElementChild;
     repliesContainer.appendChild(newReplyElement);
     
-    // Actualizar el contador del botón "Ver respuestas"
     const showBtn = parentElement.querySelector('.show-replies-btn');
     if (showBtn) {
         const parentCommentData = findCommentById(commentsCache.get(storyId) || [], parentCommentId);
@@ -623,7 +545,6 @@ export async function deleteComment(storyId, commentId, parentCommentId = null) 
 
         if (!res.ok) throw new Error('Error al eliminar');
 
-        // Eliminar del caché
         if (commentsCache.has(storyId)) {
             const comments = commentsCache.get(storyId);
             
@@ -638,18 +559,14 @@ export async function deleteComment(storyId, commentId, parentCommentId = null) 
             }
         }
 
-        // 🔥 ELIMINAR DEL DOM (sin re-render)
         const container = document.getElementById('commentsList');
         if (container) {
             const element = findCommentElement(container, commentId);
             if (element) {
                 element.remove();
             }
-            
-            // Actualizar contador del modal
             updateModalCommentCount(storyId);
             
-            // Actualizar el contador del botón "Ver respuestas" del padre
             if (parentCommentId) {
                 const parentElement = container.querySelector(`.comment-item[data-comment-id="${parentCommentId}"]`);
                 if (parentElement) {
@@ -679,7 +596,7 @@ export async function deleteComment(storyId, commentId, parentCommentId = null) 
 }
 
 // ============================================================
-// DAR LIKE A COMENTARIO (SIN RE-RENDER)
+// DAR LIKE A COMENTARIO
 // ============================================================
 
 export async function likeComment(storyId, commentId) {
@@ -705,7 +622,6 @@ export async function likeComment(storyId, commentId) {
         const currentUserId = getCurrentUser()?.id;
         let isLiked = data.liked;
         
-        // Actualizar caché de likes
         if (commentLikes.has(commentId)) {
             const likes = commentLikes.get(commentId);
             if (data.liked) {
@@ -721,7 +637,6 @@ export async function likeComment(storyId, commentId) {
             isLiked = data.liked;
         }
 
-        // 🔥 ACTUALIZAR SOLO EL UI DEL LIKE (sin re-render)
         const likesCount = data.likesCount || 0;
         updateCommentLikeUI(commentId, isLiked, likesCount);
 
@@ -786,10 +701,6 @@ window.handleReplySubmit = async function(storyId, parentCommentId) {
     }
 };
 
-// ============================================================
-// TOGGLE VISIBILIDAD DE RESPUESTAS (NIVEL 2)
-// ============================================================
-
 window.toggleRepliesVisibility = function(storyId, commentId) {
     const currentState = repliesVisibility.get(commentId) || false;
     const newState = !currentState;
@@ -810,9 +721,7 @@ window.toggleRepliesVisibility = function(storyId, commentId) {
     const replyCount = allReplies.length;
     
     if (newState) {
-        // Mostrar respuestas
         if (!repliesContainer) {
-            // Crear el contenedor de respuestas
             const tempDiv = document.createElement('div');
             tempDiv.innerHTML = `<div class="replies" id="replies-${commentId}" style="margin-left: 40px; margin-top: 8px; display: flex; flex-direction: column; gap: 8px; border-left: 2px solid rgba(192,132,252,0.08); padding-left: 12px;"></div>`;
             repliesContainer = tempDiv.firstElementChild;
@@ -827,13 +736,11 @@ window.toggleRepliesVisibility = function(storyId, commentId) {
                 }
             }
             
-            // Renderizar todas las respuestas
             const currentUser = getCurrentUser();
             allReplies.forEach(reply => {
                 appendReplyToDOM(storyId, commentId, reply, currentUser?.id, container);
             });
             
-            // Asegurar que el botón exista
             let showBtn = commentElement.querySelector('.show-replies-btn');
             if (!showBtn) {
                 const newShowBtn = document.createElement('div');
@@ -854,7 +761,6 @@ window.toggleRepliesVisibility = function(storyId, commentId) {
             showRepliesBtn.innerHTML = `<i class="fas fa-chevron-up"></i> Ocultar ${replyCount} respuestas`;
         }
     } else {
-        // Ocultar respuestas
         if (repliesContainer) {
             repliesContainer.style.display = 'none';
         }
@@ -865,7 +771,7 @@ window.toggleRepliesVisibility = function(storyId, commentId) {
 };
 
 // ============================================================
-// RENDER INICIAL DE COMENTARIOS (SOLO UNA VEZ)
+// 🔥 RENDER INICIAL DE COMENTARIOS CON FILTRADO
 // ============================================================
 
 export function renderComments(comments, storyId, currentUserId, container, highlightCommentId = null) {
@@ -882,9 +788,48 @@ export function renderComments(comments, storyId, currentUserId, container, high
         return;
     }
 
+    let commentsList = [...comments];
+    
+    // 🔥 SI HAY UN COMENTARIO DESTACADO, MOVERLO AL PRINCIPIO
+    let highlightedComment = null;
+    let highlightedIndex = -1;
+    
+    if (highlightCommentId) {
+        for (let i = 0; i < commentsList.length; i++) {
+            if (commentsList[i].id === highlightCommentId) {
+                highlightedComment = commentsList[i];
+                highlightedIndex = i;
+                break;
+            }
+        }
+        
+        // Si el comentario está en la lista, moverlo al principio
+        if (highlightedComment && highlightedIndex > 0) {
+            commentsList.splice(highlightedIndex, 1);
+            commentsList.unshift(highlightedComment);
+            
+            // Expandir respuestas del comentario padre si es una respuesta
+            let parentCommentId = null;
+            for (const comment of comments) {
+                const allReplies = getAllReplies(comment);
+                for (const reply of allReplies) {
+                    if (reply.id === highlightCommentId) {
+                        parentCommentId = comment.id;
+                        break;
+                    }
+                }
+                if (parentCommentId) break;
+            }
+            
+            if (parentCommentId) {
+                repliesVisibility.set(parentCommentId, true);
+            }
+        }
+    }
+
     let html = '';
     
-    comments.forEach(comment => {
+    commentsList.forEach(comment => {
         const cachedLikes = commentLikes.get(comment.id);
         const isLiked = cachedLikes ? cachedLikes.has(currentUserId) : (comment.likes?.includes(currentUserId) || false);
         const likesCount = cachedLikes ? cachedLikes.size : (comment.likes?.length || 0);
@@ -963,9 +908,8 @@ export async function initComments(storyId, containerId = 'commentsList', highli
     const comments = await loadComments(storyId, true);
     const currentUser = getCurrentUser();
     
-    // Si hay un comentario destacado, expandir sus respuestas
+    // 🔥 SI HAY UN COMENTARIO DESTACADO, EXPANDIR SUS RESPUESTAS
     if (highlightCommentId) {
-        // Buscar el comentario padre (Nivel 1)
         let parentCommentId = null;
         for (const comment of comments) {
             if (comment.id === highlightCommentId) {
@@ -989,7 +933,6 @@ export async function initComments(storyId, containerId = 'commentsList', highli
     
     renderComments(comments, storyId, currentUser?.id, container, highlightCommentId);
 
-    // Configurar el input de comentarios
     const input = document.getElementById('commentInput');
     const sendBtn = document.getElementById('sendCommentBtn');
 
@@ -1040,6 +983,7 @@ export async function initComments(storyId, containerId = 'commentsList', highli
         }
     }
     
+    // 🔥 SCROLL AL COMENTARIO DESTACADO
     if (highlightCommentId) {
         setTimeout(() => {
             let highlighted = container.querySelector(`.comment-item[data-comment-id="${highlightCommentId}"]`);
@@ -1058,10 +1002,6 @@ export async function initComments(storyId, containerId = 'commentsList', highli
         }, 600);
     }
 }
-
-// ============================================================
-// EXPORTAR FUNCIÓN PARA EXPANDIR RESPUESTAS DESDE NOTIFICACIONES
-// ============================================================
 
 export function expandRepliesForComment(commentId) {
     if (!commentId) return;
@@ -1094,7 +1034,6 @@ export function expandRepliesForComment(commentId) {
     
     if (found && foundStoryId && foundParentId) {
         repliesVisibility.set(foundParentId, true);
-        // Re-renderizar solo una vez
         const container = document.getElementById('commentsList');
         if (container) {
             const comments = commentsCache.get(foundStoryId) || [];

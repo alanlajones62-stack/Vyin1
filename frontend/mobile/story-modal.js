@@ -1,6 +1,7 @@
 // ============================================================
 // story-modal.js - Modal para ver historias con navegación 
 // (VERSIÓN COMPLETA - DELEGA COMENTARIOS A story-comments.js)
+// 🔥 CORREGIDO: Pasa highlightCommentId a initComments
 // ============================================================
 
 import {
@@ -847,7 +848,9 @@ async function loadStoryData(storyId, isNavigation = false) {
         updateModalUI(currentStoryData);
         updateProgress();
         
+        // 🔥 PASAR highlightCommentId A initComments
         const highlightCommentId = window._activityCommentId || null;
+        console.log('📌 Highlight comment ID:', highlightCommentId);
         await initComments(storyId, 'commentsList', highlightCommentId);
         
         await registerView(storyId);
