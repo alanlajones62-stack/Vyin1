@@ -1,6 +1,6 @@
 // ============================================================
 // story-modal.js - Modal para ver historias con navegación 
-// (VERSIÓN CORREGIDA - COMENTARIOS PERSISTENTES)
+// (VERSIÓN CORREGIDA - CON CACHÉ PERSISTENTE Y SIN DUPLICADOS)
 // ============================================================
 
 import {
@@ -9,7 +9,7 @@ import {
 } from './auth.js';
 
 import { formatNumber } from './utils.js';
-import { loadComments, initComments, getTotalCommentsCount } from './story-comments.js';
+import { loadComments, initComments, getTotalCommentsCount, addCommentToCache, getCachedComments } from './story-comments.js';
 
 const API_URL = window.location.origin;
 let currentStoryId = null;
@@ -97,19 +97,22 @@ export async function openStoryModal(storyId, storiesList = null, fromProfile = 
 }
 
 // ============================================================
-// CERRAR MODAL
+// CERRAR MODAL - CON LIMPIEZA COMPLETA
 // ============================================================
 
 export function closeStoryModal() {
     console.log('📱 [STORY-MODAL] Cerrando modal...');
     
+    // 🔥 LIMPIAR TODO
     isModalOpen = false;
     currentStoryId = null;
     currentStoryData = null;
     currentStoriesList = [];
     currentStoryIndex = 0;
     isNavigating = false;
+    isFirstLoad = true;
 
+    // Limpiar video
     const video = document.getElementById('storyVideo');
     if (video) {
         video.pause();
@@ -117,11 +120,36 @@ export function closeStoryModal() {
         video.load();
     }
 
+    // Limpiar subtítulos
     if (window._vttUrl) {
         URL.revokeObjectURL(window._vttUrl);
         window._vttUrl = null;
     }
 
+    // Limpiar contenedor de comentarios (para que no se vea información antigua)
+    const commentsList = document.getElementById('commentsList');
+    if (commentsList) {
+        commentsList.innerHTML = `
+            <div class="no-comments">
+                <i class="fas fa-spinner fa-pulse"></i>
+                <span>Cargando comentarios...</span>
+            </div>
+        `;
+    }
+
+    // Limpiar contador
+    const commentsCountEl = document.getElementById('commentsCount');
+    if (commentsCountEl) commentsCountEl.textContent = '0';
+    const modalCommentsEl = document.getElementById('modalComments');
+    if (modalCommentsEl) modalCommentsEl.textContent = '0';
+
+    // Limpiar likes y vistas
+    const likesEl = document.getElementById('modalLikes');
+    if (likesEl) likesEl.textContent = '0';
+    const viewsEl = document.getElementById('modalViews');
+    if (viewsEl) viewsEl.textContent = '0';
+
+    // Ocultar overlay
     const overlay = document.getElementById('storyModalOverlay');
     if (overlay) {
         overlay.classList.remove('active');
@@ -337,7 +365,7 @@ function setupModalEvents() {
         }
     });
 
-    // ✅ EVENTO PARA LIKES DE COMENTARIOS
+    // EVENTO PARA LIKES DE COMENTARIOS
     document.getElementById('commentsList')?.addEventListener('click', async (e) => {
         const likeBtn = e.target.closest('.btn-like-comment');
         if (likeBtn) {
@@ -351,8 +379,6 @@ function setupModalEvents() {
                 try {
                     const result = await window.handleCommentLike(currentStoryId, commentId);
                     if (result !== false) {
-                        // ✅ Actualizar contador de comentarios (no cambia)
-                        // ✅ Actualizar solo el like en la UI
                         await updateSingleCommentLike(currentStoryId, commentId);
                     }
                 } catch (error) {
@@ -367,7 +393,7 @@ function setupModalEvents() {
         }
     });
 
-    // ✅ EVENTO PARA RESPONDER
+    // EVENTO PARA RESPONDER
     document.getElementById('commentsList')?.addEventListener('click', (e) => {
         const replyBtn = e.target.closest('.btn-reply-comment');
         if (replyBtn) {
@@ -407,7 +433,7 @@ function setupModalEvents() {
 }
 
 // ============================================================
-// 🔥 ACTUALIZAR LIKE DE UN SOLO COMENTARIO
+// ACTUALIZAR LIKE DE UN SOLO COMENTARIO
 // ============================================================
 
 async function updateSingleCommentLike(storyId, commentId) {
@@ -443,7 +469,7 @@ async function updateSingleCommentLike(storyId, commentId) {
 }
 
 // ============================================================
-// 🔥 ENVIAR COMENTARIO
+// 🔥 ENVIAR COMENTARIO - VERSIÓN CORREGIDA (SIN DUPLICADOS)
 // ============================================================
 
 async function handleSendComment() {
@@ -474,7 +500,50 @@ async function handleSendComment() {
         sendBtn.textContent = 'Enviando...';
     }
 
+    // 🔥 CREAR COMENTARIO LOCAL PARA RESPUESTA RÁPIDA
+    const currentUser = getCurrentUser();
+    const userAvatar = currentUser?.avatar || getAvatar(currentUser?.fullName || 'U');
+    
+    const tempComment = {
+        id: `temp_${Date.now()}`,
+        userId: currentUser?.id || 'temp',
+        username: currentUser?.username || 'usuario',
+        fullName: currentUser?.fullName || 'Usuario',
+        avatar: userAvatar,
+        content: content.trim(),
+        createdAt: new Date().toISOString(),
+        replies: [],
+        likes: [],
+        _isTemp: true
+    };
+
+    // 🔥 1. AGREGAR LOCALMENTE (RESPUESTA INMEDIATA)
+    input.value = '';
+    addCommentToUI(tempComment);
+    
+    // 🔥 2. ACTUALIZAR CONTADOR LOCAL
+    const currentTotal = getTotalCommentsCount(currentStoryId);
+    updateCommentCount(currentTotal + 1);
+    
+    // 🔥 3. ACTUALIZAR currentStoryData LOCALMENTE
+    if (currentStoryData) {
+        if (!currentStoryData.comments) currentStoryData.comments = [];
+        currentStoryData.comments.unshift(tempComment);
+    }
+    
+    if (currentStoriesList && currentStoriesList.length > 0) {
+        const idx = currentStoriesList.findIndex(s => s.id === currentStoryId);
+        if (idx !== -1 && currentStoriesList[idx]) {
+            if (!currentStoriesList[idx].comments) currentStoriesList[idx].comments = [];
+            currentStoriesList[idx].comments.unshift(tempComment);
+        }
+    }
+
+    // 🔥 4. AGREGAR AL CACHÉ
+    addCommentToCache(currentStoryId, tempComment);
+
     try {
+        // 🔥 5. ENVIAR AL SERVIDOR
         const res = await fetch(`${API_URL}/api/stories/${currentStoryId}/comments`, {
             method: 'POST',
             headers: {
@@ -487,33 +556,17 @@ async function handleSendComment() {
         const data = await res.json();
 
         if (res.ok) {
-            input.value = '';
-            
-            // ✅ ACTUALIZAR CONTADOR DE COMENTARIOS
-            const totalComments = getTotalCommentsCount(currentStoryId);
-            updateCommentCount(totalComments);
-            
-            if (currentStoryData) {
-                if (!currentStoryData.comments) currentStoryData.comments = [];
-                currentStoryData.comments.unshift(data);
-            }
-            
-            if (currentStoriesList && currentStoriesList.length > 0) {
-                const idx = currentStoriesList.findIndex(s => s.id === currentStoryId);
-                if (idx !== -1 && currentStoriesList[idx]) {
-                    if (!currentStoriesList[idx].comments) currentStoriesList[idx].comments = [];
-                    currentStoriesList[idx].comments.unshift(data);
-                }
-            }
-
-            addCommentToUI(data);
-            
+            // 🔥 6. REEMPLAZAR COMENTARIO TEMPORAL CON EL REAL
+            await replaceTempCommentWithReal(currentStoryId, tempComment.id, data);
             showToast('💬 Comentario enviado');
         } else {
+            // 🔥 7. SI FALLA, REVERTIR
+            revertTempComment(currentStoryId, tempComment.id);
             showToast(data.error || 'Error al enviar comentario', true);
         }
     } catch (error) {
         console.error('Error enviando comentario:', error);
+        revertTempComment(currentStoryId, tempComment.id);
         showToast('Error al enviar comentario', true);
     } finally {
         input.disabled = false;
@@ -526,187 +579,171 @@ async function handleSendComment() {
 }
 
 // ============================================================
-// 🔥 ENVIAR RESPUESTA
+// REEMPLAZAR COMENTARIO TEMPORAL CON REAL
 // ============================================================
 
-async function handleSendReply(storyId, commentId) {
-    const wrapper = document.getElementById(`reply-input-${commentId}`);
-    if (!wrapper) return;
-
-    const input = wrapper.querySelector('.reply-input');
-    if (!input) return;
-
-    const content = input.value.trim();
-    if (!content) {
-        showToast('Escribe una respuesta', true);
-        return;
-    }
-
-    const token = getToken();
-    if (!token) {
-        showToast('Inicia sesión para responder', true);
-        return;
-    }
-
-    input.disabled = true;
-    const sendBtn = wrapper.querySelector('.reply-send-btn');
-    if (sendBtn) {
-        sendBtn.disabled = true;
-        sendBtn.textContent = 'Enviando...';
-    }
-
-    try {
-        const res = await fetch(`${API_URL}/api/stories/${storyId}/comments/${commentId}/replies`, {
-            method: 'POST',
-            headers: {
-                'Authorization': `Bearer ${token}`,
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({ content })
-        });
-
-        const data = await res.json();
-
-        if (res.ok) {
-            input.value = '';
-            wrapper.style.display = 'none';
-
-            // ✅ ACTUALIZAR CONTADOR DE COMENTARIOS (TOTAL CON RESPUESTAS ANIDADAS)
-            const totalComments = getTotalCommentsCount(storyId);
-            updateCommentCount(totalComments);
-
-            addReplyToUI(commentId, data);
-            
-            showToast('💬 Respuesta enviada');
-        } else {
-            showToast(data.error || 'Error al enviar respuesta', true);
+async function replaceTempCommentWithReal(storyId, tempId, realComment) {
+    // 🔥 1. Buscar y reemplazar en la UI
+    const commentsList = document.getElementById('commentsList');
+    if (commentsList) {
+        const tempElement = commentsList.querySelector(`[data-temp-id="${tempId}"]`);
+        if (tempElement) {
+            const realElement = createCommentElement(realComment);
+            tempElement.replaceWith(realElement);
         }
-    } catch (error) {
-        console.error('Error enviando respuesta:', error);
-        showToast('Error al enviar respuesta', true);
-    } finally {
-        input.disabled = false;
-        if (sendBtn) {
-            sendBtn.disabled = false;
-            sendBtn.textContent = 'Enviar';
-        }
-        input.focus();
     }
+
+    // 🔥 2. Actualizar caché de comentarios
+    const cached = getCachedComments(storyId);
+    if (cached) {
+        const idx = cached.findIndex(c => c.id === tempId);
+        if (idx !== -1) {
+            cached[idx] = realComment;
+        }
+    }
+
+    // 🔥 3. Actualizar currentStoryData
+    if (currentStoryData && currentStoryData.comments) {
+        const idx = currentStoryData.comments.findIndex(c => c.id === tempId);
+        if (idx !== -1) {
+            currentStoryData.comments[idx] = realComment;
+        }
+    }
+
+    // 🔥 4. Actualizar currentStoriesList
+    if (currentStoriesList && currentStoriesList.length > 0) {
+        const storyIdx = currentStoriesList.findIndex(s => s.id === storyId);
+        if (storyIdx !== -1 && currentStoriesList[storyIdx].comments) {
+            const idx = currentStoriesList[storyIdx].comments.findIndex(c => c.id === tempId);
+            if (idx !== -1) {
+                currentStoriesList[storyIdx].comments[idx] = realComment;
+            }
+        }
+    }
+
+    console.log('✅ Comentario reemplazado:', tempId, '→', realComment.id);
 }
 
 // ============================================================
-// 🔥 AÑADIR RESPUESTA A LA UI
+// REVERTIR COMENTARIO TEMPORAL
 // ============================================================
 
-function addReplyToUI(parentCommentId, reply) {
-    const repliesContainer = document.getElementById(`replies-${parentCommentId}`);
-    if (!repliesContainer) return;
-
-    const existingReply = repliesContainer.querySelector(`[data-comment-id="${reply.id}"]`);
-    if (existingReply) {
-        console.log('⚠️ Respuesta ya existe en la UI, omitiendo duplicado');
-        return;
+function revertTempComment(storyId, tempId) {
+    // 🔥 1. Eliminar de la UI
+    const commentsList = document.getElementById('commentsList');
+    if (commentsList) {
+        const tempElement = commentsList.querySelector(`[data-temp-id="${tempId}"]`);
+        if (tempElement) {
+            tempElement.remove();
+        }
     }
 
+    // 🔥 2. Eliminar del caché
+    const cached = getCachedComments(storyId);
+    if (cached) {
+        const idx = cached.findIndex(c => c.id === tempId);
+        if (idx !== -1) {
+            cached.splice(idx, 1);
+        }
+    }
+
+    // 🔥 3. Eliminar de currentStoryData
+    if (currentStoryData && currentStoryData.comments) {
+        currentStoryData.comments = currentStoryData.comments.filter(c => c.id !== tempId);
+    }
+
+    // 🔥 4. Eliminar de currentStoriesList
+    if (currentStoriesList && currentStoriesList.length > 0) {
+        const storyIdx = currentStoriesList.findIndex(s => s.id === storyId);
+        if (storyIdx !== -1 && currentStoriesList[storyIdx].comments) {
+            currentStoriesList[storyIdx].comments = currentStoriesList[storyIdx].comments.filter(c => c.id !== tempId);
+        }
+    }
+
+    // 🔥 5. Actualizar contador
+    const total = getTotalCommentsCount(storyId);
+    updateCommentCount(total);
+
+    console.log('🗑️ Comentario temporal revertido:', tempId);
+}
+
+// ============================================================
+// CREAR ELEMENTO DE COMENTARIO PARA LA UI
+// ============================================================
+
+function createCommentElement(comment) {
+    const isTemp = comment._isTemp || false;
+    const div = document.createElement('div');
+    div.className = 'comment-item';
+    div.setAttribute('data-comment-id', comment.id);
+    if (isTemp) {
+        div.setAttribute('data-temp-id', comment.id);
+        div.style.opacity = '0.6';
+        div.style.borderLeft = '2px solid rgba(192,132,252,0.3)';
+    }
+    
     const currentUser = getCurrentUser();
     const userAvatar = currentUser?.avatar || getAvatar(currentUser?.fullName || 'U');
 
-    const replyHtml = `
-        <div class="comment-item" data-comment-id="${reply.id}">
-            <img class="avatar" src="${reply.avatar || userAvatar}" alt="${reply.fullName}" />
-            <div class="comment-body">
-                <div class="comment-user">
-                    ${escapeHtml(reply.fullName)}
-                    <span class="handle">@${reply.username || 'usuario'}</span>
-                    <span class="time">${formatDate(reply.createdAt)}</span>
-                </div>
-                <div class="comment-text">${escapeHtml(reply.content)}</div>
-                <div class="comment-meta">
-                    <button class="btn-like-comment" data-comment-id="${reply.id}">
-                        <i class="fas fa-heart"></i> <span class="like-count">0</span>
-                    </button>
-                    <button class="btn-reply-comment" data-comment-id="${reply.id}">
-                        <i class="fas fa-reply"></i> Responder
-                    </button>
-                </div>
-                <div class="replies" id="replies-${reply.id}"></div>
-                <div class="reply-input-container" id="reply-input-${reply.id}" style="display:none;">
-                    <input type="text" class="reply-input" placeholder="Escribe una respuesta..." maxlength="500" />
-                    <button class="reply-send-btn" data-comment-id="${reply.id}">Enviar</button>
-                </div>
+    div.innerHTML = `
+        <img class="avatar" src="${comment.avatar || userAvatar}" alt="${comment.fullName}" />
+        <div class="comment-body">
+            <div class="comment-user">
+                ${escapeHtml(comment.fullName)}
+                <span class="handle">@${comment.username || 'usuario'}</span>
+                <span class="time">${formatDate(comment.createdAt)}</span>
+                ${isTemp ? '<span style="font-size:10px;color:rgba(192,132,252,0.5);margin-left:8px;">⏳ Enviando...</span>' : ''}
+            </div>
+            <div class="comment-text">${escapeHtml(comment.content)}</div>
+            <div class="comment-meta">
+                <button class="btn-like-comment" data-comment-id="${comment.id}">
+                    <i class="fas fa-heart"></i> <span class="like-count">0</span>
+                </button>
+                <button class="btn-reply-comment" data-comment-id="${comment.id}">
+                    <i class="fas fa-reply"></i> Responder
+                </button>
+            </div>
+            <div class="replies" id="replies-${comment.id}"></div>
+            <div class="reply-input-container" id="reply-input-${comment.id}" style="display:none;">
+                <input type="text" class="reply-input" placeholder="Escribe una respuesta..." maxlength="500" />
+                <button class="reply-send-btn" data-comment-id="${comment.id}">Enviar</button>
             </div>
         </div>
     `;
-
-    const tempDiv = document.createElement('div');
-    tempDiv.innerHTML = replyHtml;
-    const replyElement = tempDiv.firstElementChild;
     
-    repliesContainer.appendChild(replyElement);
-    
-    console.log('✅ Respuesta añadida a la UI');
+    return div;
 }
 
 // ============================================================
-// 🔥 AÑADIR COMENTARIO A LA UI
+// AÑADIR COMENTARIO A LA UI
 // ============================================================
 
 function addCommentToUI(comment) {
     const commentsList = document.getElementById('commentsList');
     if (!commentsList) return;
 
+    // Verificar si ya existe
     const existingComment = commentsList.querySelector(`[data-comment-id="${comment.id}"]`);
     if (existingComment) {
         console.log('⚠️ Comentario ya existe en la UI, omitiendo duplicado');
         return;
     }
 
+    // Eliminar mensaje "No hay comentarios"
     const noComments = commentsList.querySelector('.no-comments');
     if (noComments) {
         noComments.remove();
     }
 
-    const currentUser = getCurrentUser();
-    const userAvatar = currentUser?.avatar || getAvatar(currentUser?.fullName || 'U');
-
-    const commentHtml = `
-        <div class="comment-item" data-comment-id="${comment.id}">
-            <img class="avatar" src="${comment.avatar || userAvatar}" alt="${comment.fullName}" />
-            <div class="comment-body">
-                <div class="comment-user">
-                    ${escapeHtml(comment.fullName)}
-                    <span class="handle">@${comment.username || 'usuario'}</span>
-                    <span class="time">${formatDate(comment.createdAt)}</span>
-                </div>
-                <div class="comment-text">${escapeHtml(comment.content)}</div>
-                <div class="comment-meta">
-                    <button class="btn-like-comment" data-comment-id="${comment.id}">
-                        <i class="fas fa-heart"></i> <span class="like-count">0</span>
-                    </button>
-                    <button class="btn-reply-comment" data-comment-id="${comment.id}">
-                        <i class="fas fa-reply"></i> Responder
-                    </button>
-                </div>
-                <div class="replies" id="replies-${comment.id}"></div>
-                <div class="reply-input-container" id="reply-input-${comment.id}" style="display:none;">
-                    <input type="text" class="reply-input" placeholder="Escribe una respuesta..." maxlength="500" />
-                    <button class="reply-send-btn" data-comment-id="${comment.id}">Enviar</button>
-                </div>
-            </div>
-        </div>
-    `;
-
-    const tempDiv = document.createElement('div');
-    tempDiv.innerHTML = commentHtml;
-    const commentElement = tempDiv.firstElementChild;
-    
+    // Crear y agregar el elemento
+    const commentElement = createCommentElement(comment);
     commentsList.insertBefore(commentElement, commentsList.firstChild);
     
     console.log('✅ Comentario añadido a la UI');
 }
 
 // ============================================================
-// 🔥 ACTUALIZAR CONTADOR DE COMENTARIOS
+// ACTUALIZAR CONTADOR DE COMENTARIOS
 // ============================================================
 
 function updateCommentCount(total) {
@@ -1017,7 +1054,7 @@ function updateTextContentOnly(updatedData) {
 }
 
 // ============================================================
-// CARGAR DATOS DE LA HISTORIA
+// CARGAR DATOS DE LA HISTORIA - CON CACHÉ PERSISTENTE
 // ============================================================
 
 async function loadStoryData(storyId, isNavigation = false) {
@@ -1039,10 +1076,10 @@ async function loadStoryData(storyId, isNavigation = false) {
                 updateModalUI(currentStoryData);
                 updateProgress();
                 const highlightCommentId = window._activityCommentId || null;
-                const forceReload = isFirstLoad || isNavigation;
+                // 🔥 Usar caché si existe, no forzar recarga
+                const forceReload = false;
                 await initComments(storyId, 'commentsList', highlightCommentId, forceReload);
                 isFirstLoad = false;
-                // ✅ ACTUALIZAR CONTADOR DESPUÉS DE CARGAR COMENTARIOS
                 const totalComments = getTotalCommentsCount(storyId);
                 updateCommentCount(totalComments);
                 return;
@@ -1054,7 +1091,7 @@ async function loadStoryData(storyId, isNavigation = false) {
                     updateModalUI(currentStoryData);
                     updateProgress();
                     const highlightCommentId = window._activityCommentId || null;
-                    const forceReload = isFirstLoad || isNavigation;
+                    const forceReload = false;
                     await initComments(storyId, 'commentsList', highlightCommentId, forceReload);
                     isFirstLoad = false;
                     const totalComments = getTotalCommentsCount(storyId);
@@ -1109,11 +1146,11 @@ async function loadStoryData(storyId, isNavigation = false) {
         
         const highlightCommentId = window._activityCommentId || null;
         
-        const forceReload = isFirstLoad || isNavigation;
+        // 🔥 NO forzar recarga si ya tenemos caché
+        const forceReload = isFirstLoad && !getCachedComments(storyId);
         await initComments(storyId, 'commentsList', highlightCommentId, forceReload);
         isFirstLoad = false;
         
-        // ✅ ACTUALIZAR CONTADOR DE COMENTARIOS (TOTAL CON RESPUESTAS ANIDADAS)
         const totalComments = getTotalCommentsCount(storyId);
         updateCommentCount(totalComments);
         
