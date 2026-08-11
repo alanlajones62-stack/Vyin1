@@ -365,7 +365,7 @@ function setupModalEvents() {
         }
     });
 
-    // EVENTO PARA LIKES DE COMENTARIOS
+    // 🔥 EVENTO PARA LIKES DE COMENTARIOS - VERSIÓN OPTIMISTA (SIN RECARGAR)
     document.getElementById('commentsList')?.addEventListener('click', async (e) => {
         const likeBtn = e.target.closest('.btn-like-comment');
         if (likeBtn) {
@@ -373,22 +373,8 @@ function setupModalEvents() {
             e.stopPropagation();
             const commentId = likeBtn.dataset.commentId;
             if (commentId && currentStoryId) {
-                likeBtn.style.pointerEvents = 'none';
-                likeBtn.style.opacity = '0.6';
-                
-                try {
-                    const result = await window.handleCommentLike(currentStoryId, commentId);
-                    if (result !== false) {
-                        await updateSingleCommentLike(currentStoryId, commentId);
-                    }
-                } catch (error) {
-                    console.error('Error en like:', error);
-                } finally {
-                    setTimeout(() => {
-                        likeBtn.style.pointerEvents = '';
-                        likeBtn.style.opacity = '';
-                    }, 500);
-                }
+                // 🔥 Usar la función optimista que no recarga todo
+                await window.handleCommentLike(currentStoryId, commentId);
             }
         }
     });
@@ -430,42 +416,6 @@ function setupModalEvents() {
             }
         }
     });
-}
-
-// ============================================================
-// ACTUALIZAR LIKE DE UN SOLO COMENTARIO
-// ============================================================
-
-async function updateSingleCommentLike(storyId, commentId) {
-    try {
-        const token = getToken();
-        if (!token) return;
-        
-        const res = await fetch(`${API_URL}/api/stories/${storyId}/comments/${commentId}`, {
-            headers: { 'Authorization': `Bearer ${token}` }
-        });
-        
-        if (res.ok) {
-            const comment = await res.json();
-            const commentElement = document.querySelector(`.comment-item[data-comment-id="${commentId}"], .comment-item[data-reply-id="${commentId}"]`);
-            if (commentElement) {
-                const likeBtn = commentElement.querySelector('.btn-like-comment');
-                if (likeBtn) {
-                    const currentUser = getCurrentUser();
-                    const isLiked = comment.likes?.includes(currentUser?.id) || false;
-                    const likeCount = comment.likes?.length || 0;
-                    
-                    likeBtn.classList.toggle('liked', isLiked);
-                    const span = likeBtn.querySelector('span');
-                    if (span) {
-                        span.textContent = formatNumber(likeCount);
-                    }
-                }
-            }
-        }
-    } catch (error) {
-        console.error('Error actualizando like:', error);
-    }
 }
 
 // ============================================================

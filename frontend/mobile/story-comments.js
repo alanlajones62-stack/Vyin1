@@ -1,7 +1,7 @@
 // ============================================================
 // story-comments.js - Sistema de comentarios para historias
-// CON RESPUESTAS SIEMPRE VISIBLES Y CACHÉ PERSISTENTE
-// VERSIÓN CORREGIDA - SIN DUPLICADOS
+// CON RESPUESTAS SIEMPRE VISIBLES, CACHÉ PERSISTENTE Y LIKES OPTIMISTAS
+// VERSIÓN COMPLETA CORREGIDA
 // ============================================================
 
 import { getToken, getCurrentUser, showToast, getAvatar, formatDate, escapeHtml } from './auth.js';
@@ -13,12 +13,10 @@ const API_URL = window.location.origin;
 // ESTADO DE COMENTARIOS
 // ============================================================
 
-let commentsCache = new Map(); // storyId -> comments array
+let commentsCache = new Map(); // storyId -> { comments, timestamp }
 let commentLikes = new Map(); // commentId -> Set de userIds
-const CACHE_TTL = 5 * 60 * 1000; // 5 minutos de expiración
-
-// 🔥 NUEVO: Estado de visibilidad de respuestas - SIEMPRE VISIBLES POR DEFECTO
 let repliesVisibility = new Map(); // commentId -> boolean (true = visible)
+const CACHE_TTL = 5 * 60 * 1000; // 5 minutos de expiración
 
 // ============================================================
 // FUNCIÓN PARA BUSCAR COMENTARIO POR ID (RECURSIVA)
@@ -179,7 +177,6 @@ export async function loadComments(storyId, forceReload = false) {
         comments.forEach(comment => {
             if (comment.replies && comment.replies.length > 0) {
                 sortReplies(comment.replies);
-                // 🔥 TODAS LAS RESPUESTAS VISIBLES POR DEFECTO
                 repliesVisibility.set(comment.id, true);
             }
         });
@@ -254,7 +251,6 @@ export async function addComment(storyId, content, parentCommentId = null) {
 
         const newComment = await res.json();
         
-        // 🔥 ACTUALIZAR CACHÉ
         const cached = getCachedComments(storyId);
         if (cached) {
             if (parentCommentId) {
@@ -335,8 +331,6 @@ export async function deleteComment(storyId, commentId, parentCommentId = null) 
             }
         }
 
-        updateCommentsUI(storyId);
-
         showToast('🗑️ Eliminado');
         return true;
 
@@ -348,7 +342,7 @@ export async function deleteComment(storyId, commentId, parentCommentId = null) 
 }
 
 // ============================================================
-// DAR LIKE A COMENTARIO
+// 🔥 DAR LIKE A COMENTARIO - VERSIÓN OPTIMISTA MEJORADA
 // ============================================================
 
 export async function likeComment(storyId, commentId) {
@@ -358,7 +352,69 @@ export async function likeComment(storyId, commentId) {
         return false;
     }
 
+    const currentUserId = getCurrentUser()?.id;
+    if (!currentUserId) {
+        showToast('Inicia sesión para dar like', true);
+        return false;
+    }
+
+    // 🔥 1. GUARDAR ESTADO ANTERIOR PARA POSIBLE REVERSIÓN
+    let previousState = {
+        isLiked: false,
+        likesCount: 0,
+        likesSet: null
+    };
+
+    if (commentLikes.has(commentId)) {
+        const likesSet = commentLikes.get(commentId);
+        previousState.isLiked = likesSet.has(currentUserId);
+        previousState.likesCount = likesSet.size;
+        previousState.likesSet = new Set(likesSet);
+    }
+
+    // 🔥 2. CALCULAR NUEVO ESTADO
+    const newLikedState = !previousState.isLiked;
+    const newLikesCount = newLikedState ? previousState.likesCount + 1 : Math.max(0, previousState.likesCount - 1);
+
+    // 🔥 3. ACTUALIZAR LOCALMENTE (OPTIMISTA)
+    if (commentLikes.has(commentId)) {
+        const likesSet = commentLikes.get(commentId);
+        if (newLikedState) {
+            likesSet.add(currentUserId);
+        } else {
+            likesSet.delete(currentUserId);
+        }
+    } else {
+        const newSet = new Set();
+        if (newLikedState) newSet.add(currentUserId);
+        commentLikes.set(commentId, newSet);
+    }
+
+    // 🔥 4. ACTUALIZAR UI INMEDIATAMENTE (SIN RECARGAR TODO)
+    updateCommentLikeUI(commentId, newLikedState, newLikesCount);
+
+    // 🔥 5. ACTUALIZAR CACHÉ LOCAL
+    const cached = getCachedComments(storyId);
+    if (cached) {
+        const comment = findCommentById(cached, commentId);
+        if (comment) {
+            if (!comment.likes) comment.likes = [];
+            if (newLikedState) {
+                if (!comment.likes.includes(currentUserId)) {
+                    comment.likes.push(currentUserId);
+                }
+            } else {
+                comment.likes = comment.likes.filter(id => id !== currentUserId);
+            }
+            commentsCache.set(storyId, {
+                comments: cached,
+                timestamp: Date.now()
+            });
+        }
+    }
+
     try {
+        // 🔥 6. ENVIAR AL SERVIDOR
         const res = await fetch(`${API_URL}/api/stories/${storyId}/comments/${commentId}/like`, {
             method: 'POST',
             headers: {
@@ -367,50 +423,115 @@ export async function likeComment(storyId, commentId) {
             }
         });
 
-        if (!res.ok) throw new Error('Error al dar like');
-
         const data = await res.json();
-        
-        const currentUserId = getCurrentUser()?.id;
-        if (commentLikes.has(commentId)) {
-            const likes = commentLikes.get(commentId);
-            if (data.liked) {
-                likes.add(currentUserId);
-            } else {
-                likes.delete(currentUserId);
+
+        if (res.ok) {
+            // 🔥 7. SINCronizar CON EL SERVIDOR
+            const serverLiked = data.liked || false;
+            const serverLikesCount = data.likesCount || 0;
+            const serverLikes = data.likes || [];
+            
+            // Actualizar el Set con los datos del servidor
+            const serverLikesSet = new Set(serverLikes);
+            commentLikes.set(commentId, serverLikesSet);
+            
+            // Actualizar UI con el valor CORRECTO del servidor
+            updateCommentLikeUI(commentId, serverLiked, serverLikesCount);
+            
+            // Actualizar caché con datos del servidor
+            const cached2 = getCachedComments(storyId);
+            if (cached2) {
+                const comment2 = findCommentById(cached2, commentId);
+                if (comment2) {
+                    comment2.likes = serverLikes;
+                    commentsCache.set(storyId, {
+                        comments: cached2,
+                        timestamp: Date.now()
+                    });
+                }
             }
+
+            showToast(serverLiked ? '❤️ Like' : '💔 Like quitado');
+            return serverLiked;
         } else {
-            const newSet = new Set();
-            if (data.liked) newSet.add(currentUserId);
-            commentLikes.set(commentId, newSet);
+            // 🔥 8. SI FALLA, REVERTIR AL ESTADO ANTERIOR
+            console.warn('⚠️ Error en like del servidor, revirtiendo...');
+            
+            // Revertir el Set
+            if (previousState.likesSet) {
+                commentLikes.set(commentId, previousState.likesSet);
+            } else {
+                commentLikes.delete(commentId);
+            }
+            
+            // Revertir UI
+            updateCommentLikeUI(commentId, previousState.isLiked, previousState.likesCount);
+            
+            // Revertir caché
+            const cached3 = getCachedComments(storyId);
+            if (cached3) {
+                const comment3 = findCommentById(cached3, commentId);
+                if (comment3) {
+                    if (previousState.isLiked) {
+                        if (!comment3.likes.includes(currentUserId)) {
+                            comment3.likes.push(currentUserId);
+                        }
+                    } else {
+                        comment3.likes = comment3.likes.filter(id => id !== currentUserId);
+                    }
+                    commentsCache.set(storyId, {
+                        comments: cached3,
+                        timestamp: Date.now()
+                    });
+                }
+            }
+            
+            showToast(data.error || 'Error al dar like', true);
+            return false;
         }
-
-        updateCommentsUI(storyId);
-
-        showToast(data.liked ? '❤️ Like al comentario' : '💔 Like eliminado');
-        return data.liked;
-
     } catch (error) {
-        console.error('Error liking comment:', error);
+        console.error('❌ Error en like:', error);
+        
+        // 🔥 9. REVERTIR EN CASO DE ERROR DE RED
+        if (previousState.likesSet) {
+            commentLikes.set(commentId, previousState.likesSet);
+        } else {
+            commentLikes.delete(commentId);
+        }
+        
+        updateCommentLikeUI(commentId, previousState.isLiked, previousState.likesCount);
         showToast('Error al dar like', true);
         return false;
     }
 }
 
 // ============================================================
-// ACTUALIZAR UI DE COMENTARIOS LOCALMENTE
+// 🔥 ACTUALIZAR UI DE UN SOLO LIKE (SIN RECARGAR TODO)
 // ============================================================
 
-function updateCommentsUI(storyId) {
-    const container = document.getElementById('commentsList');
-    if (!container) return;
+function updateCommentLikeUI(commentId, isLiked, likesCount) {
+    // Buscar en todos los elementos (comentarios principales y respuestas)
+    const elements = document.querySelectorAll(`.comment-item[data-comment-id="${commentId}"], .comment-item[data-reply-id="${commentId}"]`);
     
-    const currentUser = getCurrentUser();
-    const comments = getCachedComments(storyId);
-    
-    if (comments) {
-        renderComments(comments, storyId, currentUser?.id, container);
-    }
+    elements.forEach(element => {
+        const likeBtn = element.querySelector('.btn-like-comment');
+        if (likeBtn) {
+            // Actualizar clase
+            likeBtn.classList.toggle('liked', isLiked);
+            
+            // Actualizar icono
+            const icon = likeBtn.querySelector('i');
+            if (icon) {
+                icon.style.color = isLiked ? '#ff6b6b' : '';
+            }
+            
+            // Actualizar contador
+            const span = likeBtn.querySelector('span');
+            if (span) {
+                span.textContent = formatNumber(likesCount);
+            }
+        }
+    });
 }
 
 // ============================================================
@@ -517,7 +638,6 @@ export function renderComments(comments, storyId, currentUserId, container, high
         const isOwn = comment.userId === currentUserId;
         const hasReplies = comment.replies && comment.replies.length > 0;
         const replyCount = comment.replies?.length || 0;
-        // 🔥 SIEMPRE VISIBLE POR DEFECTO
         const isExpanded = repliesVisibility.get(comment.id) !== false;
         
         const isHighlighted = highlightCommentId && comment.id === highlightCommentId;
@@ -536,9 +656,8 @@ export function renderComments(comments, storyId, currentUserId, container, high
                     <div class="comment-text" style="font-size:16px; line-height:1.5; color:rgba(255,255,255,0.85);">${escapeHtml(comment.content)}</div>
                     <div class="comment-meta">
                         <button class="btn-like-comment ${isLiked ? 'liked' : ''}" 
-                                data-comment-id="${comment.id}"
-                                onclick="window.handleCommentLike('${storyId}', '${comment.id}')">
-                            <i class="fas fa-heart"></i> <span>${formatNumber(likesCount)}</span>
+                                data-comment-id="${comment.id}">
+                            <i class="fas fa-heart" style="color:${isLiked ? '#ff6b6b' : 'inherit'};"></i> <span>${formatNumber(likesCount)}</span>
                         </button>
                         <button class="btn-reply-comment" onclick="window.toggleReplyInput('${storyId}', '${comment.id}')">
                             <i class="fas fa-reply"></i> Responder
@@ -585,7 +704,6 @@ function renderFlatReplies(replies, storyId, currentUserId, parentCommentId, all
     
     if (flatReplies.length === 0) return '';
 
-    // 🔥 SIEMPRE VISIBLE POR DEFECTO
     if (!isExpanded) return '';
 
     let html = `<div class="replies" id="replies-${parentCommentId}" style="margin-left: 40px; margin-top: 8px; display: flex; flex-direction: column; gap: 8px; border-left: 2px solid rgba(192,132,252,0.08); padding-left: 12px;">`;
@@ -627,7 +745,6 @@ function renderFlatReplies(replies, storyId, currentUserId, parentCommentId, all
                     <div class="comment-meta" style="display:flex;align-items:center;gap:12px;margin-top:4px;flex-wrap:wrap;">
                         <button class="btn-like-comment ${isLiked ? 'liked' : ''}" 
                                 data-comment-id="${reply.id}"
-                                onclick="window.handleCommentLike('${storyId}', '${reply.id}')"
                                 style="background:transparent;border:none;color:rgba(255,255,255,0.3);font-size:11px;cursor:pointer;display:flex;align-items:center;gap:4px;padding:2px 6px;border-radius:4px;transition:all 0.2s;">
                             <i class="fas fa-heart" style="font-size:10px;color:${isLiked ? '#ff6b6b' : 'inherit'};"></i> <span>${formatNumber(likesCount)}</span>
                         </button>
@@ -665,19 +782,52 @@ function renderFlatReplies(replies, storyId, currentUserId, parentCommentId, all
 // FUNCIONES GLOBALES PARA EL MODAL
 // ============================================================
 
+// 🔥 NUEVA FUNCIÓN PARA LIKE - OPTIMISTA Y SIN RECARGAR TODO
 window.handleCommentLike = async function(storyId, commentId) {
-    const liked = await likeComment(storyId, commentId);
-    if (liked !== false) {
-        updateCommentsUI(storyId);
+    // Prevenir múltiples clicks rápidos
+    const allButtons = document.querySelectorAll(`.btn-like-comment[data-comment-id="${commentId}"]`);
+    let targetBtn = null;
+    
+    for (const btn of allButtons) {
+        if (btn.dataset.commentId === commentId) {
+            targetBtn = btn;
+            break;
+        }
     }
-    return liked;
+    
+    if (targetBtn) {
+        if (targetBtn.classList.contains('processing')) return;
+        targetBtn.classList.add('processing');
+    }
+    
+    try {
+        const result = await likeComment(storyId, commentId);
+        return result;
+    } catch (error) {
+        console.error('Error en like:', error);
+        return false;
+    } finally {
+        if (targetBtn) {
+            setTimeout(() => {
+                targetBtn.classList.remove('processing');
+            }, 300);
+        }
+    }
 };
 
 window.handleCommentDelete = async function(storyId, commentId, parentCommentId = null) {
     if (!confirm('¿Eliminar este comentario?')) return;
     const success = await deleteComment(storyId, commentId, parentCommentId);
     if (success) {
-        updateCommentsUI(storyId);
+        // Solo recargar si es necesario
+        const container = document.getElementById('commentsList');
+        if (container) {
+            const currentUser = getCurrentUser();
+            const comments = getCachedComments(storyId);
+            if (comments) {
+                renderComments(comments, storyId, currentUser?.id, container);
+            }
+        }
     }
 };
 
@@ -719,7 +869,16 @@ window.handleReplySubmit = async function(storyId, parentCommentId) {
         input.value = '';
         const container = document.getElementById(`reply-input-${parentCommentId}`);
         if (container) container.style.display = 'none';
-        updateCommentsUI(storyId);
+        
+        // Actualizar solo si es necesario
+        const commentsContainer = document.getElementById('commentsList');
+        if (commentsContainer) {
+            const currentUser = getCurrentUser();
+            const comments = getCachedComments(storyId);
+            if (comments) {
+                renderComments(comments, storyId, currentUser?.id, commentsContainer);
+            }
+        }
     }
 };
 
@@ -736,13 +895,17 @@ window.toggleRepliesVisibility = function(commentId) {
     if (container) {
         const storyId = container.dataset.storyId || window._currentStoryId;
         if (storyId) {
-            updateCommentsUI(storyId);
+            const currentUser = getCurrentUser();
+            const comments = getCachedComments(storyId);
+            if (comments) {
+                renderComments(comments, storyId, currentUser?.id, container);
+            }
         }
     }
 };
 
 // ============================================================
-// INICIALIZAR COMENTARIOS EN MODAL - CORREGIDO
+// INICIALIZAR COMENTARIOS EN MODAL
 // ============================================================
 
 export async function initComments(storyId, containerId = 'commentsList', highlightCommentId = null, forceReload = false) {
@@ -754,7 +917,6 @@ export async function initComments(storyId, containerId = 'commentsList', highli
     container.dataset.storyId = storyId;
     window._currentStoryId = storyId;
 
-    // 🔥 SIEMPRE VERIFICAR CACHÉ ANTES DE RECARGAR
     if (!forceReload && commentsCache.has(storyId)) {
         const cached = commentsCache.get(storyId);
         if (cached && cached.timestamp && (Date.now() - cached.timestamp < CACHE_TTL)) {
@@ -865,7 +1027,17 @@ export function expandRepliesForComment(commentId) {
     }
     
     if (found) {
-        updateCommentsUI(window._currentStoryId);
+        const container = document.getElementById('commentsList');
+        if (container) {
+            const storyId = container.dataset.storyId || window._currentStoryId;
+            if (storyId) {
+                const currentUser = getCurrentUser();
+                const comments = getCachedComments(storyId);
+                if (comments) {
+                    renderComments(comments, storyId, currentUser?.id, container);
+                }
+            }
+        }
     }
 }
 
