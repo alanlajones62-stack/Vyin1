@@ -1,6 +1,7 @@
 // ============================================================
 // story-comments.js - Sistema de comentarios para historias
 // CON FILTRADO DE COMENTARIO DESTACADO AL PRINCIPIO
+// 🔥 CORREGIDO: Reconfigura el input principal en móviles
 // ============================================================
 
 import { getToken, getCurrentUser, showToast, getAvatar, formatDate, escapeHtml } from './auth.js';
@@ -893,6 +894,77 @@ export function renderComments(comments, storyId, currentUserId, container, high
 }
 
 // ============================================================
+// 🔥🔥🔥 CONFIGURAR INPUT PRINCIPAL DE COMENTARIOS
+// ============================================================
+
+function setupMainCommentInput(storyId) {
+    const input = document.getElementById('commentInput');
+    const sendBtn = document.getElementById('sendCommentBtn');
+    
+    if (!input || !sendBtn) {
+        console.warn('⚠️ Input principal no encontrado en el DOM');
+        return;
+    }
+    
+    console.log('📝 Configurando input principal de comentarios');
+    
+    // Eliminar eventos anteriores clonando
+    const newInput = input.cloneNode(true);
+    const newSendBtn = sendBtn.cloneNode(true);
+    input.parentNode.replaceChild(newInput, input);
+    sendBtn.parentNode.replaceChild(newSendBtn, sendBtn);
+    
+    const finalInput = document.getElementById('commentInput');
+    const finalSendBtn = document.getElementById('sendCommentBtn');
+    
+    if (!finalInput || !finalSendBtn) return;
+    
+    // Función para enviar comentario
+    const sendMainComment = async () => {
+        const content = finalInput.value.trim();
+        if (!content) {
+            showToast('Escribe un comentario', true);
+            return;
+        }
+        
+        finalSendBtn.disabled = true;
+        finalSendBtn.textContent = 'Enviando...';
+        
+        try {
+            const newComment = await addComment(storyId, content);
+            if (newComment) {
+                finalInput.value = '';
+                showToast('💬 Comentario enviado');
+            }
+        } catch (error) {
+            console.error('Error enviando comentario:', error);
+            showToast('Error al enviar comentario', true);
+        } finally {
+            finalSendBtn.disabled = false;
+            finalSendBtn.textContent = 'Enviar';
+            finalInput.focus();
+        }
+    };
+    
+    // Asignar eventos
+    finalSendBtn.onclick = sendMainComment;
+    finalInput.onkeydown = (e) => {
+        if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
+            sendMainComment();
+        }
+    };
+    
+    // 🔥 En móviles, asegurar que el input sea visible y funcional
+    finalInput.setAttribute('autocomplete', 'off');
+    finalInput.setAttribute('autocorrect', 'on');
+    finalInput.setAttribute('spellcheck', 'true');
+    finalInput.setAttribute('enterkeyhint', 'send');
+    
+    console.log('✅ Input principal configurado correctamente');
+}
+
+// ============================================================
 // INICIALIZAR COMENTARIOS EN MODAL
 // ============================================================
 
@@ -932,56 +1004,9 @@ export async function initComments(storyId, containerId = 'commentsList', highli
     }
     
     renderComments(comments, storyId, currentUser?.id, container, highlightCommentId);
-
-    const input = document.getElementById('commentInput');
-    const sendBtn = document.getElementById('sendCommentBtn');
-
-    if (input && sendBtn) {
-        const newSendBtn = sendBtn.cloneNode(true);
-        sendBtn.parentNode.replaceChild(newSendBtn, sendBtn);
-        
-        const newInput = input.cloneNode(true);
-        input.parentNode.replaceChild(newInput, input);
-        
-        const finalInput = document.getElementById('commentInput');
-        const finalSendBtn = document.getElementById('sendCommentBtn');
-        
-        if (finalInput && finalSendBtn) {
-            const sendComment = async () => {
-                const content = finalInput.value.trim();
-                if (!content) {
-                    showToast('Escribe un comentario', true);
-                    return;
-                }
-
-                finalSendBtn.disabled = true;
-                finalSendBtn.textContent = 'Enviando...';
-                
-                try {
-                    const newComment = await addComment(storyId, content);
-                    if (newComment) {
-                        finalInput.value = '';
-                        showToast('💬 Comentario enviado');
-                    }
-                } catch (error) {
-                    console.error('Error enviando comentario:', error);
-                    showToast('Error al enviar comentario', true);
-                } finally {
-                    finalSendBtn.disabled = false;
-                    finalSendBtn.textContent = 'Enviar';
-                    finalInput.focus();
-                }
-            };
-
-            finalSendBtn.onclick = sendComment;
-            finalInput.onkeydown = (e) => {
-                if (e.key === 'Enter' && !e.shiftKey) {
-                    e.preventDefault();
-                    sendComment();
-                }
-            };
-        }
-    }
+    
+    // 🔥🔥🔥 CONFIGURAR INPUT PRINCIPAL (SIEMPRE)
+    setupMainCommentInput(storyId);
     
     // 🔥 SCROLL AL COMENTARIO DESTACADO
     if (highlightCommentId) {
