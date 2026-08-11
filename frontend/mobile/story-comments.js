@@ -154,7 +154,7 @@ export async function loadComments(storyId, forceReload = false) {
 }
 
 // ============================================================
-// AGREGAR COMENTARIO
+// AGREGAR COMENTARIO - CORREGIDO (SIN DUPLICADOS)
 // ============================================================
 
 export async function addComment(storyId, content, parentCommentId = null) {
@@ -205,16 +205,17 @@ export async function addComment(storyId, content, parentCommentId = null) {
                     if (!parentComment.replies) parentComment.replies = [];
                     parentComment.replies.push(newComment);
                     parentComment.replies.sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
-                    // Mostrar respuestas automáticamente cuando se agrega una nueva
                     repliesVisibility.set(parentCommentId, true);
                 }
             } else {
+                // ✅ INSERTAR AL PRINCIPIO (más reciente)
                 comments.unshift(newComment);
             }
             commentsCache.set(storyId, comments);
         }
 
-        updateCommentsUI(storyId);
+        // ✅ NO LLAMAR A updateCommentsUI aquí para evitar duplicados
+        // La UI se actualiza desde story-modal.js con addCommentToUI
 
         const socket = window.socket;
         if (socket) {
@@ -679,7 +680,7 @@ window.toggleRepliesVisibility = function(commentId) {
 // INICIALIZAR COMENTARIOS EN MODAL
 // ============================================================
 
-export async function initComments(storyId, containerId = 'commentsList', highlightCommentId = null) {
+export async function initComments(storyId, containerId = 'commentsList', highlightCommentId = null, skipCache = false) {
     if (!storyId) return;
 
     const container = document.getElementById(containerId);
@@ -688,6 +689,18 @@ export async function initComments(storyId, containerId = 'commentsList', highli
     // Guardar storyId en el container para referencia
     container.dataset.storyId = storyId;
     window._currentStoryId = storyId;
+
+    // ✅ Si skipCache es true, NO recargar desde el servidor
+    if (skipCache) {
+        console.log('📦 Usando comentarios en caché, sin recargar');
+        // Si hay comentarios en caché, renderizarlos
+        if (commentsCache.has(storyId)) {
+            const comments = commentsCache.get(storyId);
+            const currentUser = getCurrentUser();
+            renderComments(comments, storyId, currentUser?.id, container, highlightCommentId);
+        }
+        return;
+    }
 
     // FORZAR RECARGA COMPLETA DESDE EL SERVIDOR
     const comments = await loadComments(storyId, true);
@@ -735,7 +748,8 @@ export async function initComments(storyId, containerId = 'commentsList', highli
             const newComment = await addComment(storyId, content);
             if (newComment) {
                 input.value = '';
-                updateCommentsUI(storyId);
+                // ✅ Solo actualizar la UI si el comentario no se añadió desde otro lugar
+                // La UI se actualiza desde story-modal.js con addCommentToUI
             }
             sendBtn.disabled = false;
         };

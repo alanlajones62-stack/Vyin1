@@ -1,6 +1,6 @@
 // ============================================================
 // story-modal.js - Modal para ver historias con navegación 
-// (VERSIÓN CORREGIDA - SIN DUPLICADOS)
+// (VERSIÓN CORREGIDA - SIN DUPLICADOS Y SIN BOTÓN PERFIL)
 // ============================================================
 
 import {
@@ -235,9 +235,6 @@ function createModalHTML() {
                             <button class="btn-share-modal" id="modalShareBtn">
                                 <i class="fas fa-share-alt"></i>
                             </button>
-                            <button class="btn-profile-modal" id="modalProfileBtn">
-                                <i class="fas fa-user"></i> Perfil
-                            </button>
                             <button class="btn-translate-modal" id="modalTranslateBtn" style="display:none;">
                                 <i class="fas fa-language"></i> Traducir
                             </button>
@@ -318,27 +315,6 @@ function setupModalEvents() {
             navigator.clipboard?.writeText(url).then(() => {
                 showToast('📋 Enlace copiado');
             });
-        }
-    });
-
-    document.getElementById('modalProfileBtn')?.addEventListener('click', () => {
-        const userId = window._modalUserId;
-        if (userId) {
-            closeStoryModal();
-            window._fromProfileModal = false;
-            window._profileContextUserId = null;
-            
-            setTimeout(() => {
-                import('./profile-modal.js').then(({ openProfileModal }) => {
-                    openProfileModal(userId);
-                }).catch(() => {
-                    if (typeof window.openProfileModal === 'function') {
-                        window.openProfileModal(userId);
-                    } else {
-                        showToast('Error al abrir perfil', true);
-                    }
-                });
-            }, 50);
         }
     });
 
@@ -433,24 +409,24 @@ async function handleSendComment() {
         if (res.ok) {
             input.value = '';
             
-            // Actualizar contador
+            // ✅ 1. Actualizar contador
             updateCommentCount(1);
             
-            // Actualizar datos
+            // ✅ 2. Actualizar datos locales SIN recargar todo
             if (currentStoryData) {
                 if (!currentStoryData.comments) currentStoryData.comments = [];
-                currentStoryData.comments.push(data);
+                currentStoryData.comments.unshift(data);
             }
             
             if (currentStoriesList && currentStoriesList.length > 0) {
                 const idx = currentStoriesList.findIndex(s => s.id === currentStoryId);
                 if (idx !== -1 && currentStoriesList[idx]) {
                     if (!currentStoriesList[idx].comments) currentStoriesList[idx].comments = [];
-                    currentStoriesList[idx].comments.push(data);
+                    currentStoriesList[idx].comments.unshift(data);
                 }
             }
 
-            // Añadir a la UI sin duplicar
+            // ✅ 3. Añadir a la UI SIN recargar todo
             addCommentToUI(data);
             
             showToast('💬 Comentario enviado');
@@ -601,6 +577,7 @@ function addCommentToUI(comment) {
     const commentsList = document.getElementById('commentsList');
     if (!commentsList) return;
 
+    // ✅ VERIFICAR SI YA EXISTE ANTES DE AÑADIR
     const existingComment = commentsList.querySelector(`[data-comment-id="${comment.id}"]`);
     if (existingComment) {
         console.log('⚠️ Comentario ya existe en la UI, omitiendo duplicado');
@@ -646,6 +623,7 @@ function addCommentToUI(comment) {
     tempDiv.innerHTML = commentHtml;
     const commentElement = tempDiv.firstElementChild;
     
+    // ✅ INSERTAR AL PRINCIPIO (más reciente primero)
     commentsList.insertBefore(commentElement, commentsList.firstChild);
     
     console.log('✅ Comentario añadido a la UI');
@@ -992,7 +970,7 @@ async function loadStoryData(storyId, isNavigation = false) {
                 updateModalUI(currentStoryData);
                 updateProgress();
                 const highlightCommentId = window._activityCommentId || null;
-                await initComments(storyId, 'commentsList', highlightCommentId);
+                await initComments(storyId, 'commentsList', highlightCommentId, true);
                 return;
             }
             if (currentStoriesList.length > 0) {
@@ -1002,7 +980,7 @@ async function loadStoryData(storyId, isNavigation = false) {
                     updateModalUI(currentStoryData);
                     updateProgress();
                     const highlightCommentId = window._activityCommentId || null;
-                    await initComments(storyId, 'commentsList', highlightCommentId);
+                    await initComments(storyId, 'commentsList', highlightCommentId, true);
                     return;
                 }
             }
@@ -1053,7 +1031,7 @@ async function loadStoryData(storyId, isNavigation = false) {
         updateProgress();
         
         const highlightCommentId = window._activityCommentId || null;
-        await initComments(storyId, 'commentsList', highlightCommentId);
+        await initComments(storyId, 'commentsList', highlightCommentId, true);
         
         await registerView(storyId);
 
