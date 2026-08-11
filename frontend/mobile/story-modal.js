@@ -1,5 +1,8 @@
-// story-modal.js - VERSIÓN CORREGIDA CON LIMPIEZA DE ESTADO Y MEJOR RENDIMIENTO
-// 🔥 CORREGIDO: Limpieza de estado anterior, mejora de renderizado, scroll en móvil
+// ============================================================
+// story-modal.js - Modal para ver historias con navegación 
+// (VERSIÓN COMPLETA - DELEGA COMENTARIOS A story-comments.js)
+// 🔥 CORREGIDO: Pasa highlightCommentId a initComments
+// ============================================================
 
 import {
     getToken, getCurrentUser, showToast,
@@ -7,7 +10,7 @@ import {
 } from './auth.js';
 
 import { formatNumber } from './utils.js';
-import { initComments, clearCommentsCache } from './story-comments.js';
+import { initComments } from './story-comments.js';
 
 const API_URL = window.location.origin;
 let currentStoryId = null;
@@ -17,14 +20,12 @@ let currentStoriesList = [];
 let currentStoryIndex = 0;
 let isNavigating = false;
 let userLanguage = 'es';
-let isLoading = false;
-let pendingStoryId = null;
 
 // Caché de traducciones
 let translationCache = {};
 
 // ============================================================
-// 🔥 ABRIR MODAL CON LIMPIEZA PREVIA
+// ABRIR MODAL
 // ============================================================
 
 async function openStoryModal(storyId, storiesList = null, fromProfile = false, profileUserId = null) {
@@ -35,26 +36,27 @@ async function openStoryModal(storyId, storiesList = null, fromProfile = false, 
 
     console.log('📱 [STORY-MODAL] Abriendo historia:', storyId);
 
-    // 🔥 LIMPIAR ESTADO ANTERIOR INMEDIATAMENTE
-    if (isModalOpen) {
-        console.log('📱 [STORY-MODAL] Cerrando modal anterior...');
-        await forceCloseAndCleanup();
-        await new Promise(resolve => setTimeout(resolve, 150));
-    }
-
     const currentUser = getCurrentUser();
     userLanguage = currentUser?.language || 'es';
 
-    // Guardar contexto
+    if (isModalOpen) {
+        console.log('📱 [STORY-MODAL] Cerrando modal anterior...');
+        closeStoryModal();
+        await new Promise(resolve => setTimeout(resolve, 100));
+    }
+
     if (fromProfile && profileUserId) {
         window._fromProfileModal = true;
         window._profileContextUserId = profileUserId;
+    } else if (window._fromExploreModal) {
+        // Mantener contexto de explorador
+    } else if (window._fromActivityModal) {
+        console.log('📱 [STORY-MODAL] Abriendo desde actividad');
     } else {
         window._fromProfileModal = false;
         window._profileContextUserId = null;
     }
 
-    // Guardar lista de historias para carrusel
     if (storiesList && Array.isArray(storiesList) && storiesList.length > 0) {
         currentStoriesList = storiesList;
         const index = currentStoriesList.findIndex(s => s.id === storyId);
@@ -68,10 +70,7 @@ async function openStoryModal(storyId, storiesList = null, fromProfile = false, 
 
     currentStoryId = storyId;
     isModalOpen = true;
-    isLoading = true;
-    pendingStoryId = storyId;
 
-    // Crear o mostrar overlay
     const overlay = document.getElementById('storyModalOverlay');
     if (!overlay) {
         createModalHTML();
@@ -82,33 +81,34 @@ async function openStoryModal(storyId, storiesList = null, fromProfile = false, 
         storyOverlay.style.display = 'flex';
         storyOverlay.classList.add('active');
         
-        // 🔥 Z-INDEX PARA MÓVIL
-        const zIndex = window._fromExploreModal ? '10002' : 
-                       window._fromActivityModal ? '10001' : '10001';
-        storyOverlay.style.zIndex = zIndex;
+        if (window._fromExploreModal) {
+            storyOverlay.style.zIndex = '10002';
+        } else if (window._fromActivityModal) {
+            storyOverlay.style.zIndex = '10001';
+        } else {
+            storyOverlay.style.zIndex = '10001';
+        }
     }
     
     document.body.style.overflow = 'hidden';
 
-    // 🔥 MOSTRAR SKELETON INMEDIATAMENTE
-    showSkeletonLoader();
-
-    // 🔥 CARGAR DATOS CON LIMPIEZA PREVIA DE CACHÉ
     await loadStoryData(storyId);
 }
 
 // ============================================================
-// 🔥 FUNCIÓN DE LIMPIEZA FORZADA
+// CERRAR MODAL
 // ============================================================
 
-async function forceCloseAndCleanup() {
-    console.log('🧹 [STORY-MODAL] Limpieza forzada...');
+function closeStoryModal() {
+    console.log('📱 [STORY-MODAL] Cerrando modal...');
     
-    // Limpiar estado
     isModalOpen = false;
-    isLoading = false;
-    
-    // Limpiar video
+    currentStoryId = null;
+    currentStoryData = null;
+    currentStoriesList = [];
+    currentStoryIndex = 0;
+    isNavigating = false;
+
     const video = document.getElementById('storyVideo');
     if (video) {
         video.pause();
@@ -116,62 +116,22 @@ async function forceCloseAndCleanup() {
         video.load();
     }
 
-    // Limpiar VTT
     if (window._vttUrl) {
         URL.revokeObjectURL(window._vttUrl);
         window._vttUrl = null;
     }
 
-    // 🔥 LIMPIAR CACHÉ DE COMENTARIOS PARA ESTA HISTORIA
-    if (currentStoryId) {
-        clearCommentsCache(currentStoryId);
-    }
-
-    // Limpiar contenedor de comentarios
-    const commentsList = document.getElementById('commentsList');
-    if (commentsList) {
-        commentsList.innerHTML = `
-            <div class="no-comments">
-                <i class="fas fa-spinner fa-pulse"></i>
-                <span>Cargando comentarios...</span>
-            </div>
-        `;
-    }
-
-    // Ocultar overlay
     const overlay = document.getElementById('storyModalOverlay');
     if (overlay) {
         overlay.classList.remove('active');
         overlay.style.display = 'none';
+        overlay.style.zIndex = '';
     }
     
-    // Resetear variables
-    currentStoryId = null;
-    currentStoryData = null;
-    currentStoriesList = [];
-    currentStoryIndex = 0;
-    pendingStoryId = null;
-    
-    // Limpiar input de comentarios
-    const commentInput = document.getElementById('commentInput');
-    if (commentInput) {
-        commentInput.value = '';
-        commentInput.disabled = false;
-        commentInput.placeholder = 'Escribe un comentario...';
-    }
-    
-    const sendBtn = document.getElementById('sendCommentBtn');
-    if (sendBtn) {
-        sendBtn.disabled = false;
-        sendBtn.textContent = 'Enviar';
-    }
-
-    // Restaurar scroll
     if (!window._fromProfileModal && !window._fromExploreModal && !window._fromActivityModal) {
         document.body.style.overflow = '';
     }
 
-    // Limpiar contexto
     setTimeout(() => {
         window._fromProfileModal = false;
         window._fromExploreModal = false;
@@ -182,49 +142,11 @@ async function forceCloseAndCleanup() {
 }
 
 // ============================================================
-// 🔥 MOSTRAR SKELETON
-// ============================================================
-
-function showSkeletonLoader() {
-    const mediaContainer = document.getElementById('modalMedia');
-    if (mediaContainer) {
-        mediaContainer.innerHTML = `
-            <div class="skeleton-media" style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;background:rgba(255,255,255,0.02);">
-                <div style="text-align:center;">
-                    <div class="skeleton-spinner" style="width:40px;height:40px;border:3px solid rgba(255,255,255,0.05);border-top-color:#c084fc;border-radius:50%;animation:spin 1s linear infinite;margin:0 auto;"></div>
-                    <p style="color:rgba(255,255,255,0.15);font-size:13px;margin-top:12px;">Cargando historia...</p>
-                </div>
-            </div>
-        `;
-    }
-
-    // Mostrar skeleton en comentarios
-    const commentsList = document.getElementById('commentsList');
-    if (commentsList) {
-        commentsList.innerHTML = `
-            <div class="no-comments">
-                <i class="fas fa-spinner fa-pulse"></i>
-                <span>Cargando comentarios...</span>
-            </div>
-        `;
-    }
-}
-
-// ============================================================
-// 🔥 CERRAR MODAL
-// ============================================================
-
-function closeStoryModal() {
-    console.log('📱 [STORY-MODAL] Cerrando modal...');
-    forceCloseAndCleanup();
-}
-
-// ============================================================
-// 🔥 NAVEGAR ENTRE HISTORIAS
+// NAVEGAR ENTRE HISTORIAS
 // ============================================================
 
 async function navigateStory(direction) {
-    if (isNavigating || isLoading) return;
+    if (isNavigating) return;
     if (!currentStoriesList || currentStoriesList.length <= 1) {
         showToast('Solo hay una historia disponible');
         return;
@@ -237,42 +159,19 @@ async function navigateStory(direction) {
     }
 
     isNavigating = true;
-    isLoading = true;
     currentStoryIndex = newIndex;
     const newStory = currentStoriesList[newIndex];
     
     if (newStory) {
         console.log(`🔄 Navegando a historia ${newIndex + 1}/${currentStoriesList.length}: ${newStory.id}`);
-        
-        // 🔥 LIMPIAR CACHÉ DE LA HISTORIA ANTERIOR
-        if (currentStoryId) {
-            clearCommentsCache(currentStoryId);
-        }
-        
-        // 🔥 LIMPIAR ESTADO DE COMENTARIOS INMEDIATAMENTE
-        const commentsList = document.getElementById('commentsList');
-        if (commentsList) {
-            commentsList.innerHTML = `
-                <div class="no-comments">
-                    <i class="fas fa-spinner fa-pulse"></i>
-                    <span>Cargando comentarios...</span>
-                </div>
-            `;
-        }
-        
-        currentStoryId = newStory.id;
-        pendingStoryId = newStory.id;
-        
-        showSkeletonLoader();
         await loadStoryData(newStory.id, true);
     }
     
     isNavigating = false;
-    isLoading = false;
 }
 
 // ============================================================
-// 🔥 CREAR HTML DEL MODAL (VERSIÓN MEJORADA)
+// CREAR HTML DEL MODAL
 // ============================================================
 
 function createModalHTML() {
@@ -353,8 +252,7 @@ function createModalHTML() {
                         </button>
                     </div>
 
-                    <!-- 🔥 SECCIÓN DE COMENTARIOS MEJORADA PARA MÓVIL -->
-                    <div class="comments-section" id="commentsSection">
+                    <div class="comments-section">
                         <div class="comments-title">
                             <span><i class="fas fa-comment-dots"></i> Comentarios</span>
                             <span id="commentsCount">0</span>
@@ -365,8 +263,7 @@ function createModalHTML() {
                                 <span>Cargando comentarios...</span>
                             </div>
                         </div>
-                        <!-- 🔥 INPUT DE COMENTARIOS SIEMPRE VISIBLE -->
-                        <div class="comment-input-wrapper" id="commentInputWrapper">
+                        <div class="comment-input-wrapper">
                             <input type="text" id="commentInput" placeholder="Escribe un comentario..." maxlength="500" />
                             <button id="sendCommentBtn">Enviar</button>
                         </div>
@@ -381,15 +278,14 @@ function createModalHTML() {
     document.body.appendChild(div.firstElementChild);
     console.log('📱 [STORY-MODAL] HTML creado e insertado');
 
-    // Eventos de teclado
     document.addEventListener('keydown', (e) => {
         if (e.key === 'Escape' && isModalOpen) {
             closeStoryModal();
         }
-        if (e.key === 'ArrowLeft' && isModalOpen && currentStoriesList.length > 1 && !isLoading) {
+        if (e.key === 'ArrowLeft' && isModalOpen && currentStoriesList.length > 1) {
             navigateStory(-1);
         }
-        if (e.key === 'ArrowRight' && isModalOpen && currentStoriesList.length > 1 && !isLoading) {
+        if (e.key === 'ArrowRight' && isModalOpen && currentStoriesList.length > 1) {
             navigateStory(1);
         }
     });
@@ -398,14 +294,14 @@ function createModalHTML() {
 }
 
 // ============================================================
-// 🔥 CONFIGURAR EVENTOS
+// CONFIGURAR EVENTOS DEL MODAL
 // ============================================================
 
 function setupModalEvents() {
     console.log('📱 [STORY-MODAL] Configurando eventos...');
     
     document.getElementById('modalLikeBtn')?.addEventListener('click', async () => {
-        if (!currentStoryId || isLoading) return;
+        if (!currentStoryId) return;
         await handleModalLike();
     });
 
@@ -413,13 +309,7 @@ function setupModalEvents() {
         const input = document.getElementById('commentInput');
         if (input) {
             input.focus();
-            // 🔥 SCROLL AL INPUT EN MÓVIL
-            setTimeout(() => {
-                const wrapper = document.getElementById('commentInputWrapper');
-                if (wrapper) {
-                    wrapper.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                }
-            }, 100);
+            input.scrollIntoView({ behavior: 'smooth', block: 'center' });
         }
     });
 
@@ -458,17 +348,19 @@ function setupModalEvents() {
 
     // BOTÓN DE TRADUCCIÓN
     document.getElementById('modalTranslateBtn')?.addEventListener('click', async () => {
-        if (!currentStoryId || isLoading) return;
+        if (!currentStoryId) return;
         await toggleTranslation();
     });
 
     // BOTÓN DE ELIMINAR
     document.getElementById('modalDeleteBtn')?.addEventListener('click', async () => {
-        if (!currentStoryId || isLoading) return;
+        if (!currentStoryId) return;
         await deleteStory(currentStoryId);
     });
 
-    // TOUCH PARA NAVEGACIÓN
+    // 🔥 LOS COMENTARIOS SON MANEJADOS POR story-comments.js
+    // NO agregar eventos de comentarios aquí
+
     let touchStartX = 0;
     let touchStartY = 0;
     const modalContent = document.querySelector('.modal-content');
@@ -479,7 +371,6 @@ function setupModalEvents() {
     });
     
     modalContent?.addEventListener('touchend', (e) => {
-        if (isLoading || isNavigating) return;
         if (currentStoriesList.length <= 1) return;
         const touchEndX = e.changedTouches[0].screenX;
         const touchEndY = e.changedTouches[0].screenY;
@@ -497,7 +388,386 @@ function setupModalEvents() {
 }
 
 // ============================================================
-// 🔥 CARGAR DATOS DE LA HISTORIA - CON LIMPIEZA DE CACHÉ
+// ELIMINAR HISTORIA
+// ============================================================
+
+async function deleteStory(storyId) {
+    if (!storyId) {
+        showToast('Historia no encontrada', true);
+        return;
+    }
+
+    const token = getToken();
+    if (!token) {
+        showToast('Inicia sesión para eliminar', true);
+        return;
+    }
+
+    const confirmDelete = confirm('¿Estás seguro de que quieres eliminar esta historia? Esta acción no se puede deshacer.');
+    if (!confirmDelete) return;
+
+    const deleteBtn = document.getElementById('modalDeleteBtn');
+    if (deleteBtn) {
+        deleteBtn.disabled = true;
+        deleteBtn.innerHTML = '<i class="fas fa-spinner fa-pulse"></i> Eliminando...';
+    }
+
+    try {
+        const res = await fetch(`${API_URL}/api/stories/${storyId}`, {
+            method: 'DELETE',
+            headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json'
+            }
+        });
+
+        if (res.ok) {
+            showToast('🗑️ Historia eliminada correctamente');
+            
+            if (currentStoriesList && currentStoriesList.length > 0) {
+                const idx = currentStoriesList.findIndex(s => s.id === storyId);
+                if (idx !== -1) {
+                    currentStoriesList.splice(idx, 1);
+                    
+                    if (currentStoriesList.length > 0) {
+                        const nextIdx = Math.min(idx, currentStoriesList.length - 1);
+                        currentStoryIndex = nextIdx;
+                        await loadStoryData(currentStoriesList[nextIdx].id, true);
+                    } else {
+                        closeStoryModal();
+                    }
+                }
+            } else {
+                closeStoryModal();
+            }
+            
+            try {
+                if (window.io) {
+                    window.io.emit('story_deleted', { storyId });
+                }
+                document.dispatchEvent(new CustomEvent('storyDeleted', { 
+                    detail: { storyId } 
+                }));
+            } catch (e) {
+                console.log('Evento emitido localmente');
+            }
+        } else {
+            const data = await res.json();
+            showToast(data.error || 'Error al eliminar la historia', true);
+            if (deleteBtn) {
+                deleteBtn.disabled = false;
+                deleteBtn.innerHTML = '<i class="fas fa-trash-alt"></i> Eliminar';
+            }
+        }
+    } catch (error) {
+        console.error('❌ Error eliminando historia:', error);
+        showToast('Error al eliminar la historia', true);
+        if (deleteBtn) {
+            deleteBtn.disabled = false;
+            deleteBtn.innerHTML = '<i class="fas fa-trash-alt"></i> Eliminar';
+        }
+    }
+}
+
+// ============================================================
+// ACTUALIZAR INDICADOR DE PROGRESO Y FLECHAS
+// ============================================================
+
+function updateProgress() {
+    const progressContainer = document.getElementById('storyProgress');
+    const prevArrow = document.getElementById('navPrevArrow');
+    const nextArrow = document.getElementById('navNextArrow');
+    
+    if (!progressContainer) return;
+
+    const hasMultiple = currentStoriesList && currentStoriesList.length > 1;
+
+    if (!hasMultiple) {
+        progressContainer.style.display = 'none';
+        if (prevArrow) prevArrow.style.display = 'none';
+        if (nextArrow) nextArrow.style.display = 'none';
+    } else {
+        progressContainer.style.display = 'flex';
+        
+        const total = currentStoriesList.length;
+        let dots = '';
+        for (let i = 0; i < total; i++) {
+            const isActive = i === currentStoryIndex;
+            dots += `<span class="progress-dot ${isActive ? 'active' : ''}"></span>`;
+        }
+        progressContainer.innerHTML = dots;
+
+        if (prevArrow) {
+            prevArrow.style.display = (currentStoryIndex > 0) ? 'flex' : 'none';
+        }
+        if (nextArrow) {
+            nextArrow.style.display = (currentStoryIndex < total - 1) ? 'flex' : 'none';
+        }
+        
+        console.log(`📊 Progreso: ${currentStoryIndex + 1}/${total}`);
+    }
+}
+
+// ============================================================
+// GENERAR VTT DESDE SEGMENTOS
+// ============================================================
+
+function generateVTTFromSegments(segments) {
+    if (!segments || segments.length === 0) {
+        return 'WEBVTT\n\n';
+    }
+    
+    let vtt = 'WEBVTT\n\n';
+    
+    segments.forEach((seg, index) => {
+        const start = formatVTTTime(seg.start || 0);
+        const end = formatVTTTime(seg.end || (seg.start || 0) + 2);
+        const text = seg.text || '';
+        vtt += `${index + 1}\n${start} --> ${end}\n${text}\n\n`;
+    });
+    
+    return vtt;
+}
+
+function formatVTTTime(seconds) {
+    const hours = Math.floor(seconds / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
+    const secs = Math.floor(seconds % 60);
+    const millis = Math.floor((seconds % 1) * 1000);
+    return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(secs).padStart(2, '0')}.${String(millis).padStart(3, '0')}`;
+}
+
+// ============================================================
+// ALTERNAR TRADUCCIÓN/ORIGINAL
+// ============================================================
+
+async function toggleTranslation() {
+    if (!currentStoryId || !currentStoryData) return;
+    
+    const token = getToken();
+    if (!token) {
+        showToast('Inicia sesión para traducir', true);
+        return;
+    }
+
+    const translateBtn = document.getElementById('modalTranslateBtn');
+    
+    const contentLanguage = currentStoryData.language || currentStoryData.originalLanguage || 'es';
+    const isDifferentLanguage = contentLanguage !== userLanguage;
+    
+    if (!isDifferentLanguage) {
+        showToast('📝 El contenido ya está en tu idioma');
+        if (translateBtn) {
+            translateBtn.style.display = 'none';
+        }
+        return;
+    }
+    
+    if (currentStoryData.translated && currentStoryData._originalTextContent) {
+        console.log('📝 Mostrando original');
+        
+        const originalData = {
+            ...currentStoryData,
+            textContent: currentStoryData._originalTextContent,
+            caption: currentStoryData._originalCaption || currentStoryData.caption,
+            translated: false,
+            showingOriginal: true
+        };
+        
+        currentStoryData = originalData;
+        translationCache[currentStoryId] = originalData;
+        
+        updateTextContentOnly(originalData);
+        
+        if (translateBtn) {
+            translateBtn.innerHTML = '<i class="fas fa-language"></i> Traducir';
+            translateBtn.style.display = 'inline-flex';
+            translateBtn.disabled = false;
+        }
+        
+        const userNameEl = document.getElementById('modalUserName');
+        if (userNameEl) {
+            const existingBadge = userNameEl.querySelector('.translation-badge-modal');
+            if (existingBadge) existingBadge.remove();
+        }
+        
+        showToast('📝 Mostrando original');
+        return;
+    }
+
+    const cacheKey = `${currentStoryId}_${userLanguage}`;
+    if (translationCache[cacheKey] && translationCache[cacheKey].translated) {
+        console.log('📦 Usando traducción desde caché');
+        const cached = translationCache[cacheKey];
+        const translatedData = {
+            ...currentStoryData,
+            textContent: cached.translated,
+            _originalTextContent: cached.original,
+            _originalCaption: currentStoryData.caption,
+            translated: true,
+            showingOriginal: false,
+            originalLanguage: contentLanguage,
+            language: userLanguage,
+            _translationCache: cached
+        };
+        
+        currentStoryData = translatedData;
+        translationCache[currentStoryId] = translatedData;
+        
+        updateTextContentOnly(translatedData);
+        
+        if (translateBtn) {
+            translateBtn.innerHTML = '<i class="fas fa-undo"></i> Mostrar original';
+            translateBtn.style.display = 'inline-flex';
+            translateBtn.disabled = false;
+        }
+        
+        const userNameEl = document.getElementById('modalUserName');
+        if (userNameEl) {
+            const existingBadge = userNameEl.querySelector('.translation-badge-modal');
+            if (existingBadge) existingBadge.remove();
+            
+            const badge = document.createElement('span');
+            badge.className = 'translation-badge-modal';
+            badge.style.cssText = 'font-size:9px;color:rgba(192,132,252,0.7);margin-left:6px;';
+            badge.innerHTML = `<i class="fas fa-language"></i> Traducido (caché)`;
+            userNameEl.appendChild(badge);
+        }
+        
+        showToast('✅ Traducción cargada (caché)');
+        return;
+    }
+
+    if (translateBtn) {
+        translateBtn.innerHTML = '<i class="fas fa-spinner fa-pulse"></i> Traduciendo...';
+        translateBtn.disabled = true;
+    }
+
+    try {
+        let textToTranslate = currentStoryData.textContent || currentStoryData.caption || '';
+        
+        if (!textToTranslate) {
+            showToast('No hay texto para traducir', true);
+            if (translateBtn) {
+                translateBtn.style.display = 'none';
+            }
+            return;
+        }
+
+        console.log('🌐 Traduciendo texto:', textToTranslate.substring(0, 50) + '...');
+        console.log(`🌐 Al idioma: ${userLanguage}`);
+        console.log(`📝 Idioma del contenido: ${contentLanguage}`);
+
+        const res = await fetch(`${API_URL}/api/vyin/translate`, {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ 
+                text: textToTranslate,
+                targetLanguage: userLanguage,
+                sourceLanguage: contentLanguage
+            })
+        });
+
+        const data = await res.json();
+        console.log('📥 Respuesta de traducción:', data);
+        
+        const isDifferent = data.success && 
+                           data.translated && 
+                           data.translated !== data.original &&
+                           data.translated.trim() !== data.original.trim();
+        
+        if (isDifferent) {
+            const cacheData = {
+                translated: data.translated,
+                original: data.original,
+                engine: data.engine || 'M2M100',
+                license: data.license || 'MIT',
+                language: userLanguage
+            };
+            translationCache[cacheKey] = cacheData;
+            
+            const translatedData = {
+                ...currentStoryData,
+                textContent: data.translated,
+                _originalTextContent: data.original,
+                _originalCaption: currentStoryData.caption,
+                translated: true,
+                showingOriginal: false,
+                originalLanguage: contentLanguage,
+                language: userLanguage,
+                translationEngine: data.engine || 'M2M100',
+                _translationCache: cacheData
+            };
+            
+            translationCache[currentStoryId] = translatedData;
+            currentStoryData = translatedData;
+            
+            updateTextContentOnly(translatedData);
+            
+            if (translateBtn) {
+                translateBtn.innerHTML = '<i class="fas fa-undo"></i> Mostrar original';
+                translateBtn.style.display = 'inline-flex';
+                translateBtn.disabled = false;
+            }
+            
+            const userNameEl = document.getElementById('modalUserName');
+            if (userNameEl) {
+                const existingBadge = userNameEl.querySelector('.translation-badge-modal');
+                if (existingBadge) existingBadge.remove();
+                
+                const badge = document.createElement('span');
+                badge.className = 'translation-badge-modal';
+                badge.style.cssText = 'font-size:9px;color:rgba(192,132,252,0.7);margin-left:6px;';
+                const engine = data.engine || 'M2M100';
+                badge.innerHTML = `<i class="fas fa-language"></i> Traducido (${engine})`;
+                userNameEl.appendChild(badge);
+            }
+            
+            showToast(`✅ Traducido al ${data.languageInfo?.name || userLanguage}`);
+        } else {
+            console.warn('⚠️ La traducción no cambió el texto');
+            showToast('📝 El texto ya está en el idioma seleccionado');
+        }
+    } catch (error) {
+        console.error('❌ Error traduciendo:', error);
+        showToast('Error al traducir', true);
+    } finally {
+        if (translateBtn) {
+            translateBtn.disabled = false;
+        }
+    }
+}
+
+// ============================================================
+// ACTUALIZAR SOLO textContent
+// ============================================================
+
+function updateTextContentOnly(updatedData) {
+    console.log('🔥 Actualizando textContent...');
+    
+    const mediaContainer = document.getElementById('modalMedia');
+    if (mediaContainer && updatedData.textContent) {
+        const textContentDiv = mediaContainer.querySelector('.text-content');
+        if (textContentDiv) {
+            textContentDiv.innerHTML = escapeHtml(updatedData.textContent);
+            console.log('✅ textContent actualizado');
+        } else if (!mediaContainer.querySelector('img') && !mediaContainer.querySelector('video')) {
+            const bgColor = updatedData.textBgColor || '#1a1a2e';
+            mediaContainer.innerHTML = `
+                <div class="text-content" style="background:${bgColor}">
+                    ${escapeHtml(updatedData.textContent)}
+                </div>
+            `;
+            console.log('✅ textContent aplicado al contenedor de medios');
+        }
+    }
+}
+
+// ============================================================
+// CARGAR DATOS DE LA HISTORIA
 // ============================================================
 
 async function loadStoryData(storyId, isNavigation = false) {
@@ -509,8 +779,6 @@ async function loadStoryData(storyId, isNavigation = false) {
     }
 
     try {
-        console.log(`📡 [STORY-MODAL] Cargando historia ${storyId}...`);
-
         const res = await fetch(`${API_URL}/api/stories/${storyId}/details`, {
             headers: { 'Authorization': `Bearer ${token}` }
         });
@@ -522,7 +790,6 @@ async function loadStoryData(storyId, isNavigation = false) {
                 updateProgress();
                 const highlightCommentId = window._activityCommentId || null;
                 await initComments(storyId, 'commentsList', highlightCommentId);
-                isLoading = false;
                 return;
             }
             if (currentStoriesList.length > 0) {
@@ -533,7 +800,6 @@ async function loadStoryData(storyId, isNavigation = false) {
                     updateProgress();
                     const highlightCommentId = window._activityCommentId || null;
                     await initComments(storyId, 'commentsList', highlightCommentId);
-                    isLoading = false;
                     return;
                 }
             }
@@ -551,7 +817,6 @@ async function loadStoryData(storyId, isNavigation = false) {
                 showToast('Error al cargar la historia', true);
             }
             if (!isNavigation) closeStoryModal();
-            isLoading = false;
             return;
         }
 
@@ -559,7 +824,6 @@ async function loadStoryData(storyId, isNavigation = false) {
         currentStoryData = story;
         currentStoryId = story.id;
 
-        // Aplicar traducción en caché
         const cacheKey = `${storyId}_${userLanguage}`;
         if (translationCache[cacheKey] && !story.translated) {
             console.log('📦 Aplicando traducción desde caché');
@@ -581,34 +845,25 @@ async function loadStoryData(storyId, isNavigation = false) {
             hasTranslation: !!translationCache[cacheKey]
         });
 
-        // 🔥 ACTUALIZAR UI
         updateModalUI(currentStoryData);
         updateProgress();
         
-        // 🔥 CARGAR COMENTARIOS CON LIMPIEZA PREVIA
+        // 🔥 PASAR highlightCommentId A initComments
         const highlightCommentId = window._activityCommentId || null;
         console.log('📌 Highlight comment ID:', highlightCommentId);
-        
-        // Limpiar caché de comentarios para esta historia antes de cargar
-        clearCommentsCache(storyId);
-        
         await initComments(storyId, 'commentsList', highlightCommentId);
         
-        // Registrar vista
         await registerView(storyId);
-        
-        isLoading = false;
 
     } catch (error) {
         console.error('Error loading story:', error);
         showToast('Error al cargar la historia', true);
         if (!isNavigation) closeStoryModal();
-        isLoading = false;
     }
 }
 
 // ============================================================
-// 🔥 ACTUALIZAR UI DEL MODAL
+// ACTUALIZAR UI DEL MODAL
 // ============================================================
 
 function updateModalUI(story) {
@@ -626,7 +881,6 @@ function updateModalUI(story) {
     document.getElementById('modalUserHandle').textContent = `@${user.username || 'usuario'}`;
     window._modalUserId = user.id;
 
-    // Botón eliminar
     const deleteBtn = document.getElementById('modalDeleteBtn');
     if (deleteBtn) {
         const currentUser = getCurrentUser();
@@ -641,7 +895,6 @@ function updateModalUI(story) {
         }
     }
 
-    // Botón traducción
     const contentLanguage = story.language || story.originalLanguage || 'es';
     const isDifferentLanguage = contentLanguage !== userLanguage;
     const isTranslated = story.translated || false;
@@ -661,7 +914,6 @@ function updateModalUI(story) {
         }
     }
 
-    // 🔥 MEDIA
     const mediaContainer = document.getElementById('modalMedia');
     if (mediaContainer) {
         if (story.mediaType === 'image' && story.mediaUrl) {
@@ -740,7 +992,6 @@ function updateModalUI(story) {
         }
     }
 
-    // Caption
     const caption = document.getElementById('modalCaption');
     if (caption) {
         let captionHtml = '';
@@ -755,7 +1006,6 @@ function updateModalUI(story) {
         }
     }
 
-    // Subtítulos
     const subtitlesIndicator = document.getElementById('subtitlesIndicator');
     if (subtitlesIndicator) {
         if (story.hasSubtitles && story.segments && story.segments.length > 0) {
@@ -766,7 +1016,6 @@ function updateModalUI(story) {
         }
     }
 
-    // Estadísticas
     const views = story.views?.length || 0;
     const likes = story.likes?.length || 0;
     const comments = story.comments?.length || 0;
@@ -776,7 +1025,6 @@ function updateModalUI(story) {
     document.getElementById('modalComments').textContent = formatNumber(comments);
     document.getElementById('commentsCount').textContent = formatNumber(comments);
 
-    // Like button
     const currentUser = getCurrentUser();
     const isLiked = story.likes?.includes(currentUser?.id) || false;
     const likeBtn = document.getElementById('modalLikeBtn');
@@ -792,12 +1040,150 @@ function updateModalUI(story) {
 }
 
 // ============================================================
-// 🔥 FUNCIONES GLOBALES PARA WINDOW
+// REGISTRAR VISTA
+// ============================================================
+
+async function registerView(storyId) {
+    const token = getToken();
+    if (!token) return;
+
+    try {
+        const res = await fetch(`${API_URL}/api/stories/${storyId}/view`, {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json'
+            }
+        });
+
+        if (res.ok) {
+            const data = await res.json();
+            const viewsEl = document.getElementById('modalViews');
+            if (viewsEl && data.viewsCount !== undefined) {
+                viewsEl.textContent = formatNumber(data.viewsCount);
+            }
+        }
+    } catch (error) {
+        console.error('Error registering view:', error);
+    }
+}
+
+// ============================================================
+// MANEJAR LIKE EN MODAL
+// ============================================================
+
+async function handleModalLike() {
+    if (!currentStoryId) return;
+
+    const token = getToken();
+    if (!token) {
+        showToast('Inicia sesión para dar like', true);
+        return;
+    }
+
+    const likeBtn = document.getElementById('modalLikeBtn');
+    const isLiked = likeBtn?.classList.contains('liked') || false;
+    const method = isLiked ? 'DELETE' : 'POST';
+
+    const likesEl = document.getElementById('modalLikes');
+    let currentLikes = parseInt(likesEl?.textContent.replace(/[^0-9]/g, '')) || 0;
+    
+    if (isLiked) {
+        currentLikes = Math.max(0, currentLikes - 1);
+        if (likeBtn) {
+            likeBtn.classList.remove('liked');
+            likeBtn.innerHTML = '<i class="fas fa-heart"></i> Like';
+        }
+    } else {
+        currentLikes = currentLikes + 1;
+        if (likeBtn) {
+            likeBtn.classList.add('liked');
+            likeBtn.innerHTML = '<i class="fas fa-heart"></i> Quitar';
+        }
+    }
+    if (likesEl) {
+        likesEl.textContent = formatNumber(currentLikes);
+    }
+
+    try {
+        const res = await fetch(`${API_URL}/api/stories/${currentStoryId}/like`, {
+            method: method,
+            headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json'
+            }
+        });
+
+        const data = await res.json();
+        if (res.ok) {
+            if (likesEl) {
+                likesEl.textContent = formatNumber(data.likesCount || 0);
+            }
+
+            if (data.liked) {
+                if (likeBtn) {
+                    likeBtn.classList.add('liked');
+                    likeBtn.innerHTML = '<i class="fas fa-heart"></i> Quitar';
+                }
+            } else {
+                if (likeBtn) {
+                    likeBtn.classList.remove('liked');
+                    likeBtn.innerHTML = '<i class="fas fa-heart"></i> Like';
+                }
+            }
+
+            if (currentStoryData) {
+                currentStoryData.likes = data.likes || [];
+            }
+            
+            if (currentStoriesList && currentStoriesList.length > 0) {
+                const idx = currentStoriesList.findIndex(s => s.id === currentStoryId);
+                if (idx !== -1 && currentStoriesList[idx]) {
+                    currentStoriesList[idx].likes = data.likes || [];
+                }
+            }
+
+            showToast(data.liked ? '❤️ Like' : '💔 Quitado');
+        } else {
+            showToast(data.error || 'Error al procesar like', true);
+            await loadStoryData(currentStoryId, true);
+        }
+    } catch (error) {
+        console.error('Error en like:', error);
+        showToast('Error al procesar like', true);
+        await loadStoryData(currentStoryId, true);
+    }
+}
+
+// ============================================================
+// FUNCIONES GLOBALES PARA WINDOW
 // ============================================================
 
 window.openStoryModal = openStoryModal;
 window.closeStoryModal = closeStoryModal;
 window.navigateStory = navigateStory;
+window.deleteStory = deleteStory;
+
+window.openProfileFromModal = function() {
+    const userId = window._modalUserId;
+    if (userId) {
+        closeStoryModal();
+        window._fromProfileModal = false;
+        window._profileContextUserId = null;
+        
+        setTimeout(() => {
+            import('./profile-modal.js').then(({ openProfileModal }) => {
+                openProfileModal(userId);
+            }).catch(() => {
+                if (typeof window.openProfileModal === 'function') {
+                    window.openProfileModal(userId);
+                } else {
+                    showToast('Error al abrir perfil', true);
+                }
+            });
+        }, 50);
+    }
+};
 
 // ============================================================
 // ✅ EXPORTACIONES
@@ -807,6 +1193,7 @@ export {
     openStoryModal, 
     closeStoryModal, 
     navigateStory, 
-    loadStoryData,
-    forceCloseAndCleanup
+    loadStoryData, 
+    handleModalLike,
+    deleteStory
 };
