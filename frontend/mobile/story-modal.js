@@ -452,7 +452,7 @@ function setupModalEvents() {
 }
 
 // ============================================================
-// 🔥 ENVIAR COMENTARIO - VERSIÓN COMPLETA CORREGIDA (SIN RE-RENDER)
+// 🔥 ENVIAR COMENTARIO - VERSIÓN COMPLETA CORREGIDA
 // ============================================================
 
 async function handleSendComment() {
@@ -508,19 +508,14 @@ async function handleSendComment() {
     input.value = '';
     console.log('📝 Añadiendo comentario temporal al DOM:', tempComment);
     
+    // 🔥 1. AGREGAR LOCALMENTE (INSERCIÓN DIRECTA)
     const added = addCommentToUI(tempComment);
     if (!added) {
-        console.warn('⚠️ No se pudo añadir el comentario al DOM, intentando directamente...');
+        console.warn('⚠️ Falló addCommentToUI, intentando directamente...');
         const commentsList = document.getElementById('commentsList');
         if (commentsList) {
             const noComments = commentsList.querySelector('.no-comments');
             if (noComments) noComments.remove();
-            
-            const loadingSpinner = commentsList.querySelector('.fa-spinner');
-            if (loadingSpinner) {
-                const loadingContainer = loadingSpinner.closest('.no-comments');
-                if (loadingContainer) loadingContainer.remove();
-            }
             
             const div = document.createElement('div');
             div.className = 'comment-item';
@@ -558,11 +553,14 @@ async function handleSendComment() {
         }
     }
     
+    // 🔥 2. ACTUALIZAR CONTADOR LOCAL
     const currentTotal = getTotalCommentsCount(currentStoryId);
     updateCommentCount(currentTotal + 1);
     
+    // 🔥 3. ACTUALIZAR CACHÉ LOCAL
     addCommentToCache(currentStoryId, tempComment);
     
+    // 🔥 4. ACTUALIZAR DATOS LOCALES
     if (currentStoryData) {
         if (!currentStoryData.comments) currentStoryData.comments = [];
         currentStoryData.comments.unshift(tempComment);
@@ -577,6 +575,7 @@ async function handleSendComment() {
     }
 
     try {
+        // 🔥 5. ENVIAR AL SERVIDOR
         const res = await fetch(`${API_URL}/api/stories/${currentStoryId}/comments`, {
             method: 'POST',
             headers: {
@@ -589,6 +588,7 @@ async function handleSendComment() {
         const data = await res.json();
 
         if (res.ok) {
+            // 🔥 6. REEMPLAZAR TEMPORAL POR REAL
             const replaced = replaceTempComment(currentStoryId, tempComment.id, data);
             if (!replaced) {
                 const tempElement = document.querySelector(`[data-temp-id="${tempComment.id}"]`);
@@ -598,6 +598,7 @@ async function handleSendComment() {
                 }
             }
             
+            // 🔥 7. ACTUALIZAR CACHÉ CON DATOS REALES
             const cached = getCachedComments(currentStoryId);
             if (cached) {
                 const idx = cached.findIndex(c => c.id === tempComment.id);
@@ -610,6 +611,7 @@ async function handleSendComment() {
                 }
             }
             
+            // 🔥 8. ACTUALIZAR DATOS LOCALES CON DATOS REALES
             if (currentStoryData && currentStoryData.comments) {
                 const idx = currentStoryData.comments.findIndex(c => c.id === tempComment.id);
                 if (idx !== -1) {
@@ -629,6 +631,7 @@ async function handleSendComment() {
             
             showToast('💬 Comentario enviado');
         } else {
+            // 🔥 9. REVERTIR EN CASO DE ERROR DEL SERVIDOR
             const tempElement = document.querySelector(`[data-temp-id="${tempComment.id}"]`);
             if (tempElement) tempElement.remove();
             
@@ -655,8 +658,9 @@ async function handleSendComment() {
             showToast(data.error || 'Error al enviar comentario', true);
         }
     } catch (error) {
-        console.error('Error enviando comentario:', error);
+        console.error('❌ Error enviando comentario:', error);
         
+        // 🔥 10. REVERTIR EN CASO DE ERROR DE RED
         const tempElement = document.querySelector(`[data-temp-id="${tempComment.id}"]`);
         if (tempElement) tempElement.remove();
         
