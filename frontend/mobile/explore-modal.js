@@ -1,6 +1,6 @@
 // explore-modal.js - BÚSQUEDA HÍBRIDA CON RESULTADOS PRIORIZADOS
 // Y SUPERPOSICIÓN DE MODALES - VERSIÓN CORREGIDA CON CACHÉ
-// 🔥 MEJORADO: Desactiva tabs durante búsqueda, mantiene scroll y estado
+// 🔥 CORREGIDO: Persistencia de resultados de búsqueda
 
 import { getToken, getCurrentUser, showToast, getAvatar } from './auth.js';
 import { formatNumber } from './utils.js';
@@ -20,6 +20,9 @@ let savedTab = 'trending';
 let lastLoadedData = null;
 let savedScrollPosition = 0;
 let isSearchMode = false;
+let currentUsers = [];
+let currentStories = [];
+let currentMeta = {};
 
 // ============================================================
 // 🔥 CACHÉ EN localStorage PARA USUARIOS POPULARES
@@ -64,7 +67,7 @@ function getFromCache(key) {
     }
 }
 
-function saveExploreState(tab, query = '', results = [], scrollPos = 0, isSearch = false) {
+function saveExploreState(tab, query = '', results = [], scrollPos = 0, isSearch = false, users = [], stories = [], meta = {}) {
     try {
         const state = {
             tab: tab,
@@ -72,6 +75,9 @@ function saveExploreState(tab, query = '', results = [], scrollPos = 0, isSearch
             results: results.slice(0, 50),
             scrollPosition: scrollPos,
             isSearchMode: isSearch,
+            users: users.slice(0, 50),
+            stories: stories.slice(0, 50),
+            meta: meta,
             timestamp: Date.now()
         };
         localStorage.setItem(CACHE_KEYS.STATE, JSON.stringify(state));
@@ -177,6 +183,9 @@ function createExploreModal() {
                 performSmartSearch(query);
             } else if (query.length === 0) {
                 currentSearchResults = [];
+                currentUsers = [];
+                currentStories = [];
+                currentMeta = {};
                 clearSearchMode();
                 loadExploreDataWithCache(currentTab);
             }
@@ -215,6 +224,13 @@ function createExploreModal() {
 
 function clearSearchMode() {
     isSearchMode = false;
+    currentSearchQuery = '';
+    currentSearchResults = [];
+    currentUsers = [];
+    currentStories = [];
+    currentMeta = {};
+    savedScrollPosition = 0;
+    
     const tabs = exploreOverlay.querySelectorAll('.explore-tabs button');
     tabs.forEach(btn => {
         btn.style.opacity = '1';
@@ -223,10 +239,6 @@ function clearSearchMode() {
         const isActive = btn.dataset.tab === currentTab;
         btn.classList.toggle('active', isActive);
     });
-    
-    currentSearchQuery = '';
-    currentSearchResults = [];
-    savedScrollPosition = 0;
 }
 
 // ============================================================
@@ -294,6 +306,11 @@ function openExploreModal(restoreState = true) {
             savedScrollPosition = savedState.scrollPosition || 0;
             isSearchMode = savedState.isSearchMode || false;
             
+            // 🔥 RESTAURAR USUARIOS Y STORIES
+            currentUsers = savedState.users || [];
+            currentStories = savedState.stories || [];
+            currentMeta = savedState.meta || {};
+            
             const tabs = exploreOverlay.querySelectorAll('.explore-tabs button');
             tabs.forEach(btn => {
                 if (isSearchMode) {
@@ -315,17 +332,29 @@ function openExploreModal(restoreState = true) {
                 searchInput.value = savedState.query || '';
             }
             
-            if (savedState.results && savedState.results.length > 0 && savedState.query) {
-                currentSearchResults = savedState.results;
-                if (!isSearchMode) activateSearchMode();
-                renderSearchResults(savedState.query, savedState.results, [], {});
+            // 🔥 SI HAY RESULTADOS DE BÚSQUEDA, MOSTRARLOS
+            if (isSearchMode && savedState.query && (savedState.results?.length > 0 || savedState.users?.length > 0)) {
+                currentSearchResults = savedState.results || [];
                 
+                // 🔥 COMBINAR USUARIOS Y STORIES PARA RENDERIZAR
+                const users = savedState.users || [];
+                const stories = savedState.stories || [];
+                const meta = savedState.meta || {};
+                
+                if (users.length > 0 || stories.length > 0) {
+                    renderSearchResults(savedState.query, stories, users, meta);
+                } else if (savedState.results && savedState.results.length > 0) {
+                    // Fallback: usar results si no hay users/stories separados
+                    renderSearchResults(savedState.query, savedState.results, [], {});
+                }
+                
+                // 🔥 RESTAURAR SCROLL
                 setTimeout(() => {
                     const content = document.getElementById('exploreContent');
                     if (content && savedState.scrollPosition) {
                         content.scrollTop = savedState.scrollPosition;
                     }
-                }, 100);
+                }, 150);
                 
                 isOpen = true;
                 exploreOverlay.classList.add('active');
@@ -345,6 +374,9 @@ function openExploreModal(restoreState = true) {
     currentTab = tabToLoad;
     currentSearchResults = [];
     currentSearchQuery = '';
+    currentUsers = [];
+    currentStories = [];
+    currentMeta = {};
     searchInProgress = false;
     savedScrollPosition = 0;
     isSearchMode = false;
@@ -387,6 +419,9 @@ function showExploreModal() {
         savedTab = tabToShow;
         savedScrollPosition = savedState.scrollPosition || 0;
         isSearchMode = savedState.isSearchMode || false;
+        currentUsers = savedState.users || [];
+        currentStories = savedState.stories || [];
+        currentMeta = savedState.meta || {};
         
         const tabs = exploreOverlay.querySelectorAll('.explore-tabs button');
         tabs.forEach(btn => {
@@ -409,18 +444,26 @@ function showExploreModal() {
             searchInput.value = savedState.query || '';
         }
         
-        if (savedState.results && savedState.results.length > 0 && savedState.query) {
-            currentSearchResults = savedState.results;
+        if (isSearchMode && savedState.query && (savedState.results?.length > 0 || savedState.users?.length > 0)) {
+            currentSearchResults = savedState.results || [];
             currentSearchQuery = savedState.query;
-            if (!isSearchMode) activateSearchMode();
-            renderSearchResults(savedState.query, savedState.results, [], {});
+            
+            const users = savedState.users || [];
+            const stories = savedState.stories || [];
+            const meta = savedState.meta || {};
+            
+            if (users.length > 0 || stories.length > 0) {
+                renderSearchResults(savedState.query, stories, users, meta);
+            } else if (savedState.results && savedState.results.length > 0) {
+                renderSearchResults(savedState.query, savedState.results, [], {});
+            }
             
             setTimeout(() => {
                 const content = document.getElementById('exploreContent');
                 if (content && savedState.scrollPosition) {
                     content.scrollTop = savedState.scrollPosition;
                 }
-            }, 100);
+            }, 150);
         } else {
             const cacheKey = `explore_${tabToShow}_data`;
             const cachedData = getFromCache(cacheKey);
@@ -452,11 +495,23 @@ function closeExploreModal() {
         const content = document.getElementById('exploreContent');
         const scrollPos = content ? content.scrollTop : 0;
         
-        saveExploreState(currentTab, query, currentSearchResults, scrollPos, isSearchMode);
+        // 🔥 GUARDAR ESTADO COMPLETO CON USUARIOS Y STORIES
+        saveExploreState(
+            currentTab, 
+            query, 
+            currentSearchResults, 
+            scrollPos, 
+            isSearchMode,
+            currentUsers,
+            currentStories,
+            currentMeta
+        );
         console.log('💾 Estado guardado:', { 
             tab: currentTab, 
             query, 
             results: currentSearchResults.length,
+            users: currentUsers.length,
+            stories: currentStories.length,
             scrollPosition: scrollPos,
             isSearchMode: isSearchMode
         });
@@ -484,6 +539,9 @@ function switchExploreTab(tab) {
         }
         currentSearchQuery = '';
         currentSearchResults = [];
+        currentUsers = [];
+        currentStories = [];
+        currentMeta = {};
         savedScrollPosition = 0;
         clearSearchMode();
     }
@@ -508,7 +566,7 @@ function switchExploreTab(tab) {
     searchInProgress = false;
     isSearchMode = false;
     
-    saveExploreState(tab, '', [], 0, false);
+    saveExploreState(tab, '', [], 0, false, [], [], {});
     loadExploreDataWithCache(tab);
 }
 
@@ -654,7 +712,7 @@ async function performSmartSearch(query) {
         console.log(`🔍 Resultados de búsqueda desde caché: "${query}"`);
         currentSearchResults = cachedResults;
         renderSearchResults(query, cachedResults, [], {});
-        saveExploreState(currentTab, query, cachedResults, 0, true);
+        saveExploreState(currentTab, query, cachedResults, 0, true, [], [], {});
         return;
     }
     
@@ -720,10 +778,15 @@ async function performSmartSearch(query) {
             return;
         }
 
+        // 🔥 GUARDAR USUARIOS Y STORIES POR SEPARADO
+        currentUsers = users;
+        currentStories = stories;
+        currentMeta = meta;
+        
         const combinedResults = [...stories, ...users.map(u => ({ ...u, type: 'user' }))];
         currentSearchResults = combinedResults;
         saveToCache(cacheKey, combinedResults);
-        saveExploreState(currentTab, query, combinedResults, 0, true);
+        saveExploreState(currentTab, query, combinedResults, 0, true, users, stories, meta);
         
         renderSearchResults(query, stories, users, meta);
 
@@ -1001,26 +1064,55 @@ function renderSearchResults(query, stories, users, meta) {
     const currentUser = getCurrentUser();
     const currentUserId = currentUser?.id;
 
-    const filteredStories = stories.filter(s => s.userId !== currentUserId);
+    // 🔥 FILTRAR STORIES VÁLIDAS
+    const validStories = (stories || []).filter(s => {
+        if (!s || !s.id) return false;
+        if (s.userId === currentUserId) return false;
+        return true;
+    });
+
+    // 🔥 FILTRAR USUARIOS VÁLIDOS
+    const validUsers = (users || []).filter(u => {
+        if (!u || !u.id) return false;
+        if (u.id === currentUserId) return false;
+        return u.privacy === 'public' || u.privacy === undefined;
+    });
+
+    // Si no hay resultados válidos, mostrar mensaje
+    if (validStories.length === 0 && validUsers.length === 0) {
+        content.innerHTML = `
+            <div class="explore-empty">
+                <i class="fas fa-search"></i>
+                <h3>No se encontraron resultados para "${query}"</h3>
+                <p>Prueba con otras palabras clave</p>
+                <div style="margin-top:16px;display:flex;gap:8px;flex-wrap:wrap;justify-content:center;">
+                    ${getRelatedSuggestions(query).map(s => `
+                        <span class="trending-hashtag" onclick="window.performSmartSearch('${s}')">#${s}</span>
+                    `).join('')}
+                </div>
+            </div>
+        `;
+        return;
+    }
 
     let html = `
         <div class="explore-section">
             <div class="section-title">
                 🔍 Resultados para "${query}"
                 <span style="font-size:10px;color:rgba(255,255,255,0.1);margin-left:8px;">
-                    ${filteredStories.length} historias · ${users.length} usuarios públicos
+                    ${validStories.length} historias · ${validUsers.length} usuarios públicos
                 </span>
             </div>
     `;
 
-    if (users.length > 0) {
+    if (validUsers.length > 0) {
         html += `
             <div style="margin-bottom:16px;">
                 <div style="font-size:12px;color:rgba(255,255,255,0.3);margin-bottom:8px;font-weight:600;letter-spacing:0.5px;border-bottom:1px solid rgba(255,255,255,0.04);padding-bottom:6px;">
-                    👥 Usuarios públicos (${users.length})
+                    👥 Usuarios públicos (${validUsers.length})
                 </div>
                 <div class="explore-users">
-                    ${users.map(user => {
+                    ${validUsers.map(user => {
                         const isOwn = currentUserId === user.id;
                         const isFollowing = user.isFollowing || false;
                         return `
@@ -1046,15 +1138,15 @@ function renderSearchResults(query, stories, users, meta) {
         `;
     }
 
-    if (filteredStories.length > 0) {
+    if (validStories.length > 0) {
         html += `
             <div>
                 <div style="font-size:12px;color:rgba(255,255,255,0.3);margin-bottom:8px;font-weight:600;letter-spacing:0.5px;border-bottom:1px solid rgba(255,255,255,0.04);padding-bottom:6px;">
-                    📸 Historias relacionadas (${filteredStories.length})
+                    📸 Historias relacionadas (${validStories.length})
                     ${meta?.algorithm ? `<span style="font-size:9px;color:rgba(255,255,255,0.08);margin-left:8px;font-weight:400;">${meta.algorithm}</span>` : ''}
                 </div>
                 <div class="explore-grid">
-                    ${filteredStories.slice(0, 30).map(story => {
+                    ${validStories.slice(0, 30).map(story => {
                         let mediaContent = '';
                         const mediaUrl = story.mediaUrl;
                         
@@ -1128,19 +1220,6 @@ function renderSearchResults(query, stories, users, meta) {
         `;
     }
 
-    if (filteredStories.length < 5 && users.length < 3) {
-        html += `
-            <div style="margin-top:16px;padding:12px;background:rgba(255,255,255,0.02);border-radius:12px;border:1px solid rgba(255,255,255,0.03);">
-                <div style="font-size:11px;color:rgba(255,255,255,0.2);margin-bottom:8px;">💡 Prueba con estas palabras clave:</div>
-                <div style="display:flex;gap:8px;flex-wrap:wrap;">
-                    ${getRelatedSuggestions(query).map(s => `
-                        <span class="trending-hashtag" onclick="window.performSmartSearch('${s}')" style="font-size:11px;padding:4px 12px;background:rgba(255,255,255,0.03);border-radius:16px;cursor:pointer;color:rgba(255,255,255,0.2);">#${s}</span>
-                    `).join('')}
-                </div>
-            </div>
-        `;
-    }
-
     html += `</div>`;
     content.innerHTML = html;
 }
@@ -1209,11 +1288,23 @@ window.openProfileFromExplore = (userId) => {
         const content = document.getElementById('exploreContent');
         const scrollPos = content ? content.scrollTop : 0;
         
-        saveExploreState(currentTab, query, currentSearchResults, scrollPos, isSearchMode);
+        // 🔥 GUARDAR ESTADO COMPLETO ANTES DE ABRIR PERFIL
+        saveExploreState(
+            currentTab, 
+            query, 
+            currentSearchResults, 
+            scrollPos, 
+            isSearchMode,
+            currentUsers,
+            currentStories,
+            currentMeta
+        );
         console.log('💾 Estado guardado antes de abrir perfil:', { 
             tab: currentTab, 
             query, 
             results: currentSearchResults.length,
+            users: currentUsers.length,
+            stories: currentStories.length,
             scrollPosition: scrollPos,
             isSearchMode: isSearchMode
         });
