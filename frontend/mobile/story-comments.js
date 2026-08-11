@@ -695,6 +695,95 @@ export function addCommentToUI(comment) {
 }
 
 // ============================================================
+// 🔥 AÑADIR RESPUESTA A LA UI (INSERCIÓN LOCAL - SIN RE-RENDER)
+// ============================================================
+
+export function addReplyToUI(storyId, parentCommentId, reply) {
+    const commentsList = document.getElementById('commentsList');
+    if (!commentsList) return false;
+
+    const repliesContainer = document.getElementById(`replies-${parentCommentId}`);
+    if (!repliesContainer) {
+        console.warn('⚠️ Contenedor de respuestas no encontrado para:', parentCommentId);
+        return false;
+    }
+
+    const existingReply = repliesContainer.querySelector(`[data-reply-id="${reply.id}"]`);
+    if (existingReply) {
+        console.log('⚠️ Respuesta ya existe, omitiendo duplicado');
+        return true;
+    }
+
+    const isTemp = reply._isTemp || false;
+    const currentUser = getCurrentUser();
+    const userAvatar = currentUser?.avatar || getAvatar(currentUser?.fullName || 'U');
+
+    const cachedComments = getCachedComments(storyId);
+    const context = getReplyContext(reply, currentUser?.id, parentCommentId, cachedComments || []);
+
+    const div = document.createElement('div');
+    div.className = 'comment-item reply-item';
+    div.setAttribute('data-reply-id', reply.id);
+    if (isTemp) {
+        div.setAttribute('data-temp-id', reply.id);
+        div.style.opacity = '0.6';
+        div.style.borderLeft = '2px solid rgba(192,132,252,0.3)';
+    }
+
+    let contextHtml = '';
+    if (context.text) {
+        const color = context.isTarget ? 'rgba(192,132,252,0.7)' : context.color;
+        contextHtml = `
+            <div class="reply-context" style="font-size:11px; color:${color}; margin:2px 0 4px 0;">
+                <i class="fas fa-reply" style="font-size:8px; margin-right:4px;"></i>
+                <span>${context.text}</span>
+            </div>
+        `;
+    }
+
+    div.innerHTML = `
+        <img class="avatar" src="${reply.avatar || userAvatar}" 
+             alt="${reply.fullName}" 
+             style="width:32px;height:32px;border-radius:50%;object-fit:cover;flex-shrink:0;margin-right:10px;"
+             onclick="window.goToProfileUser('${reply.userId}')" />
+        <div class="comment-body" style="flex:1;min-width:0;">
+            <div class="comment-user" onclick="window.goToProfileUser('${reply.userId}')" style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-size:13px;">
+                <span style="font-weight:600;color:#fff;">${escapeHtml(reply.fullName)}</span>
+                <span style="font-size:11px;color:rgba(255,255,255,0.2);">@${escapeHtml(reply.username)}</span>
+                <span style="font-size:10px;color:rgba(255,255,255,0.15);">${formatDate(reply.createdAt)}</span>
+                ${isTemp ? '<span style="font-size:10px;color:rgba(192,132,252,0.5);margin-left:8px;">⏳ Enviando...</span>' : ''}
+            </div>
+            ${contextHtml}
+            <div class="comment-text" style="font-size:15px; line-height:1.5; color:rgba(255,255,255,0.85);">${escapeHtml(reply.content)}</div>
+            <div class="comment-meta" style="display:flex;align-items:center;gap:12px;margin-top:4px;flex-wrap:wrap;">
+                <button class="btn-like-comment" 
+                        data-comment-id="${reply.id}"
+                        style="background:transparent;border:none;color:rgba(255,255,255,0.3);font-size:11px;cursor:pointer;display:flex;align-items:center;gap:4px;padding:2px 6px;border-radius:4px;transition:all 0.2s;">
+                    <i class="fas fa-heart" style="font-size:10px;"></i> <span class="like-count">0</span>
+                </button>
+                <button class="btn-reply-comment" data-comment-id="${reply.id}"
+                        style="background:transparent;border:none;color:rgba(255,255,255,0.2);font-size:11px;cursor:pointer;display:flex;align-items:center;gap:4px;padding:2px 6px;border-radius:4px;">
+                    <i class="fas fa-reply" style="font-size:9px;"></i> Responder
+                </button>
+            </div>
+            <div class="reply-input-container" id="reply-input-${reply.id}" style="display:none;margin-top:6px;">
+                <input type="text" class="reply-input" id="replyInput-${reply.id}" 
+                       placeholder="Escribe una respuesta..." maxlength="500"
+                       style="flex:1;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);border-radius:12px;padding:6px 12px;font-size:13px;color:#fff;outline:none;" />
+                <button class="reply-send-btn" onclick="window.handleReplySubmit('${storyId}', '${reply.id}')"
+                        style="background:rgba(192,132,252,0.15);border:1px solid rgba(192,132,252,0.2);border-radius:12px;color:#c084fc;padding:6px 14px;font-size:12px;cursor:pointer;transition:all 0.2s;">
+                    <i class="fas fa-paper-plane"></i>
+                </button>
+            </div>
+        </div>
+    `;
+
+    repliesContainer.appendChild(div);
+    console.log('✅ Respuesta añadida a la UI:', reply.id);
+    return true;
+}
+
+// ============================================================
 // 🔥 REEMPLAZAR COMENTARIO TEMPORAL CON REAL
 // ============================================================
 
@@ -742,6 +831,83 @@ export function replaceTempComment(storyId, tempId, realComment) {
 
     tempElement.replaceWith(div);
     console.log('✅ Comentario temporal reemplazado por real:', tempId, '→', realComment.id);
+    return true;
+}
+
+// ============================================================
+// 🔥 REEMPLAZAR RESPUESTA TEMPORAL CON REAL
+// ============================================================
+
+export function replaceTempReply(storyId, tempId, realReply) {
+    const commentsList = document.getElementById('commentsList');
+    if (!commentsList) return false;
+
+    const tempElement = commentsList.querySelector(`[data-temp-id="${tempId}"]`);
+    if (!tempElement) {
+        console.warn('⚠️ Respuesta temporal no encontrada:', tempId);
+        return false;
+    }
+
+    const currentUser = getCurrentUser();
+    const userAvatar = currentUser?.avatar || getAvatar(currentUser?.fullName || 'U');
+
+    const parentCommentId = tempElement.closest('.replies')?.id?.replace('replies-', '') || null;
+    const cachedComments = getCachedComments(storyId);
+    const context = getReplyContext(realReply, currentUser?.id, parentCommentId, cachedComments || []);
+
+    const div = document.createElement('div');
+    div.className = 'comment-item reply-item';
+    div.setAttribute('data-reply-id', realReply.id);
+
+    let contextHtml = '';
+    if (context.text) {
+        const color = context.isTarget ? 'rgba(192,132,252,0.7)' : context.color;
+        contextHtml = `
+            <div class="reply-context" style="font-size:11px; color:${color}; margin:2px 0 4px 0;">
+                <i class="fas fa-reply" style="font-size:8px; margin-right:4px;"></i>
+                <span>${context.text}</span>
+            </div>
+        `;
+    }
+
+    div.innerHTML = `
+        <img class="avatar" src="${realReply.avatar || userAvatar}" 
+             alt="${realReply.fullName}" 
+             style="width:32px;height:32px;border-radius:50%;object-fit:cover;flex-shrink:0;margin-right:10px;"
+             onclick="window.goToProfileUser('${realReply.userId}')" />
+        <div class="comment-body" style="flex:1;min-width:0;">
+            <div class="comment-user" onclick="window.goToProfileUser('${realReply.userId}')" style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-size:13px;">
+                <span style="font-weight:600;color:#fff;">${escapeHtml(realReply.fullName)}</span>
+                <span style="font-size:11px;color:rgba(255,255,255,0.2);">@${escapeHtml(realReply.username)}</span>
+                <span style="font-size:10px;color:rgba(255,255,255,0.15);">${formatDate(realReply.createdAt)}</span>
+            </div>
+            ${contextHtml}
+            <div class="comment-text" style="font-size:15px; line-height:1.5; color:rgba(255,255,255,0.85);">${escapeHtml(realReply.content)}</div>
+            <div class="comment-meta" style="display:flex;align-items:center;gap:12px;margin-top:4px;flex-wrap:wrap;">
+                <button class="btn-like-comment" 
+                        data-comment-id="${realReply.id}"
+                        style="background:transparent;border:none;color:rgba(255,255,255,0.3);font-size:11px;cursor:pointer;display:flex;align-items:center;gap:4px;padding:2px 6px;border-radius:4px;transition:all 0.2s;">
+                    <i class="fas fa-heart" style="font-size:10px;"></i> <span class="like-count">0</span>
+                </button>
+                <button class="btn-reply-comment" data-comment-id="${realReply.id}"
+                        style="background:transparent;border:none;color:rgba(255,255,255,0.2);font-size:11px;cursor:pointer;display:flex;align-items:center;gap:4px;padding:2px 6px;border-radius:4px;">
+                    <i class="fas fa-reply" style="font-size:9px;"></i> Responder
+                </button>
+            </div>
+            <div class="reply-input-container" id="reply-input-${realReply.id}" style="display:none;margin-top:6px;">
+                <input type="text" class="reply-input" id="replyInput-${realReply.id}" 
+                       placeholder="Escribe una respuesta..." maxlength="500"
+                       style="flex:1;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);border-radius:12px;padding:6px 12px;font-size:13px;color:#fff;outline:none;" />
+                <button class="reply-send-btn" onclick="window.handleReplySubmit('${storyId}', '${realReply.id}')"
+                        style="background:rgba(192,132,252,0.15);border:1px solid rgba(192,132,252,0.2);border-radius:12px;color:#c084fc;padding:6px 14px;font-size:12px;cursor:pointer;transition:all 0.2s;">
+                    <i class="fas fa-paper-plane"></i>
+                </button>
+            </div>
+        </div>
+    `;
+
+    tempElement.replaceWith(div);
+    console.log('✅ Respuesta temporal reemplazada por real:', tempId, '→', realReply.id);
     return true;
 }
 
@@ -962,8 +1128,21 @@ window.toggleRepliesVisibility = function(commentId) {
     }
 };
 
-// En story-comments.js, al final del archivo, en la sección de exportaciones
+// ============================================================
+// EXPORTACIONES
+// ============================================================
+
 export { 
     repliesVisibility,
-    addReplyToUI  // <-- AGREGAR ESTA LÍNEA
+    addReplyToUI,
+    getTotalCommentsCount,
+    addCommentToCache,
+    getCachedComments,
+    addCommentToUI,
+    replaceTempComment,
+    replaceTempReply,
+    updateCommentCounter,
+    renderComments,
+    initComments,
+    loadComments
 };
