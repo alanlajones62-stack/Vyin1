@@ -1,6 +1,7 @@
 // ============================================================
 // story-modal.js - Modal para ver historias con navegación 
 // (VERSIÓN COMPLETA - DELEGA COMENTARIOS A story-comments.js)
+// 🔥 CORREGIDO: Input de comentarios visible en móviles
 // ============================================================
 
 import {
@@ -42,6 +43,21 @@ async function openStoryModal(storyId, storiesList = null, fromProfile = false, 
         console.log('📱 [STORY-MODAL] Cerrando modal anterior...');
         closeStoryModal();
         await new Promise(resolve => setTimeout(resolve, 100));
+    }
+
+    // 🔥🔥🔥 FORZAR RECREACIÓN DEL MODAL EN MÓVILES
+    const isMobile = window.innerWidth < 768;
+    if (isMobile) {
+        console.log('📱 [STORY-MODAL] Modo móvil detectado, recreando modal...');
+        const existingOverlay = document.getElementById('storyModalOverlay');
+        if (existingOverlay) {
+            // Verificar si el input existe
+            const hasInput = existingOverlay.querySelector('#commentInput');
+            if (!hasInput) {
+                console.warn('⚠️ [STORY-MODAL] Falta el input en móvil, eliminando overlay...');
+                existingOverlay.remove();
+            }
+        }
     }
 
     if (fromProfile && profileUserId) {
@@ -176,9 +192,18 @@ async function navigateStory(direction) {
 function createModalHTML() {
     console.log('📱 [STORY-MODAL] createModalHTML() ejecutado');
     
+    // 🔥 SI EXISTE EL OVERLAY PERO ESTÁ INCOMPLETO, ELIMINARLO Y RECREAR
     if (document.getElementById('storyModalOverlay')) {
-        console.log('📱 [STORY-MODAL] El overlay ya existe');
-        return;
+        const existing = document.getElementById('storyModalOverlay');
+        // Verificar si el input existe
+        const hasInput = existing.querySelector('#commentInput');
+        if (!hasInput) {
+            console.warn('⚠️ [STORY-MODAL] El overlay existe pero falta el input, recreando...');
+            existing.remove();
+        } else {
+            console.log('📱 [STORY-MODAL] El overlay ya existe y está completo');
+            return;
+        }
     }
 
     const html = `
@@ -262,7 +287,8 @@ function createModalHTML() {
                                 <span>Cargando comentarios...</span>
                             </div>
                         </div>
-                        <div class="comment-input-wrapper">
+                        <!-- 🔥 INPUT PRINCIPAL DE COMENTARIOS -->
+                        <div class="comment-input-wrapper" id="commentInputWrapper">
                             <input type="text" id="commentInput" placeholder="Escribe un comentario..." maxlength="500" />
                             <button id="sendCommentBtn">Enviar</button>
                         </div>
@@ -276,6 +302,43 @@ function createModalHTML() {
     div.innerHTML = html;
     document.body.appendChild(div.firstElementChild);
     console.log('📱 [STORY-MODAL] HTML creado e insertado');
+
+    // 🔥 VERIFICAR QUE EL INPUT EXISTE
+    setTimeout(() => {
+        const input = document.getElementById('commentInput');
+        const sendBtn = document.getElementById('sendCommentBtn');
+        const wrapper = document.getElementById('commentInputWrapper');
+        
+        console.log('🔍 Verificando input de comentarios:');
+        console.log('  - Input:', input);
+        console.log('  - SendBtn:', sendBtn);
+        console.log('  - Wrapper:', wrapper);
+        
+        if (!input || !sendBtn) {
+            console.error('❌ [STORY-MODAL] ¡Falta el input de comentarios!');
+            // 🔥 RECUPERAR MANUALMENTE
+            const commentsSection = document.querySelector('.comments-section');
+            if (commentsSection) {
+                const wrapperDiv = document.createElement('div');
+                wrapperDiv.className = 'comment-input-wrapper';
+                wrapperDiv.id = 'commentInputWrapper';
+                wrapperDiv.innerHTML = `
+                    <input type="text" id="commentInput" placeholder="Escribe un comentario..." maxlength="500" />
+                    <button id="sendCommentBtn">Enviar</button>
+                `;
+                commentsSection.appendChild(wrapperDiv);
+                console.log('✅ Input recuperado manualmente');
+            }
+        } else {
+            console.log('✅ [STORY-MODAL] Input de comentarios encontrado');
+            // Forzar visibilidad en móviles
+            if (wrapper) {
+                wrapper.style.display = 'flex !important';
+                wrapper.style.visibility = 'visible !important';
+                wrapper.style.opacity = '1 !important';
+            }
+        }
+    }, 50);
 
     document.addEventListener('keydown', (e) => {
         if (e.key === 'Escape' && isModalOpen) {
@@ -356,9 +419,6 @@ function setupModalEvents() {
         if (!currentStoryId) return;
         await deleteStory(currentStoryId);
     });
-
-    // 🔥 LOS COMENTARIOS SON MANEJADOS POR story-comments.js
-    // NO agregar eventos de comentarios aquí
 
     let touchStartX = 0;
     let touchStartY = 0;
@@ -847,7 +907,9 @@ async function loadStoryData(storyId, isNavigation = false) {
         updateModalUI(currentStoryData);
         updateProgress();
         
+        // 🔥 PASAR highlightCommentId A initComments
         const highlightCommentId = window._activityCommentId || null;
+        console.log('📌 Highlight comment ID:', highlightCommentId);
         await initComments(storyId, 'commentsList', highlightCommentId);
         
         await registerView(storyId);
