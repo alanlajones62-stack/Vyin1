@@ -77,6 +77,39 @@ function getParentChain(comments, commentId, chain = []) {
 }
 
 // ============================================================
+// 🔥 CONTAR TODOS LOS COMENTARIOS (INCLUYENDO RESPUESTAS ANIDADAS)
+// ============================================================
+
+export function getTotalCommentsCount(storyId) {
+    const cached = commentsCache.get(storyId);
+    if (!cached) return 0;
+    
+    const comments = cached.comments;
+    let total = 0;
+    
+    // Función recursiva para contar comentarios y respuestas
+    function countComments(items) {
+        if (!items || items.length === 0) return;
+        
+        for (const item of items) {
+            total++; // Contar este comentario/respuesta
+            if (item.replies && item.replies.length > 0) {
+                countComments(item.replies); // Contar respuestas anidadas
+            }
+        }
+    }
+    
+    countComments(comments);
+    return total;
+}
+
+// ============================================================
+// EXPORTAR getTotalCommentsCount GLOBALMENTE
+// ============================================================
+
+window.getTotalCommentsCount = getTotalCommentsCount;
+
+// ============================================================
 // CARGAR COMENTARIOS (CON CACHÉ CON EXPIRACIÓN)
 // ============================================================
 
@@ -86,7 +119,6 @@ export async function loadComments(storyId, forceReload = false) {
     const token = getToken();
     if (!token) return [];
 
-    // ✅ VERIFICAR CACHÉ CON EXPIRACIÓN
     if (forceReload && commentsCache.has(storyId)) {
         console.log('🔄 [COMMENTS] Forzando recarga, eliminando caché');
         commentsCache.delete(storyId);
@@ -94,7 +126,6 @@ export async function loadComments(storyId, forceReload = false) {
 
     if (commentsCache.has(storyId)) {
         const cached = commentsCache.get(storyId);
-        // ✅ VERIFICAR SI LA CACHÉ NO HA EXPIRADO
         if (cached && cached.timestamp && (Date.now() - cached.timestamp < CACHE_TTL)) {
             console.log(`📦 [COMMENTS] Usando caché (${Math.round((Date.now() - cached.timestamp) / 1000)}s)`);
             return cached.comments;
@@ -114,10 +145,8 @@ export async function loadComments(storyId, forceReload = false) {
 
         const comments = await res.json();
         
-        // Ordenar: nuevos primero
         comments.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
         
-        // Ordenar respuestas: viejas primero (recursivo)
         const sortReplies = (items) => {
             if (!items) return;
             items.sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
@@ -134,16 +163,14 @@ export async function loadComments(storyId, forceReload = false) {
             }
         });
         
-        // ✅ GUARDAR CON TIMESTAMP
         commentsCache.set(storyId, {
             comments: comments,
             timestamp: Date.now()
         });
         
-        // Inicializar visibilidad de respuestas (ocultas por defecto)
         comments.forEach(comment => {
             if (comment.replies && comment.replies.length > 0) {
-                repliesVisibility.set(comment.id, false); // Oculto por defecto
+                repliesVisibility.set(comment.id, false);
             }
         });
         
@@ -157,7 +184,7 @@ export async function loadComments(storyId, forceReload = false) {
                         commentLikes.set(reply.id, new Set(reply.likes));
                     }
                     if (reply.replies && reply.replies.length > 0) {
-                        repliesVisibility.set(reply.id, false); // Oculto por defecto
+                        repliesVisibility.set(reply.id, false);
                     }
                 });
             }
@@ -212,7 +239,6 @@ export async function addComment(storyId, content, parentCommentId = null) {
 
         const newComment = await res.json();
         
-        // ACTUALIZAR CACHÉ LOCAL
         if (commentsCache.has(storyId)) {
             const cached = commentsCache.get(storyId);
             const comments = cached.comments;
@@ -226,7 +252,6 @@ export async function addComment(storyId, content, parentCommentId = null) {
                     repliesVisibility.set(parentCommentId, true);
                 }
             } else {
-                // ✅ INSERTAR AL PRINCIPIO (más reciente)
                 comments.unshift(newComment);
             }
             commentsCache.set(storyId, {
@@ -234,9 +259,6 @@ export async function addComment(storyId, content, parentCommentId = null) {
                 timestamp: Date.now()
             });
         }
-
-        // ✅ NO LLAMAR A updateCommentsUI aquí para evitar duplicados
-        // La UI se actualiza desde story-modal.js con addCommentToUI
 
         const socket = window.socket;
         if (socket) {
@@ -549,7 +571,6 @@ function renderFlatReplies(replies, storyId, currentUserId, parentCommentId, all
     
     if (flatReplies.length === 0) return '';
 
-    // Si no está expandido, no mostrar nada
     if (!isExpanded) return '';
 
     let html = `<div class="replies" id="replies-${parentCommentId}" style="margin-left: 40px; margin-top: 8px; display: flex; flex-direction: column; gap: 8px; border-left: 2px solid rgba(192,132,252,0.08); padding-left: 12px;">`;
@@ -688,7 +709,7 @@ window.handleReplySubmit = async function(storyId, parentCommentId) {
 };
 
 // ============================================================
-// 🔥 TOGGLE VISIBILIDAD DE RESPUESTAS (CORREGIDO)
+// TOGGLE VISIBILIDAD DE RESPUESTAS
 // ============================================================
 
 window.toggleRepliesVisibility = function(commentId) {
@@ -696,7 +717,6 @@ window.toggleRepliesVisibility = function(commentId) {
     const newState = !currentState;
     repliesVisibility.set(commentId, newState);
     
-    // Actualizar la UI
     const container = document.getElementById('commentsList');
     if (container) {
         const storyId = container.dataset.storyId || window._currentStoryId;
@@ -716,11 +736,9 @@ export async function initComments(storyId, containerId = 'commentsList', highli
     const container = document.getElementById(containerId);
     if (!container) return;
     
-    // Guardar storyId en el container para referencia
     container.dataset.storyId = storyId;
     window._currentStoryId = storyId;
 
-    // ✅ SI forceReload ES false, INTENTAR USAR CACHÉ
     if (!forceReload && commentsCache.has(storyId)) {
         const cached = commentsCache.get(storyId);
         if (cached && cached.timestamp && (Date.now() - cached.timestamp < CACHE_TTL)) {
@@ -732,32 +750,25 @@ export async function initComments(storyId, containerId = 'commentsList', highli
         }
     }
 
-    // ✅ FORZAR RECARGA COMPLETA DESDE EL SERVIDOR
     console.log('🌐 [COMMENTS] Recargando comentarios desde servidor (forceReload=true)');
     const comments = await loadComments(storyId, true);
     const currentUser = getCurrentUser();
     
-    // 🔥 SI HAY UN COMENTARIO DESTACADO, EXPANDIR LA CADENA DE PADRES
     if (highlightCommentId) {
-        // Buscar la cadena de padres para expandir todas las respuestas necesarias
         const parentChain = getParentChain(comments, highlightCommentId);
         if (parentChain) {
-            // Expandir todos los padres
             parentChain.forEach(parentId => {
                 repliesVisibility.set(parentId, true);
             });
-            // También expandir el comentario padre directo
             const parentComment = findParentComment(comments, highlightCommentId);
             if (parentComment) {
                 repliesVisibility.set(parentComment.id, true);
             }
-            // Expandir el comentario destacado si tiene respuestas
             const highlightedComment = findCommentById(comments, highlightCommentId);
             if (highlightedComment && highlightedComment.replies && highlightedComment.replies.length > 0) {
                 repliesVisibility.set(highlightCommentId, true);
             }
         } else {
-            // Si no tiene padres (es un comentario principal), solo expandirlo si tiene respuestas
             const comment = findCommentById(comments, highlightCommentId);
             if (comment && comment.replies && comment.replies.length > 0) {
                 repliesVisibility.set(highlightCommentId, true);
@@ -779,8 +790,6 @@ export async function initComments(storyId, containerId = 'commentsList', highli
             const newComment = await addComment(storyId, content);
             if (newComment) {
                 input.value = '';
-                // ✅ Solo actualizar la UI si el comentario no se añadió desde otro lugar
-                // La UI se actualiza desde story-modal.js con addCommentToUI
             }
             sendBtn.disabled = false;
         };
@@ -796,9 +805,7 @@ export async function initComments(storyId, containerId = 'commentsList', highli
     
     if (highlightCommentId) {
         setTimeout(() => {
-            // Buscar en comentarios principales
             let highlighted = container.querySelector(`.comment-item[data-comment-id="${highlightCommentId}"]`);
-            // Si no está en comentarios principales, buscar en respuestas
             if (!highlighted) {
                 highlighted = container.querySelector(`.comment-item[data-reply-id="${highlightCommentId}"]`);
             }
@@ -822,20 +829,17 @@ export async function initComments(storyId, containerId = 'commentsList', highli
 export function expandRepliesForComment(commentId) {
     if (!commentId) return;
     
-    // Buscar el comentario en el caché
     let found = false;
     for (const [storyId, cached] of commentsCache) {
         const comments = cached.comments;
         const comment = findCommentById(comments, commentId);
         if (comment) {
-            // Encontrar la cadena de padres
             const parentChain = getParentChain(comments, commentId);
             if (parentChain) {
                 parentChain.forEach(parentId => {
                     repliesVisibility.set(parentId, true);
                 });
             }
-            // Expandir el comentario si tiene respuestas
             if (comment.replies && comment.replies.length > 0) {
                 repliesVisibility.set(commentId, true);
             }

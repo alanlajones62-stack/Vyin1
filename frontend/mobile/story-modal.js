@@ -9,7 +9,7 @@ import {
 } from './auth.js';
 
 import { formatNumber } from './utils.js';
-import { loadComments, initComments } from './story-comments.js';
+import { loadComments, initComments, getTotalCommentsCount } from './story-comments.js';
 
 const API_URL = window.location.origin;
 let currentStoryId = null;
@@ -19,7 +19,7 @@ let currentStoriesList = [];
 let currentStoryIndex = 0;
 let isNavigating = false;
 let userLanguage = 'es';
-let isFirstLoad = true; // ✅ NUEVO: Control de primera carga
+let isFirstLoad = true;
 
 // Caché de traducciones
 let translationCache = {};
@@ -92,7 +92,6 @@ export async function openStoryModal(storyId, storiesList = null, fromProfile = 
     
     document.body.style.overflow = 'hidden';
 
-    // ✅ FORZAR RECARGA AL ABRIR
     isFirstLoad = true;
     await loadStoryData(storyId);
 }
@@ -166,7 +165,7 @@ export async function navigateStory(direction) {
     
     if (newStory) {
         console.log(`🔄 Navegando a historia ${newIndex + 1}/${currentStoriesList.length}: ${newStory.id}`);
-        isFirstLoad = true; // ✅ FORZAR RECARGA AL NAVEGAR
+        isFirstLoad = true;
         await loadStoryData(newStory.id, true);
     }
     
@@ -322,13 +321,11 @@ function setupModalEvents() {
         }
     });
 
-    // 🔥 BOTÓN DE TRADUCCIÓN
     document.getElementById('modalTranslateBtn')?.addEventListener('click', async () => {
         if (!currentStoryId) return;
         await toggleTranslation();
     });
 
-    // 🔥 ENVÍO DE COMENTARIO
     document.getElementById('sendCommentBtn')?.addEventListener('click', async () => {
         await handleSendComment();
     });
@@ -340,26 +337,42 @@ function setupModalEvents() {
         }
     });
 
-    // ✅ NUEVO: DELEGAR EVENTOS DE LIKE A COMENTARIOS
+    // ✅ EVENTO PARA LIKES DE COMENTARIOS
     document.getElementById('commentsList')?.addEventListener('click', async (e) => {
         const likeBtn = e.target.closest('.btn-like-comment');
         if (likeBtn) {
+            e.preventDefault();
+            e.stopPropagation();
             const commentId = likeBtn.dataset.commentId;
             if (commentId && currentStoryId) {
-                const liked = await window.handleCommentLike(currentStoryId, commentId);
-                if (liked !== false) {
-                    // ✅ RECARGAR COMENTARIOS PARA ACTUALIZAR UI
-                    const highlightCommentId = window._activityCommentId || null;
-                    await initComments(currentStoryId, 'commentsList', highlightCommentId, false);
+                likeBtn.style.pointerEvents = 'none';
+                likeBtn.style.opacity = '0.6';
+                
+                try {
+                    const result = await window.handleCommentLike(currentStoryId, commentId);
+                    if (result !== false) {
+                        // ✅ Actualizar contador de comentarios (no cambia)
+                        // ✅ Actualizar solo el like en la UI
+                        await updateSingleCommentLike(currentStoryId, commentId);
+                    }
+                } catch (error) {
+                    console.error('Error en like:', error);
+                } finally {
+                    setTimeout(() => {
+                        likeBtn.style.pointerEvents = '';
+                        likeBtn.style.opacity = '';
+                    }, 500);
                 }
             }
         }
     });
 
-    // ✅ NUEVO: DELEGAR EVENTOS DE RESPONDER
+    // ✅ EVENTO PARA RESPONDER
     document.getElementById('commentsList')?.addEventListener('click', (e) => {
         const replyBtn = e.target.closest('.btn-reply-comment');
         if (replyBtn) {
+            e.preventDefault();
+            e.stopPropagation();
             const commentId = replyBtn.dataset.commentId;
             if (commentId && currentStoryId) {
                 window.toggleReplyInput(currentStoryId, commentId);
@@ -394,7 +407,43 @@ function setupModalEvents() {
 }
 
 // ============================================================
-// 🔥 ENVIAR COMENTARIO - CORREGIDO (SIN DUPLICADOS)
+// 🔥 ACTUALIZAR LIKE DE UN SOLO COMENTARIO
+// ============================================================
+
+async function updateSingleCommentLike(storyId, commentId) {
+    try {
+        const token = getToken();
+        if (!token) return;
+        
+        const res = await fetch(`${API_URL}/api/stories/${storyId}/comments/${commentId}`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+        
+        if (res.ok) {
+            const comment = await res.json();
+            const commentElement = document.querySelector(`.comment-item[data-comment-id="${commentId}"], .comment-item[data-reply-id="${commentId}"]`);
+            if (commentElement) {
+                const likeBtn = commentElement.querySelector('.btn-like-comment');
+                if (likeBtn) {
+                    const currentUser = getCurrentUser();
+                    const isLiked = comment.likes?.includes(currentUser?.id) || false;
+                    const likeCount = comment.likes?.length || 0;
+                    
+                    likeBtn.classList.toggle('liked', isLiked);
+                    const span = likeBtn.querySelector('span');
+                    if (span) {
+                        span.textContent = formatNumber(likeCount);
+                    }
+                }
+            }
+        }
+    } catch (error) {
+        console.error('Error actualizando like:', error);
+    }
+}
+
+// ============================================================
+// 🔥 ENVIAR COMENTARIO
 // ============================================================
 
 async function handleSendComment() {
@@ -440,10 +489,10 @@ async function handleSendComment() {
         if (res.ok) {
             input.value = '';
             
-            // ✅ 1. Actualizar contador
-            updateCommentCount(1);
+            // ✅ ACTUALIZAR CONTADOR DE COMENTARIOS
+            const totalComments = getTotalCommentsCount(currentStoryId);
+            updateCommentCount(totalComments);
             
-            // ✅ 2. Actualizar datos locales SIN recargar todo
             if (currentStoryData) {
                 if (!currentStoryData.comments) currentStoryData.comments = [];
                 currentStoryData.comments.unshift(data);
@@ -457,7 +506,6 @@ async function handleSendComment() {
                 }
             }
 
-            // ✅ 3. Añadir a la UI SIN recargar todo
             addCommentToUI(data);
             
             showToast('💬 Comentario enviado');
@@ -478,7 +526,7 @@ async function handleSendComment() {
 }
 
 // ============================================================
-// 🔥 ENVIAR RESPUESTA - CORREGIDO (SIN DUPLICADOS)
+// 🔥 ENVIAR RESPUESTA
 // ============================================================
 
 async function handleSendReply(storyId, commentId) {
@@ -523,10 +571,10 @@ async function handleSendReply(storyId, commentId) {
             input.value = '';
             wrapper.style.display = 'none';
 
-            // Actualizar contador
-            updateCommentCount(1);
+            // ✅ ACTUALIZAR CONTADOR DE COMENTARIOS (TOTAL CON RESPUESTAS ANIDADAS)
+            const totalComments = getTotalCommentsCount(storyId);
+            updateCommentCount(totalComments);
 
-            // Añadir respuesta a la UI sin duplicar
             addReplyToUI(commentId, data);
             
             showToast('💬 Respuesta enviada');
@@ -547,14 +595,13 @@ async function handleSendReply(storyId, commentId) {
 }
 
 // ============================================================
-// 🔥 AÑADIR RESPUESTA A LA UI (SIN DUPLICAR)
+// 🔥 AÑADIR RESPUESTA A LA UI
 // ============================================================
 
 function addReplyToUI(parentCommentId, reply) {
     const repliesContainer = document.getElementById(`replies-${parentCommentId}`);
     if (!repliesContainer) return;
 
-    // Verificar si la respuesta ya existe
     const existingReply = repliesContainer.querySelector(`[data-comment-id="${reply.id}"]`);
     if (existingReply) {
         console.log('⚠️ Respuesta ya existe en la UI, omitiendo duplicado');
@@ -601,14 +648,13 @@ function addReplyToUI(parentCommentId, reply) {
 }
 
 // ============================================================
-// 🔥 AÑADIR COMENTARIO A LA UI (SIN DUPLICAR)
+// 🔥 AÑADIR COMENTARIO A LA UI
 // ============================================================
 
 function addCommentToUI(comment) {
     const commentsList = document.getElementById('commentsList');
     if (!commentsList) return;
 
-    // ✅ VERIFICAR SI YA EXISTE ANTES DE AÑADIR
     const existingComment = commentsList.querySelector(`[data-comment-id="${comment.id}"]`);
     if (existingComment) {
         console.log('⚠️ Comentario ya existe en la UI, omitiendo duplicado');
@@ -654,7 +700,6 @@ function addCommentToUI(comment) {
     tempDiv.innerHTML = commentHtml;
     const commentElement = tempDiv.firstElementChild;
     
-    // ✅ INSERTAR AL PRINCIPIO (más reciente primero)
     commentsList.insertBefore(commentElement, commentsList.firstChild);
     
     console.log('✅ Comentario añadido a la UI');
@@ -664,17 +709,15 @@ function addCommentToUI(comment) {
 // 🔥 ACTUALIZAR CONTADOR DE COMENTARIOS
 // ============================================================
 
-function updateCommentCount(increment) {
+function updateCommentCount(total) {
     const commentsEl = document.getElementById('modalComments');
     if (commentsEl) {
-        const current = parseInt(commentsEl.textContent.replace(/[^0-9]/g, '')) || 0;
-        commentsEl.textContent = formatNumber(current + increment);
+        commentsEl.textContent = formatNumber(total);
     }
     
     const commentsCountEl = document.getElementById('commentsCount');
     if (commentsCountEl) {
-        const current = parseInt(commentsCountEl.textContent.replace(/[^0-9]/g, '')) || 0;
-        commentsCountEl.textContent = formatNumber(current + increment);
+        commentsCountEl.textContent = formatNumber(total);
     }
 }
 
@@ -747,7 +790,7 @@ function formatVTTTime(seconds) {
 }
 
 // ============================================================
-// 🔥 ALTERNAR TRADUCCIÓN/ORIGINAL
+// ALTERNAR TRADUCCIÓN
 // ============================================================
 
 async function toggleTranslation() {
@@ -772,7 +815,6 @@ async function toggleTranslation() {
         return;
     }
     
-    // Si ya está traducida, mostrar original
     if (currentStoryData.translated && currentStoryData._originalTextContent) {
         console.log('📝 Mostrando original');
         
@@ -805,7 +847,6 @@ async function toggleTranslation() {
         return;
     }
 
-    // Verificar caché en memoria
     const cacheKey = `${currentStoryId}_${userLanguage}`;
     if (translationCache[cacheKey] && translationCache[cacheKey].translated) {
         console.log('📦 Usando traducción desde caché');
@@ -849,7 +890,6 @@ async function toggleTranslation() {
         return;
     }
 
-    // Si no está en caché, traducir
     if (translateBtn) {
         translateBtn.innerHTML = '<i class="fas fa-spinner fa-pulse"></i> Traduciendo...';
         translateBtn.disabled = true;
@@ -867,8 +907,6 @@ async function toggleTranslation() {
         }
 
         console.log('🌐 Traduciendo texto:', textToTranslate.substring(0, 50) + '...');
-        console.log(`🌐 Al idioma: ${userLanguage}`);
-        console.log(`📝 Idioma del contenido: ${contentLanguage}`);
 
         const res = await fetch(`${API_URL}/api/vyin/translate`, {
             method: 'POST',
@@ -954,7 +992,7 @@ async function toggleTranslation() {
 }
 
 // ============================================================
-// 🔥 ACTUALIZAR SOLO textContent
+// ACTUALIZAR SOLO textContent
 // ============================================================
 
 function updateTextContentOnly(updatedData) {
@@ -979,7 +1017,7 @@ function updateTextContentOnly(updatedData) {
 }
 
 // ============================================================
-// CARGAR DATOS DE LA HISTORIA - CORREGIDO
+// CARGAR DATOS DE LA HISTORIA
 // ============================================================
 
 async function loadStoryData(storyId, isNavigation = false) {
@@ -1001,10 +1039,12 @@ async function loadStoryData(storyId, isNavigation = false) {
                 updateModalUI(currentStoryData);
                 updateProgress();
                 const highlightCommentId = window._activityCommentId || null;
-                // ✅ USAR forceReload CORRECTO
                 const forceReload = isFirstLoad || isNavigation;
                 await initComments(storyId, 'commentsList', highlightCommentId, forceReload);
                 isFirstLoad = false;
+                // ✅ ACTUALIZAR CONTADOR DESPUÉS DE CARGAR COMENTARIOS
+                const totalComments = getTotalCommentsCount(storyId);
+                updateCommentCount(totalComments);
                 return;
             }
             if (currentStoriesList.length > 0) {
@@ -1017,6 +1057,8 @@ async function loadStoryData(storyId, isNavigation = false) {
                     const forceReload = isFirstLoad || isNavigation;
                     await initComments(storyId, 'commentsList', highlightCommentId, forceReload);
                     isFirstLoad = false;
+                    const totalComments = getTotalCommentsCount(storyId);
+                    updateCommentCount(totalComments);
                     return;
                 }
             }
@@ -1041,7 +1083,6 @@ async function loadStoryData(storyId, isNavigation = false) {
         currentStoryData = story;
         currentStoryId = story.id;
 
-        // Verificar si hay traducción en caché
         const cacheKey = `${storyId}_${userLanguage}`;
         if (translationCache[cacheKey] && !story.translated) {
             console.log('📦 Aplicando traducción desde caché');
@@ -1068,10 +1109,13 @@ async function loadStoryData(storyId, isNavigation = false) {
         
         const highlightCommentId = window._activityCommentId || null;
         
-        // ✅ SI ES LA PRIMERA CARGA O NAVEGACIÓN, FORZAR RECARGA
         const forceReload = isFirstLoad || isNavigation;
         await initComments(storyId, 'commentsList', highlightCommentId, forceReload);
         isFirstLoad = false;
+        
+        // ✅ ACTUALIZAR CONTADOR DE COMENTARIOS (TOTAL CON RESPUESTAS ANIDADAS)
+        const totalComments = getTotalCommentsCount(storyId);
+        updateCommentCount(totalComments);
         
         await registerView(storyId);
 
@@ -1101,7 +1145,6 @@ function updateModalUI(story) {
     document.getElementById('modalUserHandle').textContent = `@${user.username || 'usuario'}`;
     window._modalUserId = user.id;
 
-    // Botón de traducción - siempre visible
     const contentLanguage = story.language || story.originalLanguage || 'es';
     const isDifferentLanguage = contentLanguage !== userLanguage;
     const isTranslated = story.translated || false;
