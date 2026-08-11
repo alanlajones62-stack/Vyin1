@@ -16,6 +16,7 @@ const API_URL = window.location.origin;
 let commentsCache = new Map(); // storyId -> { comments, timestamp }
 let commentLikes = new Map(); // commentId -> Set de userIds
 let repliesVisibility = new Map(); // commentId -> boolean (true = visible)
+let activeReplyInputs = new Set(); // 🔥 Seguimiento de inputs activos
 const CACHE_TTL = 5 * 60 * 1000; // 5 minutos de expiración
 
 // ============================================================
@@ -126,6 +127,12 @@ export function addCommentToCache(storyId, comment) {
         cached.unshift(comment);
         commentsCache.set(storyId, {
             comments: cached,
+            timestamp: Date.now()
+        });
+    } else {
+        // Si no hay caché, crear uno nuevo
+        commentsCache.set(storyId, {
+            comments: [comment],
             timestamp: Date.now()
         });
     }
@@ -426,19 +433,16 @@ export async function likeComment(storyId, commentId) {
         const data = await res.json();
 
         if (res.ok) {
-            // 🔥 7. SINCronizar CON EL SERVIDOR
+            // 🔥 7. SINCRONIZAR CON EL SERVIDOR
             const serverLiked = data.liked || false;
             const serverLikesCount = data.likesCount || 0;
             const serverLikes = data.likes || [];
             
-            // Actualizar el Set con los datos del servidor
             const serverLikesSet = new Set(serverLikes);
             commentLikes.set(commentId, serverLikesSet);
             
-            // Actualizar UI con el valor CORRECTO del servidor
             updateCommentLikeUI(commentId, serverLiked, serverLikesCount);
             
-            // Actualizar caché con datos del servidor
             const cached2 = getCachedComments(storyId);
             if (cached2) {
                 const comment2 = findCommentById(cached2, commentId);
@@ -457,17 +461,14 @@ export async function likeComment(storyId, commentId) {
             // 🔥 8. SI FALLA, REVERTIR AL ESTADO ANTERIOR
             console.warn('⚠️ Error en like del servidor, revirtiendo...');
             
-            // Revertir el Set
             if (previousState.likesSet) {
                 commentLikes.set(commentId, previousState.likesSet);
             } else {
                 commentLikes.delete(commentId);
             }
             
-            // Revertir UI
             updateCommentLikeUI(commentId, previousState.isLiked, previousState.likesCount);
             
-            // Revertir caché
             const cached3 = getCachedComments(storyId);
             if (cached3) {
                 const comment3 = findCommentById(cached3, commentId);
@@ -510,23 +511,19 @@ export async function likeComment(storyId, commentId) {
 // ============================================================
 
 function updateCommentLikeUI(commentId, isLiked, likesCount) {
-    // Buscar en todos los elementos (comentarios principales y respuestas)
     const elements = document.querySelectorAll(`.comment-item[data-comment-id="${commentId}"], .comment-item[data-reply-id="${commentId}"]`);
     
     elements.forEach(element => {
         const likeBtn = element.querySelector('.btn-like-comment');
         if (likeBtn) {
-            // Actualizar clase
             likeBtn.classList.toggle('liked', isLiked);
             
-            // Actualizar icono
             const icon = likeBtn.querySelector('i');
             if (icon) {
                 icon.style.color = isLiked ? '#ff6b6b' : '';
             }
             
-            // Actualizar contador
-            const span = likeBtn.querySelector('span');
+            const span = likeBtn.querySelector('.like-count');
             if (span) {
                 span.textContent = formatNumber(likesCount);
             }
@@ -657,9 +654,9 @@ export function renderComments(comments, storyId, currentUserId, container, high
                     <div class="comment-meta">
                         <button class="btn-like-comment ${isLiked ? 'liked' : ''}" 
                                 data-comment-id="${comment.id}">
-                            <i class="fas fa-heart" style="color:${isLiked ? '#ff6b6b' : 'inherit'};"></i> <span>${formatNumber(likesCount)}</span>
+                            <i class="fas fa-heart" style="color:${isLiked ? '#ff6b6b' : 'inherit'};"></i> <span class="like-count">${formatNumber(likesCount)}</span>
                         </button>
-                        <button class="btn-reply-comment" onclick="window.toggleReplyInput('${storyId}', '${comment.id}')">
+                        <button class="btn-reply-comment" data-comment-id="${comment.id}">
                             <i class="fas fa-reply"></i> Responder
                         </button>
                         ${isOwn ? `
@@ -746,9 +743,9 @@ function renderFlatReplies(replies, storyId, currentUserId, parentCommentId, all
                         <button class="btn-like-comment ${isLiked ? 'liked' : ''}" 
                                 data-comment-id="${reply.id}"
                                 style="background:transparent;border:none;color:rgba(255,255,255,0.3);font-size:11px;cursor:pointer;display:flex;align-items:center;gap:4px;padding:2px 6px;border-radius:4px;transition:all 0.2s;">
-                            <i class="fas fa-heart" style="font-size:10px;color:${isLiked ? '#ff6b6b' : 'inherit'};"></i> <span>${formatNumber(likesCount)}</span>
+                            <i class="fas fa-heart" style="font-size:10px;color:${isLiked ? '#ff6b6b' : 'inherit'};"></i> <span class="like-count">${formatNumber(likesCount)}</span>
                         </button>
-                        <button class="btn-reply-comment" onclick="window.toggleReplyInput('${storyId}', '${reply.id}')"
+                        <button class="btn-reply-comment" data-comment-id="${reply.id}"
                                 style="background:transparent;border:none;color:rgba(255,255,255,0.2);font-size:11px;cursor:pointer;display:flex;align-items:center;gap:4px;padding:2px 6px;border-radius:4px;">
                             <i class="fas fa-reply" style="font-size:9px;"></i> Responder
                         </button>
@@ -784,7 +781,6 @@ function renderFlatReplies(replies, storyId, currentUserId, parentCommentId, all
 
 // 🔥 NUEVA FUNCIÓN PARA LIKE - OPTIMISTA Y SIN RECARGAR TODO
 window.handleCommentLike = async function(storyId, commentId) {
-    // Prevenir múltiples clicks rápidos
     const allButtons = document.querySelectorAll(`.btn-like-comment[data-comment-id="${commentId}"]`);
     let targetBtn = null;
     
@@ -819,7 +815,6 @@ window.handleCommentDelete = async function(storyId, commentId, parentCommentId 
     if (!confirm('¿Eliminar este comentario?')) return;
     const success = await deleteComment(storyId, commentId, parentCommentId);
     if (success) {
-        // Solo recargar si es necesario
         const container = document.getElementById('commentsList');
         if (container) {
             const currentUser = getCurrentUser();
@@ -831,10 +826,14 @@ window.handleCommentDelete = async function(storyId, commentId, parentCommentId 
     }
 };
 
+// 🔥 TOGGLE REPLY INPUT - CON ENFOQUE AUTOMÁTICO Y TECLADO
 window.toggleReplyInput = function(storyId, commentId) {
+    // Cerrar otros inputs de respuesta
     document.querySelectorAll('.reply-input-container').forEach(el => {
         if (el.id !== `reply-input-${commentId}`) {
             el.style.display = 'none';
+            const input = el.querySelector('input');
+            if (input) input.value = '';
         }
     });
     
@@ -844,16 +843,23 @@ window.toggleReplyInput = function(storyId, commentId) {
         container.style.display = isVisible ? 'none' : 'flex';
         container.style.gap = '8px';
         container.style.alignItems = 'center';
+        
         if (!isVisible) {
             const input = document.getElementById(`replyInput-${commentId}`);
             if (input) {
+                // 🔥 ENFOCAR Y ABRIR TECLADO EN MÓVIL
                 input.focus();
+                if ('ontouchstart' in window) {
+                    input.click();
+                    setTimeout(() => input.focus(), 100);
+                }
                 container.scrollIntoView({ behavior: 'smooth', block: 'center' });
             }
         }
     }
 };
 
+// 🔥 HANDLE REPLY SUBMIT - CON PREVENCIÓN DE DUPLICADOS
 window.handleReplySubmit = async function(storyId, parentCommentId) {
     const input = document.getElementById(`replyInput-${parentCommentId}`);
     if (!input) return;
@@ -864,20 +870,40 @@ window.handleReplySubmit = async function(storyId, parentCommentId) {
         return;
     }
     
-    const newReply = await addComment(storyId, content, parentCommentId);
-    if (newReply) {
-        input.value = '';
-        const container = document.getElementById(`reply-input-${parentCommentId}`);
-        if (container) container.style.display = 'none';
-        
-        // Actualizar solo si es necesario
-        const commentsContainer = document.getElementById('commentsList');
-        if (commentsContainer) {
-            const currentUser = getCurrentUser();
-            const comments = getCachedComments(storyId);
-            if (comments) {
-                renderComments(comments, storyId, currentUser?.id, commentsContainer);
+    // 🔥 PREVENIR DUPLICADOS
+    if (input.disabled) return;
+    input.disabled = true;
+    
+    const sendBtn = input.parentElement?.querySelector('.reply-send-btn');
+    if (sendBtn) {
+        sendBtn.disabled = true;
+        sendBtn.innerHTML = '<i class="fas fa-spinner fa-pulse"></i>';
+    }
+    
+    try {
+        const newReply = await addComment(storyId, content, parentCommentId);
+        if (newReply) {
+            input.value = '';
+            const container = document.getElementById(`reply-input-${parentCommentId}`);
+            if (container) container.style.display = 'none';
+            
+            const commentsContainer = document.getElementById('commentsList');
+            if (commentsContainer) {
+                const currentUser = getCurrentUser();
+                const comments = getCachedComments(storyId);
+                if (comments) {
+                    renderComments(comments, storyId, currentUser?.id, commentsContainer);
+                }
             }
+        }
+    } catch (error) {
+        console.error('Error enviando respuesta:', error);
+        showToast('Error al enviar respuesta', true);
+    } finally {
+        input.disabled = false;
+        if (sendBtn) {
+            sendBtn.disabled = false;
+            sendBtn.innerHTML = '<i class="fas fa-paper-plane"></i>';
         }
     }
 };
@@ -960,20 +986,30 @@ export async function initComments(storyId, containerId = 'commentsList', highli
     const sendBtn = document.getElementById('sendCommentBtn');
 
     if (input && sendBtn) {
+        // 🔥 REMOVER EVENTOS ANTERIORES PARA EVITAR DUPLICADOS
+        const newSendBtn = sendBtn.cloneNode(true);
+        sendBtn.parentNode.replaceChild(newSendBtn, sendBtn);
+        
+        const newInput = input.cloneNode(true);
+        input.parentNode.replaceChild(newInput, input);
+        
+        const finalInput = document.getElementById('commentInput');
+        const finalSendBtn = document.getElementById('sendCommentBtn');
+        
         const sendComment = async () => {
-            const content = input.value.trim();
+            const content = finalInput.value.trim();
             if (!content) return;
 
-            sendBtn.disabled = true;
+            finalSendBtn.disabled = true;
             const newComment = await addComment(storyId, content);
             if (newComment) {
-                input.value = '';
+                finalInput.value = '';
             }
-            sendBtn.disabled = false;
+            finalSendBtn.disabled = false;
         };
 
-        sendBtn.onclick = sendComment;
-        input.onkeydown = (e) => {
+        finalSendBtn.onclick = sendComment;
+        finalInput.onkeydown = (e) => {
             if (e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault();
                 sendComment();

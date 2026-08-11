@@ -1,6 +1,5 @@
 // ============================================================
-// story-modal.js - Modal para ver historias con navegación 
-// (VERSIÓN CORREGIDA - CON CACHÉ PERSISTENTE Y SIN DUPLICADOS)
+// story-modal.js - Modal para ver historias (VERSIÓN CORREGIDA)
 // ============================================================
 
 import {
@@ -20,6 +19,7 @@ let currentStoryIndex = 0;
 let isNavigating = false;
 let userLanguage = 'es';
 let isFirstLoad = true;
+let isCommenting = false; // 🔥 Prevenir envíos duplicados
 
 // Caché de traducciones
 let translationCache = {};
@@ -39,10 +39,11 @@ export async function openStoryModal(storyId, storiesList = null, fromProfile = 
     const currentUser = getCurrentUser();
     userLanguage = currentUser?.language || 'es';
 
+    // 🔥 CERRAR MODAL ANTERIOR COMPLETAMENTE
     if (isModalOpen) {
         console.log('📱 [STORY-MODAL] Cerrando modal anterior...');
-        closeStoryModal();
-        await new Promise(resolve => setTimeout(resolve, 100));
+        await closeStoryModal(true); // Forzar limpieza
+        await new Promise(resolve => setTimeout(resolve, 200));
     }
 
     if (fromProfile && profileUserId) {
@@ -70,6 +71,8 @@ export async function openStoryModal(storyId, storiesList = null, fromProfile = 
 
     currentStoryId = storyId;
     isModalOpen = true;
+    isFirstLoad = true;
+    isCommenting = false;
 
     const overlay = document.getElementById('storyModalOverlay');
     if (!overlay) {
@@ -92,7 +95,6 @@ export async function openStoryModal(storyId, storiesList = null, fromProfile = 
     
     document.body.style.overflow = 'hidden';
 
-    isFirstLoad = true;
     await loadStoryData(storyId);
 }
 
@@ -100,18 +102,13 @@ export async function openStoryModal(storyId, storiesList = null, fromProfile = 
 // CERRAR MODAL - CON LIMPIEZA COMPLETA
 // ============================================================
 
-export function closeStoryModal() {
+export function closeStoryModal(skipCleanup = false) {
     console.log('📱 [STORY-MODAL] Cerrando modal...');
     
-    // 🔥 LIMPIAR TODO
+    // 🔥 LIMPIAR ESTADO
     isModalOpen = false;
-    currentStoryId = null;
-    currentStoryData = null;
-    currentStoriesList = [];
-    currentStoryIndex = 0;
-    isNavigating = false;
-    isFirstLoad = true;
-
+    isCommenting = false;
+    
     // Limpiar video
     const video = document.getElementById('storyVideo');
     if (video) {
@@ -126,28 +123,52 @@ export function closeStoryModal() {
         window._vttUrl = null;
     }
 
-    // Limpiar contenedor de comentarios (para que no se vea información antigua)
+    // 🔥 LIMPIAR INPUT DE COMENTARIO
+    const commentInput = document.getElementById('commentInput');
+    if (commentInput) {
+        commentInput.value = '';
+        commentInput.disabled = false;
+        commentInput.blur();
+    }
+
+    // 🔥 LIMPIAR BOTÓN DE ENVÍO
+    const sendBtn = document.getElementById('sendCommentBtn');
+    if (sendBtn) {
+        sendBtn.disabled = false;
+        sendBtn.textContent = 'Enviar';
+    }
+
+    // 🔥 LIMPIAR CONTENEDOR DE COMENTARIOS
     const commentsList = document.getElementById('commentsList');
     if (commentsList) {
+        // Guardar referencia al storyId actual para limpiar caché
+        const storyId = currentStoryId;
         commentsList.innerHTML = `
             <div class="no-comments">
                 <i class="fas fa-spinner fa-pulse"></i>
                 <span>Cargando comentarios...</span>
             </div>
         `;
+        commentsList.dataset.storyId = '';
     }
 
-    // Limpiar contador
+    // Limpiar contadores
     const commentsCountEl = document.getElementById('commentsCount');
     if (commentsCountEl) commentsCountEl.textContent = '0';
     const modalCommentsEl = document.getElementById('modalComments');
     if (modalCommentsEl) modalCommentsEl.textContent = '0';
 
-    // Limpiar likes y vistas
     const likesEl = document.getElementById('modalLikes');
     if (likesEl) likesEl.textContent = '0';
     const viewsEl = document.getElementById('modalViews');
     if (viewsEl) viewsEl.textContent = '0';
+
+    // 🔥 LIMPIAR ESTADO DE RESPUESTAS
+    document.querySelectorAll('.reply-input-container').forEach(el => {
+        el.style.display = 'none';
+        const input = el.querySelector('input');
+        if (input) input.value = '';
+    });
 
     // Ocultar overlay
     const overlay = document.getElementById('storyModalOverlay');
@@ -161,13 +182,22 @@ export function closeStoryModal() {
         document.body.style.overflow = '';
     }
 
+    // 🔥 LIMPIAR variables después de un tiempo
     setTimeout(() => {
+        if (!isModalOpen) {
+            currentStoryId = null;
+            currentStoryData = null;
+            currentStoriesList = [];
+            currentStoryIndex = 0;
+            isNavigating = false;
+            isFirstLoad = true;
+        }
         window._fromProfileModal = false;
         window._fromExploreModal = false;
         window._fromActivityModal = false;
         window._activityCommentId = null;
         window._profileContextUserId = null;
-    }, 100);
+    }, 300);
 }
 
 // ============================================================
@@ -207,9 +237,11 @@ export async function navigateStory(direction) {
 function createModalHTML() {
     console.log('📱 [STORY-MODAL] createModalHTML() ejecutado');
     
-    if (document.getElementById('storyModalOverlay')) {
-        console.log('📱 [STORY-MODAL] El overlay ya existe');
-        return;
+    // 🔥 ELIMINAR MODAL EXISTENTE PRIMERO
+    const existingOverlay = document.getElementById('storyModalOverlay');
+    if (existingOverlay) {
+        existingOverlay.remove();
+        console.log('📱 [STORY-MODAL] Modal existente eliminado');
     }
 
     const html = `
@@ -302,6 +334,7 @@ function createModalHTML() {
     document.body.appendChild(div.firstElementChild);
     console.log('📱 [STORY-MODAL] HTML creado e insertado');
 
+    // 🔥 EVENTOS GLOBALES
     document.addEventListener('keydown', (e) => {
         if (e.key === 'Escape' && isModalOpen) {
             closeStoryModal();
@@ -329,10 +362,17 @@ function setupModalEvents() {
         await handleModalLike();
     });
 
+    // 🔥 BOTÓN DE COMENTARIO - ENFOCAR INPUT Y ABRIR TECLADO
     document.getElementById('modalCommentBtn')?.addEventListener('click', () => {
         const input = document.getElementById('commentInput');
         if (input) {
             input.focus();
+            // 🔥 Forzar que el teclado se abra en móvil
+            if ('ontouchstart' in window) {
+                input.click();
+                // Algunos navegadores necesitan esto
+                setTimeout(() => input.focus(), 100);
+            }
             input.scrollIntoView({ behavior: 'smooth', block: 'center' });
         }
     });
@@ -354,7 +394,9 @@ function setupModalEvents() {
         await toggleTranslation();
     });
 
-    document.getElementById('sendCommentBtn')?.addEventListener('click', async () => {
+    // 🔥 ENVIAR COMENTARIO - CON PREVENCIÓN DE DUPLICADOS
+    document.getElementById('sendCommentBtn')?.addEventListener('click', async (e) => {
+        e.preventDefault();
         await handleSendComment();
     });
 
@@ -365,7 +407,7 @@ function setupModalEvents() {
         }
     });
 
-    // 🔥 EVENTO PARA LIKES DE COMENTARIOS - VERSIÓN OPTIMISTA (SIN RECARGAR)
+    // 🔥 LIKES DE COMENTARIOS
     document.getElementById('commentsList')?.addEventListener('click', async (e) => {
         const likeBtn = e.target.closest('.btn-like-comment');
         if (likeBtn) {
@@ -373,13 +415,12 @@ function setupModalEvents() {
             e.stopPropagation();
             const commentId = likeBtn.dataset.commentId;
             if (commentId && currentStoryId) {
-                // 🔥 Usar la función optimista que no recarga todo
                 await window.handleCommentLike(currentStoryId, commentId);
             }
         }
     });
 
-    // EVENTO PARA RESPONDER
+    // 🔥 RESPONDER - CON ENFOQUE AUTOMÁTICO Y TECLADO
     document.getElementById('commentsList')?.addEventListener('click', (e) => {
         const replyBtn = e.target.closest('.btn-reply-comment');
         if (replyBtn) {
@@ -387,11 +428,13 @@ function setupModalEvents() {
             e.stopPropagation();
             const commentId = replyBtn.dataset.commentId;
             if (commentId && currentStoryId) {
+                // 🔥 PASAR EL STORY ID PARA EL CONTEXTO
                 window.toggleReplyInput(currentStoryId, commentId);
             }
         }
     });
 
+    // Touch para navegación
     let touchStartX = 0;
     let touchStartY = 0;
     const modalContent = document.querySelector('.modal-content');
@@ -419,10 +462,16 @@ function setupModalEvents() {
 }
 
 // ============================================================
-// 🔥 ENVIAR COMENTARIO - VERSIÓN CORREGIDA (SIN DUPLICADOS)
+// 🔥 ENVIAR COMENTARIO - VERSIÓN CORREGIDA (CON PREVENCIÓN DE DUPLICADOS)
 // ============================================================
 
 async function handleSendComment() {
+    // 🔥 PREVENIR ENVÍOS DUPLICADOS
+    if (isCommenting) {
+        console.log('⚠️ Ya hay un comentario en proceso, ignorando...');
+        return;
+    }
+
     const input = document.getElementById('commentInput');
     if (!input) return;
     
@@ -443,6 +492,8 @@ async function handleSendComment() {
         return;
     }
 
+    // 🔥 BLOQUEAR PARA PREVENIR DUPLICADOS
+    isCommenting = true;
     input.disabled = true;
     const sendBtn = document.getElementById('sendCommentBtn');
     if (sendBtn) {
@@ -455,7 +506,7 @@ async function handleSendComment() {
     const userAvatar = currentUser?.avatar || getAvatar(currentUser?.fullName || 'U');
     
     const tempComment = {
-        id: `temp_${Date.now()}`,
+        id: `temp_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`,
         userId: currentUser?.id || 'temp',
         username: currentUser?.username || 'usuario',
         fullName: currentUser?.fullName || 'Usuario',
@@ -519,6 +570,8 @@ async function handleSendComment() {
         revertTempComment(currentStoryId, tempComment.id);
         showToast('Error al enviar comentario', true);
     } finally {
+        // 🔥 DESBLOQUEAR
+        isCommenting = false;
         input.disabled = false;
         if (sendBtn) {
             sendBtn.disabled = false;
@@ -636,9 +689,9 @@ function createCommentElement(comment) {
     const userAvatar = currentUser?.avatar || getAvatar(currentUser?.fullName || 'U');
 
     div.innerHTML = `
-        <img class="avatar" src="${comment.avatar || userAvatar}" alt="${comment.fullName}" />
+        <img class="avatar" src="${comment.avatar || userAvatar}" alt="${comment.fullName}" onclick="window.goToProfileUser('${comment.userId}')" />
         <div class="comment-body">
-            <div class="comment-user">
+            <div class="comment-user" onclick="window.goToProfileUser('${comment.userId}')">
                 ${escapeHtml(comment.fullName)}
                 <span class="handle">@${comment.username || 'usuario'}</span>
                 <span class="time">${formatDate(comment.createdAt)}</span>
@@ -655,7 +708,7 @@ function createCommentElement(comment) {
             </div>
             <div class="replies" id="replies-${comment.id}"></div>
             <div class="reply-input-container" id="reply-input-${comment.id}" style="display:none;">
-                <input type="text" class="reply-input" placeholder="Escribe una respuesta..." maxlength="500" />
+                <input type="text" class="reply-input" id="replyInput-${comment.id}" placeholder="Escribe una respuesta..." maxlength="500" />
                 <button class="reply-send-btn" data-comment-id="${comment.id}">Enviar</button>
             </div>
         </div>
@@ -1026,9 +1079,7 @@ async function loadStoryData(storyId, isNavigation = false) {
                 updateModalUI(currentStoryData);
                 updateProgress();
                 const highlightCommentId = window._activityCommentId || null;
-                // 🔥 Usar caché si existe, no forzar recarga
-                const forceReload = false;
-                await initComments(storyId, 'commentsList', highlightCommentId, forceReload);
+                await initComments(storyId, 'commentsList', highlightCommentId, false);
                 isFirstLoad = false;
                 const totalComments = getTotalCommentsCount(storyId);
                 updateCommentCount(totalComments);
@@ -1041,8 +1092,7 @@ async function loadStoryData(storyId, isNavigation = false) {
                     updateModalUI(currentStoryData);
                     updateProgress();
                     const highlightCommentId = window._activityCommentId || null;
-                    const forceReload = false;
-                    await initComments(storyId, 'commentsList', highlightCommentId, forceReload);
+                    await initComments(storyId, 'commentsList', highlightCommentId, false);
                     isFirstLoad = false;
                     const totalComments = getTotalCommentsCount(storyId);
                     updateCommentCount(totalComments);
@@ -1419,6 +1469,23 @@ window.openProfileFromModal = function() {
             });
         }, 50);
     }
+};
+
+// 🔥 FUNCIÓN PARA ABRIR PERFIL DE USUARIO DESDE COMENTARIO
+window.goToProfileUser = function(userId) {
+    if (!userId) return;
+    closeStoryModal();
+    setTimeout(() => {
+        import('./profile-modal.js').then(({ openProfileModal }) => {
+            openProfileModal(userId);
+        }).catch(() => {
+            if (typeof window.openProfileModal === 'function') {
+                window.openProfileModal(userId);
+            } else {
+                showToast('Error al abrir perfil', true);
+            }
+        });
+    }, 100);
 };
 
 export { loadStoryData, handleModalLike };

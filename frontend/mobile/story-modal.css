@@ -1,5 +1,6 @@
 /* ============================================================
    STORY MODAL - CON SUBTÍTULOS Y COMENTARIOS MEJORADOS
+   VERSIÓN COMPLETA - SIN DAÑAR ESTILOS EXISTENTES
    ============================================================ */
 
 .modal-overlay {
@@ -808,7 +809,7 @@
 }
 
 /* ============================================================
-   RESPONSIVE
+   RESPONSIVE - MÓVIL PEQUEÑO (480px)
    ============================================================ */
 
 @media (max-width: 480px) {
@@ -952,6 +953,10 @@
     }
 }
 
+/* ============================================================
+   RESPONSIVE - MÓVIL MUY PEQUEÑO (380px)
+   ============================================================ */
+
 @media (max-width: 380px) {
     .modal-header {
         padding: 10px 12px 8px;
@@ -1062,6 +1067,10 @@
     }
 }
 
+/* ============================================================
+   RESPONSIVE - PANTALLA BAJA (600px)
+   ============================================================ */
+
 @media (max-height: 600px) {
     .modal-header {
         padding: 8px 14px 6px;
@@ -1133,5 +1142,59 @@
     .subtitles-indicator {
         font-size: 8px;
         padding: 2px 7px;
+    }
+}
+
+/* ============================================================
+   RESPONSIVE - TABLET (768px)
+   ============================================================ */
+
+@media (min-width: 768px) {
+    .modal-content {
+        border-radius: 24px;
+        max-width: 460px;
+        height: auto;
+        max-height: 90vh;
+        min-height: 500px;
+    }
+    .modal-overlay {
+        background: rgba(10, 10, 26, 0.85);
+        justify-content: center;
+        align-items: center;
+    }
+    .modal-media {
+        height: 320px;
+        min-height: 320px;
+        max-height: 320px;
+    }
+    .comments-list {
+        max-height: 220px;
+    }
+}
+
+/* ============================================================
+   RESPONSIVE - ESCRITORIO (1024px)
+   ============================================================ */
+
+@media (min-width: 1024px) {
+    .modal-content {
+        max-width: 480px;
+        max-height: 85vh;
+        min-height: 550px;
+    }
+    .modal-media {
+        height: 340px;
+        min-height: 340px;
+        max-height: 340px;
+    }
+    .comments-list {
+        max-height: 240px;
+    }
+    .modal-actions button {
+        padding: 6px 16px;
+        font-size: 13px;
+    }
+    .comment-item .comment-body .comment-text {
+        font-size: 15px;
     }
 }
