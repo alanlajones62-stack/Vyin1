@@ -1017,7 +1017,6 @@ export {
     clearCommentsCache,
     getCommentsFromCache,
     setCommentsCache,
-    loadComments,
     addComment,
     deleteComment,
     likeComment,
