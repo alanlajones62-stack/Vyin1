@@ -776,6 +776,76 @@ function renderFlatReplies(replies, storyId, currentUserId, parentCommentId, all
 }
 
 // ============================================================
+// 🔥 AÑADIR COMENTARIO A LA UI (EXPORTADA)
+// ============================================================
+
+export function addCommentToUI(comment) {
+    const commentsList = document.getElementById('commentsList');
+    if (!commentsList) {
+        console.warn('⚠️ commentsList no encontrado en el DOM');
+        return false;
+    }
+
+    // Verificar si ya existe
+    const existingComment = commentsList.querySelector(`[data-comment-id="${comment.id}"]`);
+    if (existingComment) {
+        console.log('⚠️ Comentario ya existe en la UI, omitiendo duplicado');
+        return true;
+    }
+
+    // Eliminar mensaje "No hay comentarios"
+    const noComments = commentsList.querySelector('.no-comments');
+    if (noComments) {
+        noComments.remove();
+    }
+
+    // Crear el elemento del comentario
+    const isTemp = comment._isTemp || false;
+    const div = document.createElement('div');
+    div.className = 'comment-item';
+    div.setAttribute('data-comment-id', comment.id);
+    if (isTemp) {
+        div.setAttribute('data-temp-id', comment.id);
+        div.style.opacity = '0.6';
+        div.style.borderLeft = '2px solid rgba(192,132,252,0.3)';
+    }
+    
+    const currentUser = getCurrentUser();
+    const userAvatar = currentUser?.avatar || getAvatar(currentUser?.fullName || 'U');
+
+    div.innerHTML = `
+        <img class="avatar" src="${comment.avatar || userAvatar}" alt="${comment.fullName}" onclick="window.goToProfileUser('${comment.userId}')" />
+        <div class="comment-body">
+            <div class="comment-user" onclick="window.goToProfileUser('${comment.userId}')">
+                ${escapeHtml(comment.fullName)}
+                <span class="handle">@${comment.username || 'usuario'}</span>
+                <span class="time">${formatDate(comment.createdAt)}</span>
+                ${isTemp ? '<span style="font-size:10px;color:rgba(192,132,252,0.5);margin-left:8px;">⏳ Enviando...</span>' : ''}
+            </div>
+            <div class="comment-text">${escapeHtml(comment.content)}</div>
+            <div class="comment-meta">
+                <button class="btn-like-comment" data-comment-id="${comment.id}">
+                    <i class="fas fa-heart"></i> <span class="like-count">0</span>
+                </button>
+                <button class="btn-reply-comment" data-comment-id="${comment.id}">
+                    <i class="fas fa-reply"></i> Responder
+                </button>
+            </div>
+            <div class="replies" id="replies-${comment.id}"></div>
+            <div class="reply-input-container" id="reply-input-${comment.id}" style="display:none;">
+                <input type="text" class="reply-input" id="replyInput-${comment.id}" placeholder="Escribe una respuesta..." maxlength="500" />
+                <button class="reply-send-btn" data-comment-id="${comment.id}">Enviar</button>
+            </div>
+        </div>
+    `;
+
+    // Insertar al principio
+    commentsList.insertBefore(div, commentsList.firstChild);
+    console.log('✅ Comentario añadido a la UI:', comment.id);
+    return true;
+}
+
+// ============================================================
 // FUNCIONES GLOBALES PARA EL MODAL
 // ============================================================
 

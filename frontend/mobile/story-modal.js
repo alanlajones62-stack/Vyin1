@@ -8,7 +8,7 @@ import {
 } from './auth.js';
 
 import { formatNumber } from './utils.js';
-import { loadComments, initComments, getTotalCommentsCount, addCommentToCache, getCachedComments } from './story-comments.js';
+import { loadComments, initComments, getTotalCommentsCount, addCommentToCache, getCachedComments, addCommentToUI } from './story-comments.js';
 
 const API_URL = window.location.origin;
 let currentStoryId = null;
@@ -518,9 +518,55 @@ async function handleSendComment() {
         _isTemp: true
     };
 
-    // 🔥 1. AGREGAR LOCALMENTE (RESPUESTA INMEDIATA)
+    // 🔥 1. AGREGAR LOCALMENTE (RESPUESTA INMEDIATA) - USANDO LA FUNCIÓN EXPORTADA
     input.value = '';
-    addCommentToUI(tempComment);
+    console.log('📝 Añadiendo comentario temporal al DOM:', tempComment);
+    
+    // 🔥 USAR LA FUNCIÓN EXPORTADA DE story-comments.js
+    const added = addCommentToUI(tempComment);
+    if (!added) {
+        console.warn('⚠️ No se pudo añadir el comentario al DOM, intentando directamente...');
+        // Fallback: añadir directamente
+        const commentsList = document.getElementById('commentsList');
+        if (commentsList) {
+            const noComments = commentsList.querySelector('.no-comments');
+            if (noComments) noComments.remove();
+            
+            const div = document.createElement('div');
+            div.className = 'comment-item';
+            div.setAttribute('data-comment-id', tempComment.id);
+            div.setAttribute('data-temp-id', tempComment.id);
+            div.style.opacity = '0.6';
+            div.style.borderLeft = '2px solid rgba(192,132,252,0.3)';
+            div.innerHTML = `
+                <img class="avatar" src="${tempComment.avatar}" alt="${tempComment.fullName}" onclick="window.goToProfileUser('${tempComment.userId}')" />
+                <div class="comment-body">
+                    <div class="comment-user" onclick="window.goToProfileUser('${tempComment.userId}')">
+                        ${escapeHtml(tempComment.fullName)}
+                        <span class="handle">@${tempComment.username || 'usuario'}</span>
+                        <span class="time">${formatDate(tempComment.createdAt)}</span>
+                        <span style="font-size:10px;color:rgba(192,132,252,0.5);margin-left:8px;">⏳ Enviando...</span>
+                    </div>
+                    <div class="comment-text">${escapeHtml(tempComment.content)}</div>
+                    <div class="comment-meta">
+                        <button class="btn-like-comment" data-comment-id="${tempComment.id}">
+                            <i class="fas fa-heart"></i> <span class="like-count">0</span>
+                        </button>
+                        <button class="btn-reply-comment" data-comment-id="${tempComment.id}">
+                            <i class="fas fa-reply"></i> Responder
+                        </button>
+                    </div>
+                    <div class="replies" id="replies-${tempComment.id}"></div>
+                    <div class="reply-input-container" id="reply-input-${tempComment.id}" style="display:none;">
+                        <input type="text" class="reply-input" id="replyInput-${tempComment.id}" placeholder="Escribe una respuesta..." maxlength="500" />
+                        <button class="reply-send-btn" data-comment-id="${tempComment.id}">Enviar</button>
+                    </div>
+                </div>
+            `;
+            commentsList.insertBefore(div, commentsList.firstChild);
+            console.log('✅ Comentario temporal añadido manualmente');
+        }
+    }
     
     // 🔥 2. ACTUALIZAR CONTADOR LOCAL
     const currentTotal = getTotalCommentsCount(currentStoryId);
@@ -591,8 +637,36 @@ async function replaceTempCommentWithReal(storyId, tempId, realComment) {
     if (commentsList) {
         const tempElement = commentsList.querySelector(`[data-temp-id="${tempId}"]`);
         if (tempElement) {
-            const realElement = createCommentElement(realComment);
-            tempElement.replaceWith(realElement);
+            // Crear elemento real
+            const div = document.createElement('div');
+            div.className = 'comment-item';
+            div.setAttribute('data-comment-id', realComment.id);
+            div.innerHTML = `
+                <img class="avatar" src="${realComment.avatar || getAvatar(realComment.fullName)}" alt="${realComment.fullName}" onclick="window.goToProfileUser('${realComment.userId}')" />
+                <div class="comment-body">
+                    <div class="comment-user" onclick="window.goToProfileUser('${realComment.userId}')">
+                        ${escapeHtml(realComment.fullName)}
+                        <span class="handle">@${realComment.username || 'usuario'}</span>
+                        <span class="time">${formatDate(realComment.createdAt)}</span>
+                    </div>
+                    <div class="comment-text">${escapeHtml(realComment.content)}</div>
+                    <div class="comment-meta">
+                        <button class="btn-like-comment" data-comment-id="${realComment.id}">
+                            <i class="fas fa-heart"></i> <span class="like-count">0</span>
+                        </button>
+                        <button class="btn-reply-comment" data-comment-id="${realComment.id}">
+                            <i class="fas fa-reply"></i> Responder
+                        </button>
+                    </div>
+                    <div class="replies" id="replies-${realComment.id}"></div>
+                    <div class="reply-input-container" id="reply-input-${realComment.id}" style="display:none;">
+                        <input type="text" class="reply-input" id="replyInput-${realComment.id}" placeholder="Escribe una respuesta..." maxlength="500" />
+                        <button class="reply-send-btn" data-comment-id="${realComment.id}">Enviar</button>
+                    </div>
+                </div>
+            `;
+            tempElement.replaceWith(div);
+            console.log('✅ Comentario temporal reemplazado por real');
         }
     }
 
@@ -638,6 +712,7 @@ function revertTempComment(storyId, tempId) {
         const tempElement = commentsList.querySelector(`[data-temp-id="${tempId}"]`);
         if (tempElement) {
             tempElement.remove();
+            console.log('🗑️ Comentario temporal eliminado de la UI');
         }
     }
 
@@ -715,34 +790,6 @@ function createCommentElement(comment) {
     `;
     
     return div;
-}
-
-// ============================================================
-// AÑADIR COMENTARIO A LA UI
-// ============================================================
-
-function addCommentToUI(comment) {
-    const commentsList = document.getElementById('commentsList');
-    if (!commentsList) return;
-
-    // Verificar si ya existe
-    const existingComment = commentsList.querySelector(`[data-comment-id="${comment.id}"]`);
-    if (existingComment) {
-        console.log('⚠️ Comentario ya existe en la UI, omitiendo duplicado');
-        return;
-    }
-
-    // Eliminar mensaje "No hay comentarios"
-    const noComments = commentsList.querySelector('.no-comments');
-    if (noComments) {
-        noComments.remove();
-    }
-
-    // Crear y agregar el elemento
-    const commentElement = createCommentElement(comment);
-    commentsList.insertBefore(commentElement, commentsList.firstChild);
-    
-    console.log('✅ Comentario añadido a la UI');
 }
 
 // ============================================================
