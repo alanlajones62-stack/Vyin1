@@ -1,6 +1,6 @@
 /* ============================================================
-   STORY MODAL - CON SUBTÍTULOS, COMENTARIOS MEJORADOS Y ELIMINAR
-   SIN BORDES REDONDOS - SIEMPRE 100% ANCHO Y ALTO
+   STORY MODAL - CON SUBTÍTULOS Y COMENTARIOS MEJORADOS
+   VERSIÓN CORREGIDA - INPUT VISIBLE EN MÓVILES
    ============================================================ */
 
 .modal-overlay {
@@ -16,13 +16,6 @@
     display: none;
     flex-direction: column;
     animation: modalFadeIn 0.35s ease;
-    border-radius: 0 !important;
-    width: 100vw;
-    height: 100vh;
-    max-width: 100vw;
-    max-height: 100vh;
-    padding: 0 !important;
-    margin: 0 !important;
 }
 
 .modal-overlay.active {
@@ -35,24 +28,22 @@
 }
 
 /* ============================================================
-   CONTENEDOR PRINCIPAL - OCUPA 100% SIN RECORTES
+   CONTENEDOR PRINCIPAL
    ============================================================ */
 
 .modal-content {
     background: #12122a;
-    border-radius: 0 !important;
-    max-width: 100vw !important;
-    width: 100vw !important;
-    height: 100vh !important;
-    max-height: 100vh !important;
+    border-radius: 0;
+    max-width: 100%;
+    width: 100%;
+    max-height: 100vh;
+    height: 100vh;
     overflow: hidden;
     position: relative;
     border: none;
     box-shadow: none;
     display: flex;
     flex-direction: column;
-    margin: 0 !important;
-    padding: 0 !important;
 }
 
 /* ============================================================
@@ -179,7 +170,7 @@
 .story-progress .progress-dot {
     flex: 1;
     height: 3px;
-    border-radius: 0;
+    border-radius: 4px;
     background: rgba(255, 255, 255, 0.12);
     transition: all 0.3s ease;
 }
@@ -189,17 +180,16 @@
 }
 
 /* ============================================================
-   BODY - USAR height: 100% PARA EVITAR RECORTES
+   BODY
    ============================================================ */
 
 .modal-body {
-    flex: 1 1 auto;
+    flex: 1;
     display: flex;
     flex-direction: column;
     padding: 12px 20px 6px;
     overflow: hidden;
     min-height: 0;
-    height: 100%;
 }
 
 /* ============================================================
@@ -208,13 +198,13 @@
 
 .modal-media {
     width: 100%;
-    border-radius: 0 !important;
+    border-radius: 12px;
     overflow: hidden;
     background: #0a0a1a;
     flex-shrink: 0;
-    height: 260px;
-    min-height: 200px;
-    max-height: 300px;
+    height: 280px;
+    min-height: 280px;
+    max-height: 280px;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -241,7 +231,7 @@
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;
     text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.9), 0px 0px 8px rgba(0, 0, 0, 0.5);
     padding: 4px 10px;
-    border-radius: 0;
+    border-radius: 6px;
     line-height: 1.4;
 }
 
@@ -378,7 +368,6 @@
     gap: 6px;
     flex: 1;
     padding: 0 4px;
-    flex-wrap: wrap;
 }
 
 .modal-actions button {
@@ -401,10 +390,6 @@
     transform: scale(0.92);
 }
 
-/* ============================================================
-   BOTÓN LIKE
-   ============================================================ */
-
 .modal-actions .btn-like-modal {
     background: rgba(255, 107, 107, 0.1);
     color: #ff6b6b;
@@ -416,27 +401,15 @@
     box-shadow: 0 4px 16px rgba(255, 107, 107, 0.2);
 }
 
-/* ============================================================
-   BOTÓN COMENTARIO
-   ============================================================ */
-
 .modal-actions .btn-comment-modal {
     background: rgba(192, 132, 252, 0.1);
     color: #c084fc;
 }
 
-/* ============================================================
-   BOTÓN COMPARTIR
-   ============================================================ */
-
 .modal-actions .btn-share-modal {
     background: rgba(255, 255, 255, 0.04);
     color: rgba(255, 255, 255, 0.3);
 }
-
-/* ============================================================
-   BOTÓN PERFIL
-   ============================================================ */
 
 .modal-actions .btn-profile-modal {
     background: rgba(192, 132, 252, 0.06);
@@ -444,68 +417,16 @@
 }
 
 /* ============================================================
-   BOTÓN TRADUCIR
-   ============================================================ */
-
-.modal-actions .btn-translate-modal {
-    background: rgba(192, 132, 252, 0.08);
-    color: #a78bfa;
-    border: 1px solid rgba(192, 132, 252, 0.1);
-}
-
-.modal-actions .btn-translate-modal:hover {
-    background: rgba(192, 132, 252, 0.15);
-    border-color: rgba(192, 132, 252, 0.2);
-}
-
-.modal-actions .btn-translate-modal:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-}
-
-/* ============================================================
-   BOTÓN ELIMINAR
-   ============================================================ */
-
-.modal-actions .btn-delete-modal {
-    background: rgba(239, 68, 68, 0.12);
-    color: #ef4444;
-    border: 1px solid rgba(239, 68, 68, 0.15);
-    transition: all 0.3s ease;
-}
-
-.modal-actions .btn-delete-modal:hover {
-    background: rgba(239, 68, 68, 0.2);
-    border-color: rgba(239, 68, 68, 0.3);
-    transform: scale(1.05);
-}
-
-.modal-actions .btn-delete-modal:active {
-    transform: scale(0.92);
-}
-
-.modal-actions .btn-delete-modal:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-    transform: none;
-}
-
-.modal-actions .btn-delete-modal i {
-    font-size: 13px;
-}
-
-/* ============================================================
-   COMENTARIOS - ESTRUCTURA FLEXIBLE
+   COMENTARIOS
    ============================================================ */
 
 .comments-section {
-    flex: 1 1 auto;
+    flex: 1;
     display: flex;
     flex-direction: column;
     min-height: 0;
     border-top: 1px solid rgba(255, 255, 255, 0.04);
     padding-top: 4px;
-    overflow: hidden;
 }
 
 .comments-section .comments-title {
@@ -521,21 +442,11 @@
     letter-spacing: 0.5px;
 }
 
-.comments-section .comments-title span:last-child {
-    background: rgba(255, 255, 255, 0.03);
-    padding: 1px 8px;
-    border-radius: 10px;
-    font-size: 10px;
-    color: rgba(255, 255, 255, 0.15);
-}
-
 .comments-section .comments-list {
-    flex: 1 1 auto;
+    flex: 1;
     overflow-y: auto;
     padding-right: 2px;
-    min-height: 40px;
-    padding-top: 4px;
-    padding-bottom: 4px;
+    min-height: 20px;
 }
 
 .comments-section .comments-list::-webkit-scrollbar {
@@ -548,68 +459,6 @@
 }
 
 /* ============================================================
-   INPUT PRINCIPAL - SIEMPRE VISIBLE
-   ============================================================ */
-
-.comment-input-wrapper {
-    display: flex;
-    gap: 8px;
-    padding: 4px 0 6px;
-    border-top: 1px solid rgba(255, 255, 255, 0.04);
-    flex-shrink: 0;
-    background: #12122a;
-}
-
-.comment-input-wrapper input {
-    flex: 1;
-    background: rgba(255, 255, 255, 0.04);
-    border: 1px solid rgba(255, 255, 255, 0.04);
-    border-radius: 50px;
-    padding: 6px 14px;
-    color: #fff;
-    font-size: 13px;
-    font-family: inherit;
-    outline: none;
-    transition: all 0.3s;
-    min-height: 34px;
-}
-
-.comment-input-wrapper input::placeholder {
-    color: rgba(255, 255, 255, 0.15);
-    font-size: 13px;
-}
-
-.comment-input-wrapper input:focus {
-    border-color: rgba(192, 132, 252, 0.2);
-    background: rgba(255, 255, 255, 0.06);
-}
-
-.comment-input-wrapper button {
-    background: linear-gradient(135deg, #c084fc, #db2777);
-    border: none;
-    border-radius: 50px;
-    padding: 6px 16px;
-    color: #fff;
-    font-weight: 600;
-    font-size: 13px;
-    cursor: pointer;
-    transition: all 0.25s;
-    font-family: inherit;
-    white-space: nowrap;
-    flex-shrink: 0;
-    min-height: 34px;
-}
-
-.comment-input-wrapper button:active {
-    transform: scale(0.92);
-}
-
-.comment-input-wrapper button:disabled {
-    opacity: 0.3;
-    cursor: not-allowed;
-}
-
-/* ============================================================
    COMENTARIO ITEM
    ============================================================ */
 
@@ -617,7 +466,7 @@
     display: flex;
     gap: 10px;
     padding: 10px 12px;
-    border-radius: 0;
+    border-radius: 10px;
     background: rgba(255, 255, 255, 0.02);
     margin-bottom: 2px;
     transition: background 0.2s;
@@ -698,7 +547,6 @@
     align-items: center;
     gap: 6px;
     margin-top: 2px;
-    flex-wrap: wrap;
 }
 
 .comment-item .comment-body .comment-meta button {
@@ -732,10 +580,6 @@
     font-size: 10px;
 }
 
-/* ============================================================
-   BOTÓN LIKE COMENTARIO
-   ============================================================ */
-
 .comment-item .comment-body .comment-meta .btn-like-comment {
     background: rgba(255, 255, 255, 0.03);
     border: 1px solid rgba(255, 255, 255, 0.04);
@@ -765,10 +609,6 @@
     margin-left: 1px;
 }
 
-/* ============================================================
-   BOTÓN RESPONDER COMENTARIO
-   ============================================================ */
-
 .comment-item .comment-body .comment-meta .btn-reply-comment {
     background: rgba(255, 255, 255, 0.03);
     border: 1px solid rgba(255, 255, 255, 0.04);
@@ -780,10 +620,6 @@
     border-color: rgba(192, 132, 252, 0.1);
     color: rgba(192, 132, 252, 0.5);
 }
-
-/* ============================================================
-   BOTÓN ELIMINAR COMENTARIO
-   ============================================================ */
 
 .comment-item .comment-body .comment-meta .btn-delete-comment {
     background: rgba(255, 255, 255, 0.03);
@@ -855,11 +691,6 @@
     transform: scale(0.92);
 }
 
-.reply-input-container .reply-send-btn:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-}
-
 /* ============================================================
    BOTÓN MOSTRAR RESPUESTAS
    ============================================================ */
@@ -899,6 +730,68 @@
 }
 
 /* ============================================================
+   INPUT PRINCIPAL
+   ============================================================ */
+
+.comment-input-wrapper {
+    display: flex;
+    gap: 8px;
+    padding: 4px 0 6px;
+    border-top: 1px solid rgba(255, 255, 255, 0.04);
+    flex-shrink: 0;
+    background: #12122a;
+}
+
+.comment-input-wrapper input {
+    flex: 1;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.04);
+    border-radius: 50px;
+    padding: 6px 14px;
+    color: #fff;
+    font-size: 13px;
+    font-family: inherit;
+    outline: none;
+    transition: all 0.3s;
+    min-height: 34px;
+}
+
+.comment-input-wrapper input::placeholder {
+    color: rgba(255, 255, 255, 0.15);
+    font-size: 13px;
+}
+
+.comment-input-wrapper input:focus {
+    border-color: rgba(192, 132, 252, 0.2);
+    background: rgba(255, 255, 255, 0.06);
+}
+
+.comment-input-wrapper button {
+    background: linear-gradient(135deg, #c084fc, #db2777);
+    border: none;
+    border-radius: 50px;
+    padding: 6px 16px;
+    color: #fff;
+    font-weight: 600;
+    font-size: 13px;
+    cursor: pointer;
+    transition: all 0.25s;
+    font-family: inherit;
+    white-space: nowrap;
+    flex-shrink: 0;
+    min-height: 34px;
+}
+
+.comment-input-wrapper button:active {
+    transform: scale(0.92);
+}
+
+.comment-input-wrapper button:disabled {
+    opacity: 0.3;
+    cursor: not-allowed;
+}
+
+/* ============================================================
    ESTADO VACÍO
    ============================================================ */
 
@@ -917,102 +810,10 @@
 }
 
 /* ============================================================
-   🔥🔥🔥 FIX MÓVIL: INPUT SIEMPRE VISIBLE
+   RESPONSIVE - MÓVIL
    ============================================================ */
 
-@media (max-width: 768px) {
-    .modal-content {
-        height: 100vh !important;
-        max-height: 100vh !important;
-    }
-
-    .modal-body {
-        flex: 1 1 auto !important;
-        padding: 8px 16px 4px !important;
-        overflow: hidden !important;
-        height: 100% !important;
-        min-height: 0 !important;
-    }
-
-    .comments-section {
-        flex: 1 1 auto !important;
-        min-height: 0 !important;
-        overflow: hidden !important;
-    }
-
-    .comments-section .comments-list {
-        flex: 1 1 auto !important;
-        min-height: 40px !important;
-        max-height: none !important;
-        overflow-y: auto !important;
-    }
-
-    .comment-input-wrapper {
-        display: flex !important;
-        flex-shrink: 0 !important;
-        visibility: visible !important;
-        opacity: 1 !important;
-        min-height: 48px !important;
-        padding: 8px 4px !important;
-        background: rgba(18, 18, 42, 0.98) !important;
-        border-top: 1px solid rgba(255, 255, 255, 0.06) !important;
-        width: 100% !important;
-        gap: 8px !important;
-        align-items: center !important;
-        position: relative !important;
-        z-index: 10 !important;
-    }
-
-    .comment-input-wrapper input {
-        display: block !important;
-        min-height: 40px !important;
-        font-size: 14px !important;
-        padding: 8px 14px !important;
-        background: rgba(255, 255, 255, 0.05) !important;
-        border: 1px solid rgba(255, 255, 255, 0.08) !important;
-        border-radius: 50px !important;
-        color: #fff !important;
-        width: 100% !important;
-        flex: 1 !important;
-        outline: none !important;
-        -webkit-appearance: none !important;
-    }
-
-    .comment-input-wrapper input:focus {
-        border-color: rgba(192, 132, 252, 0.3) !important;
-        background: rgba(255, 255, 255, 0.08) !important;
-    }
-
-    .comment-input-wrapper input::placeholder {
-        color: rgba(255, 255, 255, 0.2) !important;
-        font-size: 13px !important;
-    }
-
-    .comment-input-wrapper button {
-        display: block !important;
-        min-height: 40px !important;
-        padding: 8px 16px !important;
-        font-size: 13px !important;
-        flex-shrink: 0 !important;
-        background: linear-gradient(135deg, #c084fc, #db2777) !important;
-        border: none !important;
-        border-radius: 50px !important;
-        color: #fff !important;
-        font-weight: 600 !important;
-        cursor: pointer !important;
-        white-space: nowrap !important;
-    }
-
-    .comment-input-wrapper button:active {
-        transform: scale(0.95) !important;
-    }
-
-    .comment-input-wrapper button:disabled {
-        opacity: 0.4 !important;
-        cursor: not-allowed !important;
-    }
-
-    /* Ajustes para elementos internos */
+@media (max-width: 480px) {
     .modal-header {
         padding: 12px 16px 10px;
     }
@@ -1038,9 +839,12 @@
     .subtitles-indicator i {
         font-size: 9px;
     }
+    .modal-body {
+        padding: 8px 16px 4px;
+    }
     .modal-media {
-        height: 200px;
-        min-height: 160px;
+        height: 220px;
+        min-height: 220px;
         max-height: 220px;
     }
     .modal-media .text-content {
@@ -1093,6 +897,12 @@
     .modal-stats .stat strong {
         font-size: 13px;
     }
+    .comments-section {
+        padding-top: 4px;
+    }
+    .comments-section .comments-title {
+        font-size: 11px;
+    }
     .comment-item {
         padding: 6px 8px;
         gap: 8px;
@@ -1129,11 +939,20 @@
         padding: 5px 10px;
         min-height: 26px;
     }
+    .comment-input-wrapper {
+        padding: 2px 0 4px;
+    }
+    .comment-input-wrapper input {
+        font-size: 12px;
+        padding: 5px 12px;
+        min-height: 30px;
+    }
+    .comment-input-wrapper button {
+        font-size: 12px;
+        padding: 5px 14px;
+        min-height: 30px;
+    }
 }
-
-/* ============================================================
-   MÓVIL MUY PEQUEÑO
-   ============================================================ */
 
 @media (max-width: 380px) {
     .modal-header {
@@ -1165,8 +984,8 @@
         padding: 6px 12px 2px;
     }
     .modal-media {
-        height: 160px;
-        min-height: 140px;
+        height: 180px;
+        min-height: 180px;
         max-height: 180px;
     }
     .modal-media .text-content {
@@ -1233,27 +1052,17 @@
         margin-left: 20px;
         padding-left: 6px;
     }
-
-    .comment-input-wrapper {
-        min-height: 40px !important;
-        padding: 4px 2px !important;
-        gap: 6px !important;
-    }
     .comment-input-wrapper input {
-        min-height: 34px !important;
-        font-size: 12px !important;
-        padding: 6px 10px !important;
+        font-size: 11px;
+        padding: 4px 10px;
+        min-height: 26px;
     }
     .comment-input-wrapper button {
-        min-height: 34px !important;
-        font-size: 11px !important;
-        padding: 6px 12px !important;
+        font-size: 11px;
+        padding: 4px 10px;
+        min-height: 26px;
     }
 }
-
-/* ============================================================
-   PANTALLA BAJA
-   ============================================================ */
 
 @media (max-height: 600px) {
     .modal-header {
@@ -1273,8 +1082,8 @@
         padding: 6px 14px 2px;
     }
     .modal-media {
-        height: 140px;
-        min-height: 120px;
+        height: 160px;
+        min-height: 160px;
         max-height: 160px;
     }
     .modal-media .text-content {
@@ -1313,6 +1122,16 @@
     .comment-item .comment-body .comment-text {
         font-size: 13px;
     }
+    .comment-input-wrapper input {
+        min-height: 28px;
+        font-size: 12px;
+        padding: 4px 10px;
+    }
+    .comment-input-wrapper button {
+        min-height: 28px;
+        font-size: 12px;
+        padding: 4px 12px;
+    }
     .story-progress {
         padding: 3px 10px 0;
     }
@@ -1323,38 +1142,6 @@
         font-size: 8px;
         padding: 2px 7px;
     }
-
-    .comment-input-wrapper {
-        min-height: 36px !important;
-        padding: 4px 2px !important;
-    }
-    .comment-input-wrapper input {
-        min-height: 32px !important;
-        font-size: 12px !important;
-        padding: 4px 10px !important;
-    }
-    .comment-input-wrapper button {
-        min-height: 32px !important;
-        font-size: 11px !important;
-        padding: 4px 12px !important;
-    }
-}
-
-/* ============================================================
-   BADGE DE TRADUCCIÓN
-   ============================================================ */
-
-.translation-badge-modal {
-    display: inline-block;
-    font-size: 9px;
-    color: rgba(192, 132, 252, 0.7);
-    margin-left: 6px;
-    font-weight: 400;
-}
-
-.translation-badge-modal i {
-    font-size: 8px;
-    margin-right: 2px;
 }
 
 /* ============================================================
@@ -1380,6 +1167,23 @@
 .modal-body::-webkit-scrollbar-thumb:hover,
 .comments-section .comments-list::-webkit-scrollbar-thumb:hover {
     background: rgba(192, 132, 252, 0.25);
+}
+
+/* ============================================================
+   BADGE DE TRADUCCIÓN
+   ============================================================ */
+
+.translation-badge-modal {
+    display: inline-block;
+    font-size: 9px;
+    color: rgba(192, 132, 252, 0.7);
+    margin-left: 6px;
+    font-weight: 400;
+}
+
+.translation-badge-modal i {
+    font-size: 8px;
+    margin-right: 2px;
 }
 
 /* ============================================================
