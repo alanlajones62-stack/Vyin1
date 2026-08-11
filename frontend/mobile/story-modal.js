@@ -1057,7 +1057,7 @@ function updateTextContentOnly(updatedData) {
 }
 
 // ============================================================
-// CARGAR DATOS DE LA HISTORIA - CON CACHÉ PERSISTENTE
+// 🔥 CARGAR DATOS DE LA HISTORIA - CON FORCE RELOAD DE COMENTARIOS
 // ============================================================
 
 async function loadStoryData(storyId, isNavigation = false) {
@@ -1079,7 +1079,8 @@ async function loadStoryData(storyId, isNavigation = false) {
                 updateModalUI(currentStoryData);
                 updateProgress();
                 const highlightCommentId = window._activityCommentId || null;
-                await initComments(storyId, 'commentsList', highlightCommentId, false);
+                // 🔥 FORZAR RECARGA DE COMENTARIOS DESDE EL SERVIDOR
+                await initComments(storyId, 'commentsList', highlightCommentId, true);
                 isFirstLoad = false;
                 const totalComments = getTotalCommentsCount(storyId);
                 updateCommentCount(totalComments);
@@ -1092,7 +1093,8 @@ async function loadStoryData(storyId, isNavigation = false) {
                     updateModalUI(currentStoryData);
                     updateProgress();
                     const highlightCommentId = window._activityCommentId || null;
-                    await initComments(storyId, 'commentsList', highlightCommentId, false);
+                    // 🔥 FORZAR RECARGA DE COMENTARIOS DESDE EL SERVIDOR
+                    await initComments(storyId, 'commentsList', highlightCommentId, true);
                     isFirstLoad = false;
                     const totalComments = getTotalCommentsCount(storyId);
                     updateCommentCount(totalComments);
@@ -1146,8 +1148,9 @@ async function loadStoryData(storyId, isNavigation = false) {
         
         const highlightCommentId = window._activityCommentId || null;
         
-        // 🔥 NO forzar recarga si ya tenemos caché
-        const forceReload = isFirstLoad && !getCachedComments(storyId);
+        // 🔥 SIEMPRE FORZAR RECARGA DE COMENTARIOS AL ABRIR EL MODAL
+        // Esto asegura que siempre veas los comentarios más recientes
+        const forceReload = true;
         await initComments(storyId, 'commentsList', highlightCommentId, forceReload);
         isFirstLoad = false;
         

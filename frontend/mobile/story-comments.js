@@ -943,6 +943,7 @@ export async function initComments(storyId, containerId = 'commentsList', highli
     container.dataset.storyId = storyId;
     window._currentStoryId = storyId;
 
+    // 🔥 SI forceReload ES TRUE, IGNORAR CACHÉ Y CARGAR DEL SERVIDOR
     if (!forceReload && commentsCache.has(storyId)) {
         const cached = commentsCache.get(storyId);
         if (cached && cached.timestamp && (Date.now() - cached.timestamp < CACHE_TTL)) {
