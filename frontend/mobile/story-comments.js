@@ -1,6 +1,7 @@
 // ============================================================
 // story-comments.js - Sistema de comentarios para historias
 // CON ESTADO CORRECTO DE OCULTAR/MOSTRAR RESPUESTAS
+// VERSIÓN CORREGIDA - CON CACHÉ CON EXPIRACIÓN
 // ============================================================
 
 import { getToken, getCurrentUser, showToast, getAvatar, formatDate, escapeHtml } from './auth.js';
@@ -12,9 +13,10 @@ const API_URL = window.location.origin;
 // ESTADO DE COMENTARIOS
 // ============================================================
 
-let commentsCache = new Map(); // storyId -> [comments]
+let commentsCache = new Map(); // storyId -> { comments, timestamp }
 let commentLikes = new Map(); // commentId -> Set de userIds
 let repliesVisibility = new Map(); // commentId -> boolean (true = visible, false = oculto)
+const CACHE_TTL = 5 * 60 * 1000; // 5 minutos de expiración
 
 // ============================================================
 // FUNCIÓN PARA BUSCAR COMENTARIO POR ID (RECURSIVA)
@@ -75,7 +77,7 @@ function getParentChain(comments, commentId, chain = []) {
 }
 
 // ============================================================
-// CARGAR COMENTARIOS (FORZAR RECARGA)
+// CARGAR COMENTARIOS (CON CACHÉ CON EXPIRACIÓN)
 // ============================================================
 
 export async function loadComments(storyId, forceReload = false) {
@@ -84,15 +86,26 @@ export async function loadComments(storyId, forceReload = false) {
     const token = getToken();
     if (!token) return [];
 
+    // ✅ VERIFICAR CACHÉ CON EXPIRACIÓN
     if (forceReload && commentsCache.has(storyId)) {
+        console.log('🔄 [COMMENTS] Forzando recarga, eliminando caché');
         commentsCache.delete(storyId);
     }
 
     if (commentsCache.has(storyId)) {
-        return commentsCache.get(storyId);
+        const cached = commentsCache.get(storyId);
+        // ✅ VERIFICAR SI LA CACHÉ NO HA EXPIRADO
+        if (cached && cached.timestamp && (Date.now() - cached.timestamp < CACHE_TTL)) {
+            console.log(`📦 [COMMENTS] Usando caché (${Math.round((Date.now() - cached.timestamp) / 1000)}s)`);
+            return cached.comments;
+        } else {
+            console.log('⏰ [COMMENTS] Caché expirada, recargando...');
+            commentsCache.delete(storyId);
+        }
     }
 
     try {
+        console.log('🌐 [COMMENTS] Cargando comentarios desde servidor');
         const res = await fetch(`${API_URL}/api/stories/${storyId}/comments`, {
             headers: { 'Authorization': `Bearer ${token}` }
         });
@@ -121,7 +134,11 @@ export async function loadComments(storyId, forceReload = false) {
             }
         });
         
-        commentsCache.set(storyId, comments);
+        // ✅ GUARDAR CON TIMESTAMP
+        commentsCache.set(storyId, {
+            comments: comments,
+            timestamp: Date.now()
+        });
         
         // Inicializar visibilidad de respuestas (ocultas por defecto)
         comments.forEach(comment => {
@@ -197,7 +214,8 @@ export async function addComment(storyId, content, parentCommentId = null) {
         
         // ACTUALIZAR CACHÉ LOCAL
         if (commentsCache.has(storyId)) {
-            const comments = commentsCache.get(storyId);
+            const cached = commentsCache.get(storyId);
+            const comments = cached.comments;
             
             if (parentCommentId) {
                 const parentComment = findCommentById(comments, parentCommentId);
@@ -211,7 +229,10 @@ export async function addComment(storyId, content, parentCommentId = null) {
                 // ✅ INSERTAR AL PRINCIPIO (más reciente)
                 comments.unshift(newComment);
             }
-            commentsCache.set(storyId, comments);
+            commentsCache.set(storyId, {
+                comments: comments,
+                timestamp: Date.now()
+            });
         }
 
         // ✅ NO LLAMAR A updateCommentsUI aquí para evitar duplicados
@@ -263,7 +284,8 @@ export async function deleteComment(storyId, commentId, parentCommentId = null) 
         if (!res.ok) throw new Error('Error al eliminar');
 
         if (commentsCache.has(storyId)) {
-            const comments = commentsCache.get(storyId);
+            const cached = commentsCache.get(storyId);
+            const comments = cached.comments;
             
             if (parentCommentId) {
                 const parentComment = findCommentById(comments, parentCommentId);
@@ -272,7 +294,10 @@ export async function deleteComment(storyId, commentId, parentCommentId = null) 
                 }
             } else {
                 const filtered = comments.filter(c => c.id !== commentId);
-                commentsCache.set(storyId, filtered);
+                commentsCache.set(storyId, {
+                    comments: filtered,
+                    timestamp: Date.now()
+                });
             }
         }
 
@@ -347,7 +372,8 @@ function updateCommentsUI(storyId) {
     if (!container) return;
     
     const currentUser = getCurrentUser();
-    const comments = commentsCache.get(storyId) || [];
+    const cached = commentsCache.get(storyId);
+    const comments = cached ? cached.comments : [];
     
     renderComments(comments, storyId, currentUser?.id, container);
 }
@@ -608,6 +634,7 @@ window.handleCommentLike = async function(storyId, commentId) {
     if (liked !== false) {
         updateCommentsUI(storyId);
     }
+    return liked;
 };
 
 window.handleCommentDelete = async function(storyId, commentId, parentCommentId = null) {
@@ -633,7 +660,10 @@ window.toggleReplyInput = function(storyId, commentId) {
         container.style.alignItems = 'center';
         if (!isVisible) {
             const input = document.getElementById(`replyInput-${commentId}`);
-            if (input) input.focus();
+            if (input) {
+                input.focus();
+                container.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }
         }
     }
 };
@@ -677,10 +707,10 @@ window.toggleRepliesVisibility = function(commentId) {
 };
 
 // ============================================================
-// INICIALIZAR COMENTARIOS EN MODAL
+// INICIALIZAR COMENTARIOS EN MODAL - CORREGIDO
 // ============================================================
 
-export async function initComments(storyId, containerId = 'commentsList', highlightCommentId = null, skipCache = false) {
+export async function initComments(storyId, containerId = 'commentsList', highlightCommentId = null, forceReload = false) {
     if (!storyId) return;
 
     const container = document.getElementById(containerId);
@@ -690,19 +720,20 @@ export async function initComments(storyId, containerId = 'commentsList', highli
     container.dataset.storyId = storyId;
     window._currentStoryId = storyId;
 
-    // ✅ Si skipCache es true, NO recargar desde el servidor
-    if (skipCache) {
-        console.log('📦 Usando comentarios en caché, sin recargar');
-        // Si hay comentarios en caché, renderizarlos
-        if (commentsCache.has(storyId)) {
-            const comments = commentsCache.get(storyId);
+    // ✅ SI forceReload ES false, INTENTAR USAR CACHÉ
+    if (!forceReload && commentsCache.has(storyId)) {
+        const cached = commentsCache.get(storyId);
+        if (cached && cached.timestamp && (Date.now() - cached.timestamp < CACHE_TTL)) {
+            console.log('📦 [COMMENTS] Usando caché para renderizar');
+            const comments = cached.comments;
             const currentUser = getCurrentUser();
             renderComments(comments, storyId, currentUser?.id, container, highlightCommentId);
+            return;
         }
-        return;
     }
 
-    // FORZAR RECARGA COMPLETA DESDE EL SERVIDOR
+    // ✅ FORZAR RECARGA COMPLETA DESDE EL SERVIDOR
+    console.log('🌐 [COMMENTS] Recargando comentarios desde servidor (forceReload=true)');
     const comments = await loadComments(storyId, true);
     const currentUser = getCurrentUser();
     
@@ -793,7 +824,8 @@ export function expandRepliesForComment(commentId) {
     
     // Buscar el comentario en el caché
     let found = false;
-    for (const [storyId, comments] of commentsCache) {
+    for (const [storyId, cached] of commentsCache) {
+        const comments = cached.comments;
         const comment = findCommentById(comments, commentId);
         if (comment) {
             // Encontrar la cadena de padres

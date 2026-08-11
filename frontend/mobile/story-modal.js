@@ -1,6 +1,6 @@
 // ============================================================
 // story-modal.js - Modal para ver historias con navegación 
-// (VERSIÓN CORREGIDA - SIN DUPLICADOS Y SIN BOTÓN PERFIL)
+// (VERSIÓN CORREGIDA - COMENTARIOS PERSISTENTES)
 // ============================================================
 
 import {
@@ -19,6 +19,7 @@ let currentStoriesList = [];
 let currentStoryIndex = 0;
 let isNavigating = false;
 let userLanguage = 'es';
+let isFirstLoad = true; // ✅ NUEVO: Control de primera carga
 
 // Caché de traducciones
 let translationCache = {};
@@ -91,6 +92,8 @@ export async function openStoryModal(storyId, storiesList = null, fromProfile = 
     
     document.body.style.overflow = 'hidden';
 
+    // ✅ FORZAR RECARGA AL ABRIR
+    isFirstLoad = true;
     await loadStoryData(storyId);
 }
 
@@ -163,6 +166,7 @@ export async function navigateStory(direction) {
     
     if (newStory) {
         console.log(`🔄 Navegando a historia ${newIndex + 1}/${currentStoriesList.length}: ${newStory.id}`);
+        isFirstLoad = true; // ✅ FORZAR RECARGA AL NAVEGAR
         await loadStoryData(newStory.id, true);
     }
     
@@ -333,6 +337,33 @@ function setupModalEvents() {
         if (e.key === 'Enter' && !e.shiftKey) {
             e.preventDefault();
             handleSendComment();
+        }
+    });
+
+    // ✅ NUEVO: DELEGAR EVENTOS DE LIKE A COMENTARIOS
+    document.getElementById('commentsList')?.addEventListener('click', async (e) => {
+        const likeBtn = e.target.closest('.btn-like-comment');
+        if (likeBtn) {
+            const commentId = likeBtn.dataset.commentId;
+            if (commentId && currentStoryId) {
+                const liked = await window.handleCommentLike(currentStoryId, commentId);
+                if (liked !== false) {
+                    // ✅ RECARGAR COMENTARIOS PARA ACTUALIZAR UI
+                    const highlightCommentId = window._activityCommentId || null;
+                    await initComments(currentStoryId, 'commentsList', highlightCommentId, false);
+                }
+            }
+        }
+    });
+
+    // ✅ NUEVO: DELEGAR EVENTOS DE RESPONDER
+    document.getElementById('commentsList')?.addEventListener('click', (e) => {
+        const replyBtn = e.target.closest('.btn-reply-comment');
+        if (replyBtn) {
+            const commentId = replyBtn.dataset.commentId;
+            if (commentId && currentStoryId) {
+                window.toggleReplyInput(currentStoryId, commentId);
+            }
         }
     });
 
@@ -948,7 +979,7 @@ function updateTextContentOnly(updatedData) {
 }
 
 // ============================================================
-// CARGAR DATOS DE LA HISTORIA
+// CARGAR DATOS DE LA HISTORIA - CORREGIDO
 // ============================================================
 
 async function loadStoryData(storyId, isNavigation = false) {
@@ -970,7 +1001,10 @@ async function loadStoryData(storyId, isNavigation = false) {
                 updateModalUI(currentStoryData);
                 updateProgress();
                 const highlightCommentId = window._activityCommentId || null;
-                await initComments(storyId, 'commentsList', highlightCommentId, true);
+                // ✅ USAR forceReload CORRECTO
+                const forceReload = isFirstLoad || isNavigation;
+                await initComments(storyId, 'commentsList', highlightCommentId, forceReload);
+                isFirstLoad = false;
                 return;
             }
             if (currentStoriesList.length > 0) {
@@ -980,7 +1014,9 @@ async function loadStoryData(storyId, isNavigation = false) {
                     updateModalUI(currentStoryData);
                     updateProgress();
                     const highlightCommentId = window._activityCommentId || null;
-                    await initComments(storyId, 'commentsList', highlightCommentId, true);
+                    const forceReload = isFirstLoad || isNavigation;
+                    await initComments(storyId, 'commentsList', highlightCommentId, forceReload);
+                    isFirstLoad = false;
                     return;
                 }
             }
@@ -1031,7 +1067,11 @@ async function loadStoryData(storyId, isNavigation = false) {
         updateProgress();
         
         const highlightCommentId = window._activityCommentId || null;
-        await initComments(storyId, 'commentsList', highlightCommentId, true);
+        
+        // ✅ SI ES LA PRIMERA CARGA O NAVEGACIÓN, FORZAR RECARGA
+        const forceReload = isFirstLoad || isNavigation;
+        await initComments(storyId, 'commentsList', highlightCommentId, forceReload);
+        isFirstLoad = false;
         
         await registerView(storyId);
 
