@@ -1,8 +1,6 @@
 // ============================================================
 // story-modal.js - Modal para ver historias con navegación 
-// (VERSIÓN COMPLETA - DELEGA COMENTARIOS A story-comments.js)
-// 🔥 CORREGIDO: Input de comentarios visible en móviles
-// 🔥 ELIMINADO: Botón de perfil (ya se accede desde el header)
+// (VERSIÓN CORREGIDA - SIN DUPLICADOS)
 // ============================================================
 
 import {
@@ -11,7 +9,7 @@ import {
 } from './auth.js';
 
 import { formatNumber } from './utils.js';
-import { initComments } from './story-comments.js';
+import { loadComments, initComments } from './story-comments.js';
 
 const API_URL = window.location.origin;
 let currentStoryId = null;
@@ -29,7 +27,7 @@ let translationCache = {};
 // ABRIR MODAL
 // ============================================================
 
-async function openStoryModal(storyId, storiesList = null, fromProfile = false, profileUserId = null) {
+export async function openStoryModal(storyId, storiesList = null, fromProfile = false, profileUserId = null) {
     if (!storyId) {
         showToast('Historia no encontrada', true);
         return;
@@ -44,21 +42,6 @@ async function openStoryModal(storyId, storiesList = null, fromProfile = false, 
         console.log('📱 [STORY-MODAL] Cerrando modal anterior...');
         closeStoryModal();
         await new Promise(resolve => setTimeout(resolve, 100));
-    }
-
-    // 🔥🔥🔥 FORZAR RECREACIÓN DEL MODAL EN MÓVILES
-    const isMobile = window.innerWidth < 768;
-    if (isMobile) {
-        console.log('📱 [STORY-MODAL] Modo móvil detectado, recreando modal...');
-        const existingOverlay = document.getElementById('storyModalOverlay');
-        if (existingOverlay) {
-            // Verificar si el input existe
-            const hasInput = existingOverlay.querySelector('#commentInput');
-            if (!hasInput) {
-                console.warn('⚠️ [STORY-MODAL] Falta el input en móvil, eliminando overlay...');
-                existingOverlay.remove();
-            }
-        }
     }
 
     if (fromProfile && profileUserId) {
@@ -115,7 +98,7 @@ async function openStoryModal(storyId, storiesList = null, fromProfile = false, 
 // CERRAR MODAL
 // ============================================================
 
-function closeStoryModal() {
+export function closeStoryModal() {
     console.log('📱 [STORY-MODAL] Cerrando modal...');
     
     isModalOpen = false;
@@ -161,7 +144,7 @@ function closeStoryModal() {
 // NAVEGAR ENTRE HISTORIAS
 // ============================================================
 
-async function navigateStory(direction) {
+export async function navigateStory(direction) {
     if (isNavigating) return;
     if (!currentStoriesList || currentStoriesList.length <= 1) {
         showToast('Solo hay una historia disponible');
@@ -193,18 +176,9 @@ async function navigateStory(direction) {
 function createModalHTML() {
     console.log('📱 [STORY-MODAL] createModalHTML() ejecutado');
     
-    // 🔥 SI EXISTE EL OVERLAY PERO ESTÁ INCOMPLETO, ELIMINARLO Y RECREAR
     if (document.getElementById('storyModalOverlay')) {
-        const existing = document.getElementById('storyModalOverlay');
-        // Verificar si el input existe
-        const hasInput = existing.querySelector('#commentInput');
-        if (!hasInput) {
-            console.warn('⚠️ [STORY-MODAL] El overlay existe pero falta el input, recreando...');
-            existing.remove();
-        } else {
-            console.log('📱 [STORY-MODAL] El overlay ya existe y está completo');
-            return;
-        }
+        console.log('📱 [STORY-MODAL] El overlay ya existe');
+        return;
     }
 
     const html = `
@@ -261,11 +235,11 @@ function createModalHTML() {
                             <button class="btn-share-modal" id="modalShareBtn">
                                 <i class="fas fa-share-alt"></i>
                             </button>
+                            <button class="btn-profile-modal" id="modalProfileBtn">
+                                <i class="fas fa-user"></i> Perfil
+                            </button>
                             <button class="btn-translate-modal" id="modalTranslateBtn" style="display:none;">
                                 <i class="fas fa-language"></i> Traducir
-                            </button>
-                            <button class="btn-delete-modal" id="modalDeleteBtn" style="display:none;">
-                                <i class="fas fa-trash-alt"></i> Eliminar
                             </button>
                         </div>
                         
@@ -285,8 +259,7 @@ function createModalHTML() {
                                 <span>Cargando comentarios...</span>
                             </div>
                         </div>
-                        <!-- 🔥 INPUT PRINCIPAL DE COMENTARIOS -->
-                        <div class="comment-input-wrapper" id="commentInputWrapper">
+                        <div class="comment-input-wrapper">
                             <input type="text" id="commentInput" placeholder="Escribe un comentario..." maxlength="500" />
                             <button id="sendCommentBtn">Enviar</button>
                         </div>
@@ -300,43 +273,6 @@ function createModalHTML() {
     div.innerHTML = html;
     document.body.appendChild(div.firstElementChild);
     console.log('📱 [STORY-MODAL] HTML creado e insertado');
-
-    // 🔥 VERIFICAR QUE EL INPUT EXISTE
-    setTimeout(() => {
-        const input = document.getElementById('commentInput');
-        const sendBtn = document.getElementById('sendCommentBtn');
-        const wrapper = document.getElementById('commentInputWrapper');
-        
-        console.log('🔍 Verificando input de comentarios:');
-        console.log('  - Input:', input);
-        console.log('  - SendBtn:', sendBtn);
-        console.log('  - Wrapper:', wrapper);
-        
-        if (!input || !sendBtn) {
-            console.error('❌ [STORY-MODAL] ¡Falta el input de comentarios!');
-            // 🔥 RECUPERAR MANUALMENTE
-            const commentsSection = document.querySelector('.comments-section');
-            if (commentsSection) {
-                const wrapperDiv = document.createElement('div');
-                wrapperDiv.className = 'comment-input-wrapper';
-                wrapperDiv.id = 'commentInputWrapper';
-                wrapperDiv.innerHTML = `
-                    <input type="text" id="commentInput" placeholder="Escribe un comentario..." maxlength="500" />
-                    <button id="sendCommentBtn">Enviar</button>
-                `;
-                commentsSection.appendChild(wrapperDiv);
-                console.log('✅ Input recuperado manualmente');
-            }
-        } else {
-            console.log('✅ [STORY-MODAL] Input de comentarios encontrado');
-            // Forzar visibilidad en móviles
-            if (wrapper) {
-                wrapper.style.display = 'flex !important';
-                wrapper.style.visibility = 'visible !important';
-                wrapper.style.opacity = '1 !important';
-            }
-        }
-    }, 50);
 
     document.addEventListener('keydown', (e) => {
         if (e.key === 'Escape' && isModalOpen) {
@@ -385,16 +321,43 @@ function setupModalEvents() {
         }
     });
 
-    // BOTÓN DE TRADUCCIÓN
+    document.getElementById('modalProfileBtn')?.addEventListener('click', () => {
+        const userId = window._modalUserId;
+        if (userId) {
+            closeStoryModal();
+            window._fromProfileModal = false;
+            window._profileContextUserId = null;
+            
+            setTimeout(() => {
+                import('./profile-modal.js').then(({ openProfileModal }) => {
+                    openProfileModal(userId);
+                }).catch(() => {
+                    if (typeof window.openProfileModal === 'function') {
+                        window.openProfileModal(userId);
+                    } else {
+                        showToast('Error al abrir perfil', true);
+                    }
+                });
+            }, 50);
+        }
+    });
+
+    // 🔥 BOTÓN DE TRADUCCIÓN
     document.getElementById('modalTranslateBtn')?.addEventListener('click', async () => {
         if (!currentStoryId) return;
         await toggleTranslation();
     });
 
-    // BOTÓN DE ELIMINAR
-    document.getElementById('modalDeleteBtn')?.addEventListener('click', async () => {
-        if (!currentStoryId) return;
-        await deleteStory(currentStoryId);
+    // 🔥 ENVÍO DE COMENTARIO
+    document.getElementById('sendCommentBtn')?.addEventListener('click', async () => {
+        await handleSendComment();
+    });
+
+    document.getElementById('commentInput')?.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
+            handleSendComment();
+        }
     });
 
     let touchStartX = 0;
@@ -424,84 +387,285 @@ function setupModalEvents() {
 }
 
 // ============================================================
-// ELIMINAR HISTORIA
+// 🔥 ENVIAR COMENTARIO - CORREGIDO (SIN DUPLICADOS)
 // ============================================================
 
-async function deleteStory(storyId) {
-    if (!storyId) {
-        showToast('Historia no encontrada', true);
+async function handleSendComment() {
+    const input = document.getElementById('commentInput');
+    if (!input) return;
+    
+    const content = input.value.trim();
+    if (!content) {
+        showToast('Escribe un comentario', true);
         return;
     }
 
     const token = getToken();
     if (!token) {
-        showToast('Inicia sesión para eliminar', true);
+        showToast('Inicia sesión para comentar', true);
         return;
     }
 
-    const confirmDelete = confirm('¿Estás seguro de que quieres eliminar esta historia? Esta acción no se puede deshacer.');
-    if (!confirmDelete) return;
+    if (!currentStoryId) {
+        showToast('Error: historia no cargada', true);
+        return;
+    }
 
-    const deleteBtn = document.getElementById('modalDeleteBtn');
-    if (deleteBtn) {
-        deleteBtn.disabled = true;
-        deleteBtn.innerHTML = '<i class="fas fa-spinner fa-pulse"></i> Eliminando...';
+    input.disabled = true;
+    const sendBtn = document.getElementById('sendCommentBtn');
+    if (sendBtn) {
+        sendBtn.disabled = true;
+        sendBtn.textContent = 'Enviando...';
     }
 
     try {
-        const res = await fetch(`${API_URL}/api/stories/${storyId}`, {
-            method: 'DELETE',
+        const res = await fetch(`${API_URL}/api/stories/${currentStoryId}/comments`, {
+            method: 'POST',
             headers: {
                 'Authorization': `Bearer ${token}`,
                 'Content-Type': 'application/json'
-            }
+            },
+            body: JSON.stringify({ content })
         });
 
+        const data = await res.json();
+
         if (res.ok) {
-            showToast('🗑️ Historia eliminada correctamente');
+            input.value = '';
+            
+            // Actualizar contador
+            updateCommentCount(1);
+            
+            // Actualizar datos
+            if (currentStoryData) {
+                if (!currentStoryData.comments) currentStoryData.comments = [];
+                currentStoryData.comments.push(data);
+            }
             
             if (currentStoriesList && currentStoriesList.length > 0) {
-                const idx = currentStoriesList.findIndex(s => s.id === storyId);
-                if (idx !== -1) {
-                    currentStoriesList.splice(idx, 1);
-                    
-                    if (currentStoriesList.length > 0) {
-                        const nextIdx = Math.min(idx, currentStoriesList.length - 1);
-                        currentStoryIndex = nextIdx;
-                        await loadStoryData(currentStoriesList[nextIdx].id, true);
-                    } else {
-                        closeStoryModal();
-                    }
+                const idx = currentStoriesList.findIndex(s => s.id === currentStoryId);
+                if (idx !== -1 && currentStoriesList[idx]) {
+                    if (!currentStoriesList[idx].comments) currentStoriesList[idx].comments = [];
+                    currentStoriesList[idx].comments.push(data);
                 }
-            } else {
-                closeStoryModal();
             }
+
+            // Añadir a la UI sin duplicar
+            addCommentToUI(data);
             
-            try {
-                if (window.io) {
-                    window.io.emit('story_deleted', { storyId });
-                }
-                document.dispatchEvent(new CustomEvent('storyDeleted', { 
-                    detail: { storyId } 
-                }));
-            } catch (e) {
-                console.log('Evento emitido localmente');
-            }
+            showToast('💬 Comentario enviado');
         } else {
-            const data = await res.json();
-            showToast(data.error || 'Error al eliminar la historia', true);
-            if (deleteBtn) {
-                deleteBtn.disabled = false;
-                deleteBtn.innerHTML = '<i class="fas fa-trash-alt"></i> Eliminar';
-            }
+            showToast(data.error || 'Error al enviar comentario', true);
         }
     } catch (error) {
-        console.error('❌ Error eliminando historia:', error);
-        showToast('Error al eliminar la historia', true);
-        if (deleteBtn) {
-            deleteBtn.disabled = false;
-            deleteBtn.innerHTML = '<i class="fas fa-trash-alt"></i> Eliminar';
+        console.error('Error enviando comentario:', error);
+        showToast('Error al enviar comentario', true);
+    } finally {
+        input.disabled = false;
+        if (sendBtn) {
+            sendBtn.disabled = false;
+            sendBtn.textContent = 'Enviar';
         }
+        input.focus();
+    }
+}
+
+// ============================================================
+// 🔥 ENVIAR RESPUESTA - CORREGIDO (SIN DUPLICADOS)
+// ============================================================
+
+async function handleSendReply(storyId, commentId) {
+    const wrapper = document.getElementById(`reply-input-${commentId}`);
+    if (!wrapper) return;
+
+    const input = wrapper.querySelector('.reply-input');
+    if (!input) return;
+
+    const content = input.value.trim();
+    if (!content) {
+        showToast('Escribe una respuesta', true);
+        return;
+    }
+
+    const token = getToken();
+    if (!token) {
+        showToast('Inicia sesión para responder', true);
+        return;
+    }
+
+    input.disabled = true;
+    const sendBtn = wrapper.querySelector('.reply-send-btn');
+    if (sendBtn) {
+        sendBtn.disabled = true;
+        sendBtn.textContent = 'Enviando...';
+    }
+
+    try {
+        const res = await fetch(`${API_URL}/api/stories/${storyId}/comments/${commentId}/replies`, {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ content })
+        });
+
+        const data = await res.json();
+
+        if (res.ok) {
+            input.value = '';
+            wrapper.style.display = 'none';
+
+            // Actualizar contador
+            updateCommentCount(1);
+
+            // Añadir respuesta a la UI sin duplicar
+            addReplyToUI(commentId, data);
+            
+            showToast('💬 Respuesta enviada');
+        } else {
+            showToast(data.error || 'Error al enviar respuesta', true);
+        }
+    } catch (error) {
+        console.error('Error enviando respuesta:', error);
+        showToast('Error al enviar respuesta', true);
+    } finally {
+        input.disabled = false;
+        if (sendBtn) {
+            sendBtn.disabled = false;
+            sendBtn.textContent = 'Enviar';
+        }
+        input.focus();
+    }
+}
+
+// ============================================================
+// 🔥 AÑADIR RESPUESTA A LA UI (SIN DUPLICAR)
+// ============================================================
+
+function addReplyToUI(parentCommentId, reply) {
+    const repliesContainer = document.getElementById(`replies-${parentCommentId}`);
+    if (!repliesContainer) return;
+
+    // Verificar si la respuesta ya existe
+    const existingReply = repliesContainer.querySelector(`[data-comment-id="${reply.id}"]`);
+    if (existingReply) {
+        console.log('⚠️ Respuesta ya existe en la UI, omitiendo duplicado');
+        return;
+    }
+
+    const currentUser = getCurrentUser();
+    const userAvatar = currentUser?.avatar || getAvatar(currentUser?.fullName || 'U');
+
+    const replyHtml = `
+        <div class="comment-item" data-comment-id="${reply.id}">
+            <img class="avatar" src="${reply.avatar || userAvatar}" alt="${reply.fullName}" />
+            <div class="comment-body">
+                <div class="comment-user">
+                    ${escapeHtml(reply.fullName)}
+                    <span class="handle">@${reply.username || 'usuario'}</span>
+                    <span class="time">${formatDate(reply.createdAt)}</span>
+                </div>
+                <div class="comment-text">${escapeHtml(reply.content)}</div>
+                <div class="comment-meta">
+                    <button class="btn-like-comment" data-comment-id="${reply.id}">
+                        <i class="fas fa-heart"></i> <span class="like-count">0</span>
+                    </button>
+                    <button class="btn-reply-comment" data-comment-id="${reply.id}">
+                        <i class="fas fa-reply"></i> Responder
+                    </button>
+                </div>
+                <div class="replies" id="replies-${reply.id}"></div>
+                <div class="reply-input-container" id="reply-input-${reply.id}" style="display:none;">
+                    <input type="text" class="reply-input" placeholder="Escribe una respuesta..." maxlength="500" />
+                    <button class="reply-send-btn" data-comment-id="${reply.id}">Enviar</button>
+                </div>
+            </div>
+        </div>
+    `;
+
+    const tempDiv = document.createElement('div');
+    tempDiv.innerHTML = replyHtml;
+    const replyElement = tempDiv.firstElementChild;
+    
+    repliesContainer.appendChild(replyElement);
+    
+    console.log('✅ Respuesta añadida a la UI');
+}
+
+// ============================================================
+// 🔥 AÑADIR COMENTARIO A LA UI (SIN DUPLICAR)
+// ============================================================
+
+function addCommentToUI(comment) {
+    const commentsList = document.getElementById('commentsList');
+    if (!commentsList) return;
+
+    const existingComment = commentsList.querySelector(`[data-comment-id="${comment.id}"]`);
+    if (existingComment) {
+        console.log('⚠️ Comentario ya existe en la UI, omitiendo duplicado');
+        return;
+    }
+
+    const noComments = commentsList.querySelector('.no-comments');
+    if (noComments) {
+        noComments.remove();
+    }
+
+    const currentUser = getCurrentUser();
+    const userAvatar = currentUser?.avatar || getAvatar(currentUser?.fullName || 'U');
+
+    const commentHtml = `
+        <div class="comment-item" data-comment-id="${comment.id}">
+            <img class="avatar" src="${comment.avatar || userAvatar}" alt="${comment.fullName}" />
+            <div class="comment-body">
+                <div class="comment-user">
+                    ${escapeHtml(comment.fullName)}
+                    <span class="handle">@${comment.username || 'usuario'}</span>
+                    <span class="time">${formatDate(comment.createdAt)}</span>
+                </div>
+                <div class="comment-text">${escapeHtml(comment.content)}</div>
+                <div class="comment-meta">
+                    <button class="btn-like-comment" data-comment-id="${comment.id}">
+                        <i class="fas fa-heart"></i> <span class="like-count">0</span>
+                    </button>
+                    <button class="btn-reply-comment" data-comment-id="${comment.id}">
+                        <i class="fas fa-reply"></i> Responder
+                    </button>
+                </div>
+                <div class="replies" id="replies-${comment.id}"></div>
+                <div class="reply-input-container" id="reply-input-${comment.id}" style="display:none;">
+                    <input type="text" class="reply-input" placeholder="Escribe una respuesta..." maxlength="500" />
+                    <button class="reply-send-btn" data-comment-id="${comment.id}">Enviar</button>
+                </div>
+            </div>
+        </div>
+    `;
+
+    const tempDiv = document.createElement('div');
+    tempDiv.innerHTML = commentHtml;
+    const commentElement = tempDiv.firstElementChild;
+    
+    commentsList.insertBefore(commentElement, commentsList.firstChild);
+    
+    console.log('✅ Comentario añadido a la UI');
+}
+
+// ============================================================
+// 🔥 ACTUALIZAR CONTADOR DE COMENTARIOS
+// ============================================================
+
+function updateCommentCount(increment) {
+    const commentsEl = document.getElementById('modalComments');
+    if (commentsEl) {
+        const current = parseInt(commentsEl.textContent.replace(/[^0-9]/g, '')) || 0;
+        commentsEl.textContent = formatNumber(current + increment);
+    }
+    
+    const commentsCountEl = document.getElementById('commentsCount');
+    if (commentsCountEl) {
+        const current = parseInt(commentsCountEl.textContent.replace(/[^0-9]/g, '')) || 0;
+        commentsCountEl.textContent = formatNumber(current + increment);
     }
 }
 
@@ -574,7 +738,7 @@ function formatVTTTime(seconds) {
 }
 
 // ============================================================
-// ALTERNAR TRADUCCIÓN/ORIGINAL
+// 🔥 ALTERNAR TRADUCCIÓN/ORIGINAL
 // ============================================================
 
 async function toggleTranslation() {
@@ -599,6 +763,7 @@ async function toggleTranslation() {
         return;
     }
     
+    // Si ya está traducida, mostrar original
     if (currentStoryData.translated && currentStoryData._originalTextContent) {
         console.log('📝 Mostrando original');
         
@@ -631,6 +796,7 @@ async function toggleTranslation() {
         return;
     }
 
+    // Verificar caché en memoria
     const cacheKey = `${currentStoryId}_${userLanguage}`;
     if (translationCache[cacheKey] && translationCache[cacheKey].translated) {
         console.log('📦 Usando traducción desde caché');
@@ -674,6 +840,7 @@ async function toggleTranslation() {
         return;
     }
 
+    // Si no está en caché, traducir
     if (translateBtn) {
         translateBtn.innerHTML = '<i class="fas fa-spinner fa-pulse"></i> Traduciendo...';
         translateBtn.disabled = true;
@@ -778,7 +945,7 @@ async function toggleTranslation() {
 }
 
 // ============================================================
-// ACTUALIZAR SOLO textContent
+// 🔥 ACTUALIZAR SOLO textContent
 // ============================================================
 
 function updateTextContentOnly(updatedData) {
@@ -860,6 +1027,7 @@ async function loadStoryData(storyId, isNavigation = false) {
         currentStoryData = story;
         currentStoryId = story.id;
 
+        // Verificar si hay traducción en caché
         const cacheKey = `${storyId}_${userLanguage}`;
         if (translationCache[cacheKey] && !story.translated) {
             console.log('📦 Aplicando traducción desde caché');
@@ -884,9 +1052,7 @@ async function loadStoryData(storyId, isNavigation = false) {
         updateModalUI(currentStoryData);
         updateProgress();
         
-        // 🔥 PASAR highlightCommentId A initComments
         const highlightCommentId = window._activityCommentId || null;
-        console.log('📌 Highlight comment ID:', highlightCommentId);
         await initComments(storyId, 'commentsList', highlightCommentId);
         
         await registerView(storyId);
@@ -917,20 +1083,7 @@ function updateModalUI(story) {
     document.getElementById('modalUserHandle').textContent = `@${user.username || 'usuario'}`;
     window._modalUserId = user.id;
 
-    const deleteBtn = document.getElementById('modalDeleteBtn');
-    if (deleteBtn) {
-        const currentUser = getCurrentUser();
-        const isOwner = currentUser && user.id && currentUser.id === user.id;
-        if (isOwner) {
-            deleteBtn.style.display = 'inline-flex';
-            deleteBtn.disabled = false;
-            deleteBtn.innerHTML = '<i class="fas fa-trash-alt"></i> Eliminar';
-            deleteBtn.title = 'Eliminar esta historia';
-        } else {
-            deleteBtn.style.display = 'none';
-        }
-    }
-
+    // Botón de traducción - siempre visible
     const contentLanguage = story.language || story.originalLanguage || 'es';
     const isDifferentLanguage = contentLanguage !== userLanguage;
     const isTranslated = story.translated || false;
@@ -1192,13 +1345,12 @@ async function handleModalLike() {
 }
 
 // ============================================================
-// FUNCIONES GLOBALES PARA WINDOW
+// FUNCIONES GLOBALES
 // ============================================================
 
 window.openStoryModal = openStoryModal;
 window.closeStoryModal = closeStoryModal;
 window.navigateStory = navigateStory;
-window.deleteStory = deleteStory;
 
 window.openProfileFromModal = function() {
     const userId = window._modalUserId;
@@ -1221,15 +1373,4 @@ window.openProfileFromModal = function() {
     }
 };
 
-// ============================================================
-// ✅ EXPORTACIONES
-// ============================================================
-
-export { 
-    openStoryModal, 
-    closeStoryModal, 
-    navigateStory, 
-    loadStoryData, 
-    handleModalLike,
-    deleteStory
-};
+export { loadStoryData, handleModalLike };

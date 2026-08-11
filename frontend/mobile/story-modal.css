@@ -1,6 +1,5 @@
 /* ============================================================
    STORY MODAL - CON SUBTÍTULOS Y COMENTARIOS MEJORADOS
-   VERSIÓN CORREGIDA - INPUT VISIBLE EN MÓVILES
    ============================================================ */
 
 .modal-overlay {
@@ -459,7 +458,7 @@
 }
 
 /* ============================================================
-   COMENTARIO ITEM
+   COMENTARIO ITEM - ESTILOS MEJORADOS
    ============================================================ */
 
 .comment-item {
@@ -739,7 +738,6 @@
     padding: 4px 0 6px;
     border-top: 1px solid rgba(255, 255, 255, 0.04);
     flex-shrink: 0;
-    background: #12122a;
 }
 
 .comment-input-wrapper input {
@@ -810,7 +808,7 @@
 }
 
 /* ============================================================
-   RESPONSIVE - MÓVIL
+   RESPONSIVE
    ============================================================ */
 
 @media (max-width: 480px) {
@@ -1116,12 +1114,6 @@
         width: 20px;
         height: 20px;
     }
-    .comment-item {
-        padding: 4px 6px;
-    }
-    .comment-item .comment-body .comment-text {
-        font-size: 13px;
-    }
     .comment-input-wrapper input {
         min-height: 28px;
         font-size: 12px;
@@ -1143,63 +1135,3 @@
         padding: 2px 7px;
     }
 }
-
-/* ============================================================
-   SCROLLBAR PERSONALIZADA
-   ============================================================ */
-
-.modal-body::-webkit-scrollbar,
-.comments-section .comments-list::-webkit-scrollbar {
-    width: 3px;
-}
-
-.modal-body::-webkit-scrollbar-track,
-.comments-section .comments-list::-webkit-scrollbar-track {
-    background: transparent;
-}
-
-.modal-body::-webkit-scrollbar-thumb,
-.comments-section .comments-list::-webkit-scrollbar-thumb {
-    background: rgba(192, 132, 252, 0.15);
-    border-radius: 10px;
-}
-
-.modal-body::-webkit-scrollbar-thumb:hover,
-.comments-section .comments-list::-webkit-scrollbar-thumb:hover {
-    background: rgba(192, 132, 252, 0.25);
-}
-
-/* ============================================================
-   BADGE DE TRADUCCIÓN
-   ============================================================ */
-
-.translation-badge-modal {
-    display: inline-block;
-    font-size: 9px;
-    color: rgba(192, 132, 252, 0.7);
-    margin-left: 6px;
-    font-weight: 400;
-}
-
-.translation-badge-modal i {
-    font-size: 8px;
-    margin-right: 2px;
-}
-
-/* ============================================================
-   ANIMACIONES
-   ============================================================ */
-
-@keyframes slideUp {
-    0% { opacity: 0; transform: translateY(10px); }
-    100% { opacity: 1; transform: translateY(0); }
-}
-
-.comment-item {
-    animation: slideUp 0.25s ease forwards;
-}
-
-.comment-item:nth-child(2) { animation-delay: 0.05s; }
-.comment-item:nth-child(3) { animation-delay: 0.1s; }
-.comment-item:nth-child(4) { animation-delay: 0.15s; }
-.comment-item:nth-child(5) { animation-delay: 0.2s; }
