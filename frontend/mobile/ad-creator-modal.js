@@ -113,13 +113,6 @@ export function openAdCreator() {
                             <option value="region">Mi región</option>
                         </select>
                     </div>
-
-                    <!-- Presupuesto -->
-                    <div class="form-group">
-                        <label>Presupuesto (VYN)</label>
-                        <input type="number" id="adBudget" placeholder="0" min="0" value="0" />
-                        <div class="helper">Opcional. Mayor presupuesto = mayor visibilidad</div>
-                    </div>
                 </div>
 
                 <!-- Info box -->
@@ -186,7 +179,7 @@ function setupEvents() {
         validateForm();
     });
 
-    // Validar formulario
+    // Validar formulario - Ahora solo requiere título y descripción
     function validateForm() {
         const title = titleInput?.value.trim() || '';
         const desc = descInput?.value.trim() || '';
@@ -294,7 +287,6 @@ function resetForm() {
     document.getElementById('adTitle').value = '';
     document.getElementById('adDescription').value = '';
     document.getElementById('adLink').value = '';
-    document.getElementById('adBudget').value = '0';
     document.getElementById('adDuration').value = '7';
     document.getElementById('adAudience').value = 'all';
     document.getElementById('adPreview').style.display = 'none';
@@ -318,7 +310,6 @@ async function publishAd() {
     const link = document.getElementById('adLink')?.value.trim() || '';
     const duration = parseInt(document.getElementById('adDuration')?.value || '7');
     const audience = document.getElementById('adAudience')?.value || 'all';
-    const budget = parseInt(document.getElementById('adBudget')?.value || '0');
 
     const statusMsg = document.getElementById('adStatusMessage');
     const publishBtn = document.getElementById('adPublishBtn');
@@ -389,7 +380,6 @@ async function publishAd() {
                 linkUrl: link || null,
                 durationDays: duration,
                 targetAudience: audience,
-                budget: budget || 0,
                 mediaType: 'image',
                 mediaUrl: imageUrl || null
             })

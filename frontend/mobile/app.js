@@ -1,4 +1,4 @@
-// app.js - VERSIÓN COMPLETA CON BOTONES EN EL CENTRO (125px) Y LIKES CORREGIDOS
+// app.js - VERSIÓN COMPLETA CON FILTRO PUBLICIDAD
 // ============================================================
 
 import {
@@ -20,10 +20,13 @@ import { openCreator, closeCreator } from './story-creator-modal.js';
 import { openExploreModal, closeExploreModal } from './explore-modal.js';
 import { openActivityModal, closeActivityModal, updateBadge } from './activity-modal.js';
 
-// 🔥 IMPORTAR CREADOR DE PUBLICIDAD (NUEVO)
+// 🔥 IMPORTAR CREADOR DE PUBLICIDAD
 import { openAdCreator, closeAdCreator } from './ad-creator-modal.js';
 
-// 🔥 IMPORTAR PERFIL NATIVO (SOLO PARA NAVEGACIÓN INFERIOR Y HEADER)
+// 🔥 IMPORTAR PUBLICIDADES PARA EL FEED
+import { loadActiveAds, renderAds, registerAdView, registerAdClick } from './ads-feed.js';
+
+// 🔥 IMPORTAR PERFIL NATIVO
 import { showProfileNative, hideProfileNative } from './profile-native.js';
 
 const API_URL = window.location.origin;
@@ -93,6 +96,10 @@ let isInitialLoad = true;
 
 // 🔥 Caché de traducciones
 let translationCache = {};
+
+// 🔥 Publicidades
+let activeAds = [];
+let isAdsLoaded = false;
 
 // ============================================================
 // CONSTANTES DE TIEMPO
@@ -245,21 +252,19 @@ function restoreFeedCursor() {
 }
 
 // ============================================================
-// 🔥 ACTUALIZAR CONTADORES - CORREGIDO (CADA CONTADOR ES INDEPENDIENTE)
+// 🔥 ACTUALIZAR CONTADORES
 // ============================================================
 
 function updateStoryCounters(storyId, data) {
     const currentUser = getCurrentUser();
     const userId = currentUser?.id;
     
-    // 🔥 OBTENER ELEMENTOS HTML
     const viewCountEl = document.getElementById(`view-count-${storyId}`);
     const likeCountEl = document.getElementById(`like-count-${storyId}`);
     const commentCountEl = document.getElementById(`comment-count-${storyId}`);
     const heartIcon = document.getElementById(`heart-icon-${storyId}`);
     const likeBtn = document.querySelector(`.btn-like[data-story-id="${storyId}"]`);
     
-    // 🔥 ACTUALIZAR SOLO SI VIENE EL DATO - NO SOBRESCRIBIR CON undefined
     if (data.viewsCount !== undefined && viewCountEl) {
         viewCountEl.textContent = formatNumber(data.viewsCount);
     }
@@ -272,27 +277,8 @@ function updateStoryCounters(storyId, data) {
         commentCountEl.textContent = formatNumber(data.commentsCount);
     }
     
-    // 🔥 Determinar si el usuario actual dio like (SOLO si viene data de likes)
     if (data.likes !== undefined && userId) {
         const isLikedByMe = data.likes.includes(userId);
-        
-        if (likeBtn) {
-            if (isLikedByMe) {
-                likeBtn.classList.add('liked');
-                likeBtn.innerHTML = '<i class="fas fa-heart"></i> Quitar';
-            } else {
-                likeBtn.classList.remove('liked');
-                likeBtn.innerHTML = '<i class="fas fa-heart"></i> Like';
-            }
-        }
-        
-        if (heartIcon) {
-            heartIcon.style.color = isLikedByMe ? '#ff6b6b' : 'inherit';
-        }
-    } else if (data.liked !== undefined) {
-        // Fallback: si solo viene el estado del usuario que hizo clic
-        const senderId = data.senderId || data.userId;
-        const isLikedByMe = data.liked && senderId === userId;
         
         if (likeBtn) {
             if (isLikedByMe) {
@@ -311,7 +297,7 @@ function updateStoryCounters(storyId, data) {
 }
 
 // ============================================================
-// 🔥 FUNCIÓN PARA RESTAURAR NAVEGACIÓN A INICIO (SOLO PARA APP)
+// 🔥 FUNCIÓN PARA RESTAURAR NAVEGACIÓN A INICIO
 // ============================================================
 
 function restoreNavToHome() {
@@ -319,15 +305,12 @@ function restoreNavToHome() {
     const navFeed = document.getElementById('navFeed');
     if (navFeed) navFeed.classList.add('active');
     
-    // 🔥 Ocultar perfil nativo si está visible
     const section = document.getElementById('sectionProfile');
     if (section && !section.classList.contains('hidden')) {
         hideProfileNative();
     }
     
-    // 🔥 Cerrar modal de perfil si está abierto
     if (typeof window.closeProfileModal === 'function') {
-        // No cerrar si venimos de seguidores
         if (!window._fromFollowers) {
             window.closeProfileModal();
         }
@@ -382,6 +365,9 @@ async function init() {
             await fetchFeedByCursor('ranked', feedCursor);
             document.querySelector('.filter-btn[data-filter="ranked"]')?.classList.add('active');
             
+            // 🔥 Cargar publicidades en segundo plano
+            loadAdsInBackground();
+            
             if (!isPreloadDone) {
                 setTimeout(() => {
                     console.log('🔄 Pre-cargando perfil...');
@@ -398,6 +384,21 @@ async function init() {
     setupEvents();
     setupIOSOptimizations();
     console.log('✅ App lista');
+}
+
+// ============================================================
+// 🔥 CARGAR PUBLICIDADES EN SEGUNDO PLANO
+// ============================================================
+
+async function loadAdsInBackground() {
+    if (isAdsLoaded) return;
+    try {
+        activeAds = await loadActiveAds();
+        isAdsLoaded = true;
+        console.log(`📢 ${activeAds.length} publicidades cargadas en segundo plano`);
+    } catch (error) {
+        console.error('Error cargando publicidades:', error);
+    }
 }
 
 // ============================================================
@@ -620,14 +621,10 @@ function initSocket() {
         }
     });
 
-    // 🔥 CORRECCIÓN: Evento story_liked - SOLO actualiza likes, NO toca views/comments
     socket.on('story_liked', (data) => {
         const story = allStories.find(s => s.id === data.storyId);
         if (story) {
-            // Actualizar la lista de likes en memoria
             story.likes = data.likes || [];
-            
-            // 🔥 SOLO actualizar likes, NO tocar views ni comments
             updateStoryCounters(data.storyId, {
                 likesCount: data.likes?.length || 0,
                 likes: data.likes,
@@ -637,25 +634,21 @@ function initSocket() {
         }
     });
 
-    // 🔥 CORRECCIÓN: Evento story_viewed - SOLO actualiza vistas
     socket.on('story_viewed', (data) => {
         const story = allStories.find(s => s.id === data.storyId);
         if (story) {
             story.views = data.views || [];
-            // 🔥 SOLO actualizar vistas
             updateStoryCounters(data.storyId, {
                 viewsCount: data.viewsCount || 0
             });
         }
     });
 
-    // 🔥 CORRECCIÓN: Evento new_comment - SOLO actualiza comentarios
     socket.on('new_comment', (data) => {
         const story = allStories.find(s => s.id === data.storyId);
         if (story) {
             if (!story.comments) story.comments = [];
             story.comments.push(data.comment);
-            // 🔥 SOLO actualizar comentarios
             updateStoryCounters(data.storyId, {
                 commentsCount: story.comments.length
             });
@@ -773,14 +766,19 @@ async function fetchFeedByCursor(filter, cursor = null) {
             });
             console.log(`📊 [PARA TI] ${stories.length} historias con más de 10 minutos`);
             stories = stories.filter(s => !isStoryViewed(s.id));
+        } else if (filter === 'ads') {
+            // 🔥 FILTRO PUBLICIDAD - NO CARGAR HISTORIAS NORMALES
+            stories = [];
         }
 
         const currentUser = getCurrentUser();
-        if (currentUser) {
+        if (currentUser && filter !== 'ads') {
             stories = stories.filter(s => s.userId !== currentUser.id);
         }
 
-        stories = stories.filter(s => !s.hidden);
+        if (filter !== 'ads') {
+            stories = stories.filter(s => !s.hidden);
+        }
 
         const users = await fetchUsers(stories.map(s => s.userId));
         const userMap = {};
@@ -823,10 +821,15 @@ async function fetchFeedByCursor(filter, cursor = null) {
 
         console.log(`📊 ${filter} - Mostrando ${displayedStories.length} historias`);
 
-        renderFeed(displayedStories);
+        // 🔥 Si es el filtro de publicidad, mostrar anuncios
+        if (filter === 'ads') {
+            renderAdsFeed(activeAds);
+        } else {
+            renderFeed(displayedStories);
+        }
         isLoading = false;
 
-        if (hasMoreStories && displayedStories.length > 0) {
+        if (hasMoreStories && displayedStories.length > 0 && filter !== 'ads') {
             preloadNextPage();
         }
 
@@ -837,6 +840,70 @@ async function fetchFeedByCursor(filter, cursor = null) {
         }
         isLoading = false;
     }
+}
+
+// ============================================================
+// 🔥 RENDER PUBLICIDADES EN EL FEED
+// ============================================================
+
+function renderAdsFeed(ads) {
+    const container = document.getElementById('feedContainer');
+    if (!container) return;
+
+    if (!ads || ads.length === 0) {
+        container.innerHTML = `
+            <div class="empty-state">
+                <i class="fas fa-bullhorn" style="color:#fbbf24;"></i>
+                <h3>No hay publicidades disponibles</h3>
+                <p>Las empresas aún no han publicado anuncios</p>
+            </div>
+        `;
+        return;
+    }
+
+    const adsHtml = renderAds(ads, container);
+    container.innerHTML = adsHtml;
+
+    // Event listeners para publicidades
+    container.querySelectorAll('.ad-like-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const adId = btn.dataset.adId;
+            window.handleAdLike(adId, btn);
+        });
+    });
+
+    container.querySelectorAll('.ad-share-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const adId = btn.dataset.adId;
+            const url = `${window.location.origin}/ad/${adId}`;
+            if (navigator.share) {
+                navigator.share({ title: 'Vyin Social - Publicidad', url });
+            } else {
+                navigator.clipboard?.writeText(url).then(() => {
+                    showToast('📋 Enlace copiado');
+                });
+            }
+        });
+    });
+
+    // Registrar vistas de publicidades
+    const observer = new IntersectionObserver((entries) => {
+        entries.forEach(entry => {
+            if (entry.isIntersecting) {
+                const card = entry.target;
+                const adId = card.dataset.adId;
+                if (adId) {
+                    registerAdView(adId);
+                }
+            }
+        });
+    }, { threshold: 0.3 });
+
+    container.querySelectorAll('.ad-card').forEach(card => {
+        observer.observe(card);
+    });
 }
 
 // ============================================================
@@ -876,7 +943,7 @@ let preloadTimeout = null;
 
 function preloadNextPage() {
     if (preloadTimeout) clearTimeout(preloadTimeout);
-    if (!hasMoreStories || isLoadingMore) return;
+    if (!hasMoreStories || isLoadingMore || currentFilter === 'ads') return;
     
     preloadTimeout = setTimeout(() => {
         console.log(`🔄 Pre-cargando siguiente página (cursor: ${feedCursor})...`);
@@ -889,7 +956,7 @@ function preloadNextPage() {
 // ============================================================
 
 async function loadMoreStories(preload = false) {
-    if (isLoadingMore || !hasMoreStories) return;
+    if (isLoadingMore || !hasMoreStories || currentFilter === 'ads') return;
     
     isLoadingMore = true;
     
@@ -1051,6 +1118,18 @@ function applyFilter(filter) {
         hideNewStoriesBadge();
     }
 
+    if (filter === 'ads') {
+        // 🔥 Si es publicidad, mostrar anuncios
+        if (activeAds.length === 0) {
+            loadAdsInBackground().then(() => {
+                renderAdsFeed(activeAds);
+            });
+        } else {
+            renderAdsFeed(activeAds);
+        }
+        return;
+    }
+
     const savedCursor = restoreFeedCursor();
     if (savedCursor && savedCursor !== 'null') {
         feedCursor = savedCursor;
@@ -1100,7 +1179,7 @@ function showEmptyState(message) {
 }
 
 // ============================================================
-// 🔥 RENDER FEED - CON BOTONES EN EL CENTRO (125px)
+// 🔥 RENDER FEED
 // ============================================================
 
 function renderFeed(storiesData) {
@@ -1134,7 +1213,6 @@ function renderFeed(storiesData) {
             avatar: story.avatar || getAvatar(story.fullName || 'U')
         };
 
-        // 🔥 CORRECCIÓN: Determinar si el usuario actual dio like
         const isLiked = story.likes?.includes(userId) || false;
         const likesCount = story.likes?.length || 0;
         const viewsCount = story.views?.length || 0;
@@ -1244,7 +1322,6 @@ function renderFeed(storiesData) {
                     ${mediaHtml}
                 </div>
                 
-                <!-- 🔥 BOTONES EN EL CENTRO (sobre el media) -->
                 <div class="card-actions-center">
                     ${captionHtml ? `<div class="caption">${captionHtml}</div>` : ''}
                     <div class="actions-box">
@@ -1270,7 +1347,6 @@ function renderFeed(storiesData) {
                     </div>
                 </div>
                 
-                <!-- 🔥 FOOTER SOLO DECORATIVO -->
                 <div class="card-footer"></div>
             </div>
         `;
@@ -1309,7 +1385,6 @@ function renderFeed(storiesData) {
 
     window._viewObserver = observer;
 
-    // Event listeners para los botones en el centro
     container.querySelectorAll('.btn-like').forEach(btn => {
         btn.addEventListener('click', (e) => {
             e.stopPropagation();
@@ -1378,7 +1453,7 @@ function setupInfiniteScroll() {
 
     scrollObserver = new IntersectionObserver((entries) => {
         const entry = entries[0];
-        if (entry.isIntersecting && hasMoreStories && !isLoadingMore) {
+        if (entry.isIntersecting && hasMoreStories && !isLoadingMore && currentFilter !== 'ads') {
             console.log('📥 Llegó al final del feed, cargando más...');
             loadMoreStories(false);
         }
@@ -1435,18 +1510,14 @@ async function registerView(storyId) {
             const data = await res.json();
             console.log(`✅ [VIEW] Vista registrada para ${storyId}`);
             
-            // 🔥 SOLO actualizar el contador de vistas
             const viewCountEl = document.getElementById(`view-count-${storyId}`);
             if (viewCountEl && data.viewsCount !== undefined) {
                 viewCountEl.textContent = formatNumber(data.viewsCount);
             }
             
-            // 🔥 Actualizar en memoria
             const story = allStories.find(s => s.id === storyId);
             if (story && data.viewsCount !== undefined) {
                 story.views = story.views || [];
-                // No sabemos exactamente quién más ha visto, pero podemos actualizar el conteo
-                // La próxima vez que se cargue el feed, vendrá con los datos actualizados
             }
         }
     } catch (error) {
@@ -1647,7 +1718,7 @@ async function handleStoryView(storyId) {
 }
 
 // ============================================================
-// HANDLE LIKE - CORREGIDO (SOLO ACTUALIZA LIKES)
+// HANDLE LIKE
 // ============================================================
 
 async function handleLike(storyId, btn) {
@@ -1680,7 +1751,6 @@ async function handleLike(storyId, btn) {
                 } catch (e) {}
             }
 
-            // 🔥 SOLO actualizar likes, NO tocar views ni comments
             updateStoryCounters(storyId, {
                 likesCount: data.likesCount || 0,
                 liked: data.liked,
@@ -1688,7 +1758,6 @@ async function handleLike(storyId, btn) {
                 senderId: (await getCurrentUser())?.id
             });
 
-            // Actualizar en memoria
             const story = allStories.find(s => s.id === storyId);
             if (story && data.likes) {
                 story.likes = data.likes;
@@ -1731,11 +1800,17 @@ async function refreshFeed() {
     }
     
     displayedStories = [];
-    await fetchFeedByCursor(currentFilter, feedCursor);
+    
+    if (currentFilter === 'ads') {
+        activeAds = await loadActiveAds();
+        renderAdsFeed(activeAds);
+    } else {
+        await fetchFeedByCursor(currentFilter, feedCursor);
+    }
 }
 
 // ============================================================
-// 🔥🔥🔥 FUNCIONES GLOBALES - CORREGIDAS
+// 🔥🔥🔥 FUNCIONES GLOBALES
 // ============================================================
 
 window.showToast = showToast;
@@ -1761,11 +1836,9 @@ window.closeExploreModal = closeExploreModal;
 window.openActivityModal = openActivityModal;
 window.closeActivityModal = closeActivityModal;
 
-// 🔥 EXPORTAR CREADOR DE PUBLICIDAD
 window.openAdCreator = openAdCreator;
 window.closeAdCreator = closeAdCreator;
 
-// 🔥 PERFIL NATIVO (SOLO PARA NAVEGACIÓN INFERIOR Y HEADER)
 window.showProfileNative = showProfileNative;
 window.hideProfileNative = hideProfileNative;
 
@@ -1773,8 +1846,43 @@ window.loadPendingStories = () => {
     refreshFeed();
 };
 
+window.handleAdClick = async function(adId) {
+    await registerAdClick(adId);
+};
+
+window.handleAdLike = async function(adId, btn) {
+    const token = getToken();
+    if (!token) {
+        showToast('Inicia sesión para dar like', true);
+        return;
+    }
+
+    const isLiked = btn.classList.contains('liked');
+    const method = isLiked ? 'DELETE' : 'POST';
+
+    try {
+        const res = await fetch(`${API_URL}/api/ads/${adId}/like`, {
+            method: method,
+            headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json'
+            }
+        });
+
+        if (res.ok) {
+            const data = await res.json();
+            btn.classList.toggle('liked');
+            btn.innerHTML = data.liked ? '<i class="fas fa-heart"></i> Quitar' : '<i class="fas fa-heart"></i> Like';
+            showToast(data.liked ? '❤️ Like guardado' : '💔 Like eliminado');
+        }
+    } catch (error) {
+        console.error('Error dando like a publicidad:', error);
+        showToast('Error al procesar like', true);
+    }
+};
+
 // ============================================================
-// 🔥🔥🔥 goToProfileUser - CORREGIDO (SIEMPRE USA EL MODAL)
+// goToProfileUser
 // ============================================================
 
 window.goToProfileUser = (userId) => {
@@ -1787,22 +1895,16 @@ window.goToProfileUser = (userId) => {
     
     console.log(`👤 goToProfileUser: ${userId}, usuario actual: ${currentUser?.id}`);
     
-    // 🔥 CERRAR TODOS LOS MODALES
     closeExploreModal();
     closeActivityModal();
     closeStoryModal();
     closeCreator();
     closeEditProfileModal();
-    closeAdCreator(); // 🔥 CERRAR CREADOR DE PUBLICIDAD
-    
-    // 🔥 SIEMPRE ABRIR CON openProfileModal
-    // 🔥 El perfil propio se muestra en el modal como cualquier otro
-    // 🔥 Esto preserva la navegación por pila correctamente
+    closeAdCreator();
     
     if (typeof openProfileModal === 'function') {
         openProfileModal(userId);
     } else {
-        // Fallback: importar dinámicamente
         import('./profile-modal.js').then(({ openProfileModal: openModal }) => {
             openModal(userId);
         }).catch(err => {
@@ -1838,10 +1940,6 @@ function setupEvents() {
         }
     });
 
-    // ============================================================
-    // 🔥 userBadge - SOLO PROFILE-NATIVE (NAVEGACIÓN PRINCIPAL)
-    // ============================================================
-    
     document.getElementById('userBadge')?.addEventListener('click', () => {
         const user = getCurrentUser();
         if (user?.id) {
@@ -1851,9 +1949,8 @@ function setupEvents() {
             closeCreator();
             closeEditProfileModal();
             closeProfileModal();
-            closeAdCreator(); // 🔥 CERRAR CREADOR DE PUBLICIDAD
+            closeAdCreator();
             
-            // 🔥 Este SÍ usa profile-native (es el acceso directo desde el header)
             showProfileNative(user.id);
         } else {
             showToast('Inicia sesión', true);
@@ -1863,10 +1960,6 @@ function setupEvents() {
         }
     });
 
-    // ============================================================
-    // 🔥 navProfile - SOLO PROFILE-NATIVE (NAVEGACIÓN PRINCIPAL)
-    // ============================================================
-    
     document.getElementById('navProfile')?.addEventListener('click', () => {
         const user = getCurrentUser();
         if (user?.id) {
@@ -1876,13 +1969,11 @@ function setupEvents() {
             closeCreator();
             closeEditProfileModal();
             closeProfileModal();
-            closeAdCreator(); // 🔥 CERRAR CREADOR DE PUBLICIDAD
+            closeAdCreator();
             
             document.querySelectorAll('.bottom-nav button').forEach(b => b.classList.remove('active'));
             document.getElementById('navProfile').classList.add('active');
             
-            // 🔥 Este SÍ debe usar profile-native porque es la navegación principal
-            // Es la única excepción: el usuario quiere ver su perfil en la sección nativa
             showProfileNative(user.id);
         } else {
             showToast('Inicia sesión', true);
@@ -1896,7 +1987,6 @@ function setupEvents() {
         refreshFeed();
     });
 
-    // 🔥 BOTÓN CREAR - DETECTA CUENTA DE EMPRESA
     document.getElementById('createBtn')?.addEventListener('click', () => {
         const token = getToken();
         if (!token) {
@@ -1911,10 +2001,8 @@ function setupEvents() {
         const isBusiness = user?.accountType === 'business' || user?.accountType === 'business_verified';
         
         if (isBusiness) {
-            // 🏢 ABRIR CREADOR DE PUBLICIDAD
             openAdCreator();
         } else {
-            // 📸 ABRIR CREADOR DE HISTORIA NORMAL
             openCreator();
         }
     });
@@ -1953,10 +2041,33 @@ function setupEvents() {
         applyFilter('recent');
     });
 
-    // ============================================================
+    // 🔥 NUEVO FILTRO PUBLICIDAD
+    document.getElementById('filterTrending')?.addEventListener('click', () => {
+        const token = getToken();
+        if (!token) {
+            showToast('Inicia sesión para ver publicidades', true);
+            setTimeout(() => {
+                window.location.href = '/login.html';
+            }, 500);
+            return;
+        }
+        
+        document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+        document.getElementById('filterTrending').classList.add('active');
+        hideNewStoriesBadge();
+        
+        // Cargar publicidades si no están cargadas
+        if (activeAds.length === 0) {
+            loadAdsInBackground().then(() => {
+                renderAdsFeed(activeAds);
+            });
+        } else {
+            renderAdsFeed(activeAds);
+        }
+        currentFilter = 'ads';
+    });
+
     // BOTTOM NAV
-    // ============================================================
-    
     document.getElementById('navFeed')?.addEventListener('click', () => {
         const token = getToken();
         if (!token) {
@@ -1973,7 +2084,7 @@ function setupEvents() {
         closeCreator();
         closeEditProfileModal();
         closeProfileModal();
-        closeAdCreator(); // 🔥 CERRAR CREADOR DE PUBLICIDAD
+        closeAdCreator();
         
         const section = document.getElementById('sectionProfile');
         if (section && !section.classList.contains('hidden')) {
@@ -2001,7 +2112,7 @@ function setupEvents() {
         closeCreator();
         closeEditProfileModal();
         closeProfileModal();
-        closeAdCreator(); // 🔥 CERRAR CREADOR DE PUBLICIDAD
+        closeAdCreator();
         
         const section = document.getElementById('sectionProfile');
         if (section && !section.classList.contains('hidden')) {
@@ -2031,7 +2142,7 @@ function setupEvents() {
         closeCreator();
         closeEditProfileModal();
         closeProfileModal();
-        closeAdCreator(); // 🔥 CERRAR CREADOR DE PUBLICIDAD
+        closeAdCreator();
         
         const section = document.getElementById('sectionProfile');
         if (section && !section.classList.contains('hidden')) {
@@ -2100,7 +2211,7 @@ function setupEvents() {
             closeCreator();
             closeExploreModal();
             closeActivityModal();
-            closeAdCreator(); // 🔥 CERRAR CREADOR DE PUBLICIDAD
+            closeAdCreator();
         }
     });
 
