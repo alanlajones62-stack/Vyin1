@@ -8,6 +8,13 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <!-- 🔥 ESTILOS DE MODALES (IMPORTANTE) -->
+    <link rel="stylesheet" href="/mobile/story-modal.css" />
+    <link rel="stylesheet" href="/mobile/profile-modal.css" />
+    <link rel="stylesheet" href="/mobile/followers-modal.css" />
+    
+    <!-- Estilos del chat -->
     <link rel="stylesheet" href="./chats.css">
 </head>
 <body>
@@ -95,7 +102,19 @@
         </div>
     </div>
 
+    <!-- SOCKET.IO -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.2/socket.io.min.js"></script>
+
+    <!-- 🔥 SCRIPTS DE MODALES (IMPORTANTE) -->
+    <script type="importmap">
+        {
+            "imports": {
+                "./": "./"
+            }
+        }
+    </script>
+
+    <!-- 🔥 CHAT JS (debe importar los modales) -->
     <script type="module" src="./chats.js"></script>
 
 </body>
