@@ -3,11 +3,11 @@
 const cloudinary = require('cloudinary').v2;
 const fs = require('fs');
 
-// 🔥 TUS CREDENCIALES EXISTENTES
+// 🔥 CREDENCIALES CORRECTAS
 cloudinary.config({
     cloud_name: 'anonimatix',
     api_key: '834122285252736',
-    api_secret: 'PMpBvWpxz49UiHjixemVpO6LL40'
+    api_secret: '4YKciFBJY7Ui0enGNFbjo3FVC94'  // ← CORREGIDA
 });
 
 /**
@@ -15,6 +15,8 @@ cloudinary.config({
  */
 const uploadFile = async (filePath, options = {}) => {
     try {
+        console.log(`☁️ Subiendo a Cloudinary: ${filePath}`);
+        
         const result = await cloudinary.uploader.upload(filePath, {
             folder: 'vyn_stories',
             resource_type: 'auto',
@@ -22,8 +24,17 @@ const uploadFile = async (filePath, options = {}) => {
         });
 
         // Eliminar archivo local después de subir
-        try { fs.unlinkSync(filePath); } catch (e) {}
+        try { 
+            if (fs.existsSync(filePath)) {
+                fs.unlinkSync(filePath); 
+                console.log(`🗑️ Archivo local eliminado: ${filePath}`);
+            }
+        } catch (e) {
+            console.warn('⚠️ No se pudo eliminar archivo local:', e.message);
+        }
 
+        console.log(`✅ Subido a Cloudinary: ${result.secure_url}`);
+        
         return {
             success: true,
             url: result.secure_url,
@@ -34,7 +45,8 @@ const uploadFile = async (filePath, options = {}) => {
             height: result.height
         };
     } catch (error) {
-        console.error('❌ Error subiendo a Cloudinary:', error);
+        console.error('❌ Error subiendo a Cloudinary:', error.message);
+        console.error('   Detalles:', error);
         return { success: false, error: error.message };
     }
 };
@@ -69,6 +81,6 @@ const testConnection = async () => {
 
 module.exports = { 
     uploadFile,
-    deleteFile,      // ✅ EXPORTADO
-    testConnection   // ✅ EXPORTADO
+    deleteFile,
+    testConnection
 };
