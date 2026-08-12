@@ -1,7 +1,6 @@
 // ============================================================
 // story-comments.js - Sistema de comentarios para historias
-// VERSIÓN CORREGIDA: SIN RE-RENDER
-// CON loadComments PARA COMPATIBILIDAD
+// VERSIÓN CORREGIDA: SIN RE-RENDER, SIN DUPLICADOS
 // ============================================================
 
 import { getToken, getCurrentUser, showToast, getAvatar, formatDate, escapeHtml } from './auth.js';
@@ -758,18 +757,19 @@ window.toggleRepliesVisibility = function(commentId) {
 };
 
 // ============================================================
-// 🔥 EXPORTAR FUNCIONES
+// 🔥 EXPORTAR FUNCIONES (UNA SOLA VEZ - SIN DUPLICADOS)
 // ============================================================
 
 export { 
-    localComments,
-    localCommentLikes,
-    localRepliesVisibility,
-    findCommentById,
-    getParentChain,
     loadComments,
     initComments,
     addComment,
     deleteComment,
-    likeComment
+    likeComment,
+    renderComments,
+    findCommentById,
+    getParentChain,
+    localComments,
+    localCommentLikes,
+    localRepliesVisibility
 };
