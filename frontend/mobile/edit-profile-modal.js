@@ -1,5 +1,5 @@
 // ============================================================
-// edit-profile-modal.js - Modal para editar perfil (CON AUTO-GUARDADO Y LOGOUT)
+// edit-profile-modal.js - Modal para editar perfil (CON AUTO-GUARDADO, LOGOUT Y REGLAS)
 // ============================================================
 
 import {
@@ -368,6 +368,85 @@ function injectStyles() {
         }
         .account-type-locked i { color: #c084fc; }
         
+        /* ============================================================
+           🆕 COMMUNITY RULES SECTION
+           ============================================================ */
+        
+        .community-rules-section {
+            background: rgba(255, 255, 255, 0.02);
+            border-radius: 16px;
+            padding: 16px;
+            border: 1px solid rgba(255, 255, 255, 0.04);
+        }
+        
+        .rules-grid {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            margin-bottom: 16px;
+        }
+        
+        .rule-item {
+            display: flex;
+            align-items: flex-start;
+            gap: 14px;
+            padding: 12px 14px;
+            background: rgba(255, 255, 255, 0.03);
+            border-radius: 12px;
+            transition: all 0.2s ease;
+            border: 1px solid transparent;
+        }
+        
+        .rule-item:hover {
+            background: rgba(255, 255, 255, 0.06);
+            border-color: rgba(192, 132, 252, 0.1);
+            transform: translateX(4px);
+        }
+        
+        .rule-icon {
+            font-size: 22px;
+            line-height: 1;
+            flex-shrink: 0;
+            margin-top: 2px;
+        }
+        
+        .rule-content {
+            flex: 1;
+            min-width: 0;
+        }
+        
+        .rule-title {
+            font-weight: 600;
+            font-size: 14px;
+            color: rgba(255, 255, 255, 0.9);
+            margin-bottom: 2px;
+        }
+        
+        .rule-desc {
+            font-size: 13px;
+            color: rgba(255, 255, 255, 0.5);
+            line-height: 1.4;
+        }
+        
+        .rules-footer {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 12px 16px;
+            background: rgba(251, 191, 36, 0.06);
+            border-radius: 12px;
+            border-left: 3px solid #fbbf24;
+            font-size: 13px;
+            color: rgba(255, 255, 255, 0.5);
+            margin-top: 4px;
+        }
+        
+        .rules-footer i {
+            color: #fbbf24;
+            font-size: 16px;
+            flex-shrink: 0;
+        }
+        
         /* Business Request Modal */
         .business-request-overlay {
             position: fixed;
@@ -558,6 +637,13 @@ function injectStyles() {
             .privacy-option .privacy-info .title { font-size: 12px; }
             .privacy-option .privacy-info .desc { font-size: 10px; }
             .btn-logout { font-size: 14px; padding: 12px; }
+            .community-rules-section { padding: 12px; }
+            .rule-item { padding: 10px 12px; gap: 10px; }
+            .rule-icon { font-size: 18px; }
+            .rule-title { font-size: 13px; }
+            .rule-desc { font-size: 12px; }
+            .rules-footer { font-size: 12px; padding: 10px 12px; }
+            .rules-footer i { font-size: 14px; }
         }
         @media (max-height: 600px) {
             .edit-profile-header { padding: 10px 16px 8px; }
@@ -569,6 +655,12 @@ function injectStyles() {
             .edit-group { margin-bottom: 10px; }
             .edit-group input, .edit-group textarea, .edit-group select { font-size: 12px; padding: 8px 12px; }
             .business-request-body { padding: 14px; }
+            .rules-grid { gap: 8px; }
+            .rule-item { padding: 8px 10px; }
+            .rule-icon { font-size: 16px; }
+            .rule-title { font-size: 12px; }
+            .rule-desc { font-size: 11px; }
+            .rules-footer { font-size: 11px; padding: 8px 12px; }
         }
     `;
     document.head.appendChild(styles);
@@ -762,8 +854,6 @@ async function performSave() {
     const language = document.getElementById('editLanguage')?.value || 'es';
     const privacy = window._selectedPrivacy || 'public';
 
-    // No guardar accountType - solo el admin puede cambiar eso
-
     if (username && !validateUsername(username)) {
         updateSaveStatus('error', 'Usuario inválido');
         return;
@@ -814,7 +904,6 @@ async function performSave() {
             originalUsername = updatedUser.username || '';
             updateSaveStatus('saved');
             
-            // Actualizar el perfil si está abierto
             const profileOverlay = document.getElementById('profileModalOverlay');
             if (profileOverlay && profileOverlay.classList.contains('active')) {
                 const userId = updatedUser.id;
@@ -878,7 +967,6 @@ function loadEditProfileData(user) {
         `<option value="${code}" ${code === language ? 'selected' : ''}>${name}</option>`
     ).join('');
 
-    // Opciones de cuenta - SOLO personal y business disponibles para selección manual
     const accountTypes = [
         { value: 'personal', label: '👤 Personal' },
         { value: 'business', label: '🏢 Empresa' }
@@ -889,7 +977,6 @@ function loadEditProfileData(user) {
         return `<option value="${type.value}" ${isSelected ? 'selected' : ''}>${type.label}</option>`;
     }).join('');
 
-    // Si el usuario tiene cuenta verificada o business_verified, mostrar el estado actual
     const isSpecialAccount = accountType === 'verified' || accountType === 'business_verified';
     let accountTypeDisplay = '';
     
@@ -911,7 +998,6 @@ function loadEditProfileData(user) {
     const daysRemaining = getDaysUntilNextChange(lastUsernameChange);
     const usernameDisabled = daysRemaining > 0;
 
-    // Generar HTML para la sección de empresa
     let businessSectionHtml = '';
     
     if (isAdmin) {
@@ -960,6 +1046,73 @@ function loadEditProfileData(user) {
             </div>
         `;
     }
+
+    // ============================================================
+    // 🆕 SECCIÓN DE REGLAS Y NORMAS DE LA COMUNIDAD
+    // ============================================================
+    const communityRulesHtml = `
+        <div class="edit-section community-rules-section">
+            <div class="edit-section-title">
+                <i class="fas fa-gavel" style="color: #fbbf24;"></i> 
+                Reglas y normas de la comunidad
+            </div>
+
+            <div class="rules-grid">
+                <div class="rule-item">
+                    <div class="rule-icon">🤝</div>
+                    <div class="rule-content">
+                        <div class="rule-title">Respeta a los demás</div>
+                        <div class="rule-desc">Trata a todos con respeto. No se tolerará el acoso, el odio o la discriminación.</div>
+                    </div>
+                </div>
+
+                <div class="rule-item">
+                    <div class="rule-icon">🚫</div>
+                    <div class="rule-content">
+                        <div class="rule-title">Sin NSFW ni contenido sensible</div>
+                        <div class="rule-desc">No se permite contenido explícito, violento, o que pueda ser considerado sensible o perturbador.</div>
+                    </div>
+                </div>
+
+                <div class="rule-item">
+                    <div class="rule-icon">⏳</div>
+                    <div class="rule-content">
+                        <div class="rule-title">Contenido efímero</div>
+                        <div class="rule-desc">Todo lo que compartes aquí es temporal. Las historias desaparecen después de 24 horas. ¡Disfruta el momento!</div>
+                    </div>
+                </div>
+
+                <div class="rule-item">
+                    <div class="rule-icon">🔞</div>
+                    <div class="rule-content">
+                        <div class="rule-title">Contenido para mayores de 16 años</div>
+                        <div class="rule-desc">Esta plataforma está diseñada para usuarios mayores de 16 años. La supervisión parental es recomendada para menores.</div>
+                    </div>
+                </div>
+
+                <div class="rule-item">
+                    <div class="rule-icon">💬</div>
+                    <div class="rule-content">
+                        <div class="rule-title">Idioma y comunicación</div>
+                        <div class="rule-desc">Fomenta un ambiente positivo. El lenguaje ofensivo o las discusiones tóxicas no son bienvenidas.</div>
+                    </div>
+                </div>
+
+                <div class="rule-item">
+                    <div class="rule-icon">⚖️</div>
+                    <div class="rule-content">
+                        <div class="rule-title">Cumple con las leyes locales</div>
+                        <div class="rule-desc">Asegúrate de que tu contenido cumpla con todas las leyes y regulaciones aplicables en tu país.</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="rules-footer">
+                <i class="fas fa-info-circle"></i>
+                <span>Estas reglas aplican para todos los usuarios. El incumplimiento puede resultar en la suspensión de tu cuenta.</span>
+            </div>
+        </div>
+    `;
 
     container.innerHTML = `
         <div class="edit-avatar-section">
@@ -1063,6 +1216,9 @@ function loadEditProfileData(user) {
 
         ${businessSectionHtml}
 
+        <!-- 🆕 REGLAS Y NORMAS DE LA COMUNIDAD -->
+        ${communityRulesHtml}
+
         <!-- 🔥 SECCIÓN DE CERRAR SESIÓN -->
         <div class="edit-logout-section">
             <button class="btn-logout" onclick="window.handleLogout()">
@@ -1082,7 +1238,6 @@ function loadEditProfileData(user) {
         const el = document.getElementById(fieldId);
         if (el) {
             el.addEventListener('input', () => {
-                // Validar username en tiempo real
                 if (fieldId === 'editUsername') {
                     const value = el.value.trim();
                     const status = document.getElementById('usernameStatus');
@@ -1101,7 +1256,6 @@ function loadEditProfileData(user) {
                     }
                 }
                 
-                // Actualizar contador de bio
                 if (fieldId === 'editBio') {
                     const count = document.getElementById('bioCount');
                     if (count) {
@@ -1112,7 +1266,6 @@ function loadEditProfileData(user) {
                 autoSave();
             });
             
-            // Guardar al perder foco
             el.addEventListener('blur', () => {
                 if (saveTimeout) {
                     clearTimeout(saveTimeout);
@@ -1122,7 +1275,6 @@ function loadEditProfileData(user) {
         }
     });
 
-    // Evento para privacidad
     window.selectEditPrivacy = function(privacy) {
         window._selectedPrivacy = privacy;
         document.querySelectorAll('.privacy-option').forEach(opt => {
@@ -1131,15 +1283,12 @@ function loadEditProfileData(user) {
         autoSave();
     };
 
-    // Evento para cambiar avatar
     document.getElementById('changeAvatarBtn')?.addEventListener('click', () => {
         showToast('📸 Cambiar avatar (próximamente)', false, 2000);
     });
 
-    // Restaurar privacidad seleccionada
     window._selectedPrivacy = privacy;
     
-    // Guardar inmediatamente al cargar (por si hay cambios pendientes)
     setTimeout(() => {
         updateSaveStatus('saved');
     }, 500);
@@ -1151,26 +1300,21 @@ function loadEditProfileData(user) {
 
 function handleLogout() {
     if (confirm('¿Estás seguro de que quieres cerrar sesión?')) {
-        // Cerrar el modal de edición
         closeEditProfileModal();
         
-        // Cerrar cualquier otro modal abierto
         const storyModal = document.getElementById('storyModalOverlay');
         if (storyModal) storyModal.classList.remove('active');
         
         const profileModal = document.getElementById('profileModalOverlay');
         if (profileModal) profileModal.classList.remove('active');
         
-        // Ejecutar logout desde auth.js
         import('./auth.js').then(({ logout }) => {
             logout();
             showToast('👋 Sesión cerrada', false);
-            // Recargar la página para limpiar el estado
             setTimeout(() => {
                 window.location.href = '/login.html';
             }, 500);
         }).catch(() => {
-            // Fallback: limpiar localStorage y recargar
             localStorage.removeItem('token');
             localStorage.removeItem('user');
             window.location.href = '/login.html';
