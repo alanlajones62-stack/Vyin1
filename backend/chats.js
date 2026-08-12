@@ -1,4 +1,4 @@
-// backend/chats.js - CON SISTEMA DE BLOQUEO
+// backend/chats.js - CON SISTEMA DE BLOQUEO, CIFRADO Y MULTIMEDIA
 const auth = require('./middleware/auth');
 
 module.exports = (read, write, io, encryptMessage, decryptMessage, createNotification) => {
@@ -23,6 +23,17 @@ module.exports = (read, write, io, encryptMessage, decryptMessage, createNotific
     }
 
     // ============================================================
+    // FUNCIÓN PARA CIFRAR MULTIMEDIA (BASE64)
+    // ============================================================
+    function encryptMedia(mediaData) {
+        return encryptMessage(mediaData);
+    }
+
+    function decryptMedia(encryptedMedia) {
+        return decryptMessage(encryptedMedia);
+    }
+
+    // ============================================================
     // OBTENER CONVERSACIONES - CON FILTRO DE BLOQUEOS
     // ============================================================
     router.get('/conversations', auth, (req, res) => {
@@ -30,7 +41,6 @@ module.exports = (read, write, io, encryptMessage, decryptMessage, createNotific
             const messages = read('messages.json');
             const users = read('users.json');
             
-            // 🔥 OBTENER USUARIO ACTUAL PARA BLOQUEOS
             const currentUser = users.find(u => u.id === req.userId);
             if (!currentUser) {
                 return res.status(404).json({ error: 'Usuario no encontrado' });
@@ -39,10 +49,8 @@ module.exports = (read, write, io, encryptMessage, decryptMessage, createNotific
             const blockedIds = currentUser.blocked || [];
             const blockedByIds = currentUser.blockedBy || [];
             
-            // 🔥 FILTRAR MENSAJES - EXCLUIR BLOQUEADOS
             const userMessages = messages.filter(m => {
                 const otherId = m.from === req.userId ? m.to : m.from;
-                // No mostrar conversaciones con usuarios bloqueados
                 if (blockedIds.includes(otherId)) return false;
                 if (blockedByIds.includes(otherId)) return false;
                 return m.from === req.userId || m.to === req.userId;
@@ -56,11 +64,9 @@ module.exports = (read, write, io, encryptMessage, decryptMessage, createNotific
                 if (!conversationsMap.has(otherUserId)) {
                     const otherUser = users.find(u => u.id === otherUserId);
                     if (otherUser) {
-                        // 🔥 VERIFICAR SI EL OTRO USUARIO ESTÁ BLOQUEADO POR ALGUIEN
                         const isUserBlocked = blockedIds.includes(otherUserId);
                         const isUserBlockedBy = blockedByIds.includes(otherUserId);
                         
-                        // Si está bloqueado, mostrar como "Usuario no encontrado"
                         let userData = {
                             id: otherUser.id,
                             username: otherUser.username,
@@ -78,13 +84,24 @@ module.exports = (read, write, io, encryptMessage, decryptMessage, createNotific
                             };
                         }
                         
+                        // Decrypt last message content
+                        let lastContent = '';
+                        if (msg.content) {
+                            try {
+                                lastContent = msg.encrypted ? decryptMessage(msg.content) : msg.content;
+                            } catch (e) {
+                                lastContent = '[Mensaje cifrado]';
+                            }
+                        }
+                        
                         conversationsMap.set(otherUserId, {
                             user: userData,
                             lastMessage: {
-                                content: msg.content ? (msg.encrypted ? decryptMessage(msg.content) : msg.content) : '',
+                                content: lastContent,
                                 timestamp: msg.timestamp,
                                 read: msg.read,
-                                fromMe: msg.from === req.userId
+                                fromMe: msg.from === req.userId,
+                                mediaType: msg.mediaType || null
                             },
                             unreadCount: 0,
                             isBlocked: isUserBlocked || isUserBlockedBy
@@ -94,11 +111,20 @@ module.exports = (read, write, io, encryptMessage, decryptMessage, createNotific
                 
                 const conv = conversationsMap.get(otherUserId);
                 if (conv && new Date(msg.timestamp) > new Date(conv.lastMessage.timestamp)) {
+                    let lastContent = '';
+                    if (msg.content) {
+                        try {
+                            lastContent = msg.encrypted ? decryptMessage(msg.content) : msg.content;
+                        } catch (e) {
+                            lastContent = '[Mensaje cifrado]';
+                        }
+                    }
                     conv.lastMessage = {
-                        content: msg.content ? (msg.encrypted ? decryptMessage(msg.content) : msg.content) : '',
+                        content: lastContent,
                         timestamp: msg.timestamp,
                         read: msg.read,
-                        fromMe: msg.from === req.userId
+                        fromMe: msg.from === req.userId,
+                        mediaType: msg.mediaType || null
                     };
                 }
             });
@@ -128,7 +154,6 @@ module.exports = (read, write, io, encryptMessage, decryptMessage, createNotific
             const targetUserId = req.params.userId;
             const users = read('users.json');
             
-            // 🔥 VERIFICAR BLOQUEOS
             if (isBlocked(users, req.userId, targetUserId)) {
                 return res.status(404).json({ 
                     error: 'Usuario no encontrado',
@@ -147,15 +172,26 @@ module.exports = (read, write, io, encryptMessage, decryptMessage, createNotific
             
             const paginated = filtered.slice(offset, offset + limit);
             
-            const result = paginated.map(msg => ({
-                id: msg.id,
-                from: msg.from,
-                to: msg.to,
-                content: msg.encrypted ? decryptMessage(msg.content) : msg.content,
-                timestamp: msg.timestamp,
-                read: msg.read,
-                isOwn: msg.from === req.userId
-            }));
+            const result = paginated.map(msg => {
+                let content = '';
+                try {
+                    content = msg.encrypted ? decryptMessage(msg.content) : msg.content;
+                } catch (e) {
+                    content = '[Mensaje corrupto]';
+                }
+                
+                return {
+                    id: msg.id,
+                    from: msg.from,
+                    to: msg.to,
+                    content: content,
+                    timestamp: msg.timestamp,
+                    read: msg.read,
+                    isOwn: msg.from === req.userId,
+                    mediaType: msg.mediaType || null,
+                    encrypted: msg.encrypted || false
+                };
+            });
             
             let updated = false;
             let updatedMessageIds = [];
@@ -190,7 +226,7 @@ module.exports = (read, write, io, encryptMessage, decryptMessage, createNotific
     });
 
     // ============================================================
-    // ENVIAR MENSAJE - CON VERIFICACIÓN DE BLOQUEOS
+    // ENVIAR MENSAJE DE TEXTO - CON CIFRADO Y BLOQUEOS
     // ============================================================
     router.post('/messages/:userId', auth, (req, res) => {
         try {
@@ -203,7 +239,6 @@ module.exports = (read, write, io, encryptMessage, decryptMessage, createNotific
             
             const users = read('users.json');
             
-            // 🔥 VERIFICAR BLOQUEOS
             if (isBlocked(users, req.userId, toUserId)) {
                 return res.status(404).json({ 
                     error: 'Usuario no encontrado',
@@ -215,13 +250,14 @@ module.exports = (read, write, io, encryptMessage, decryptMessage, createNotific
             const messages = read('messages.json');
             
             const newMessage = {
-                id: Date.now().toString(),
+                id: Date.now().toString() + '_' + Math.random().toString(36).substr(2, 6),
                 from: req.userId,
                 to: toUserId,
                 content: encryptedContent,
                 encrypted: true,
                 read: false,
-                timestamp: new Date().toISOString()
+                timestamp: new Date().toISOString(),
+                mediaType: null
             };
             
             messages.push(newMessage);
@@ -234,10 +270,11 @@ module.exports = (read, write, io, encryptMessage, decryptMessage, createNotific
                 content: content,
                 timestamp: newMessage.timestamp,
                 read: false,
-                isOwn: true
+                isOwn: true,
+                mediaType: null,
+                encrypted: true
             };
             
-            // 🔥 SOLO ENVIAR SI NO HAY BLOQUEO
             if (!isBlocked(users, toUserId, req.userId)) {
                 io.to(`user_${toUserId}`).emit('receive_message', {
                     id: newMessage.id,
@@ -246,18 +283,18 @@ module.exports = (read, write, io, encryptMessage, decryptMessage, createNotific
                     content: content,
                     timestamp: newMessage.timestamp,
                     read: false,
-                    isOwn: false
+                    isOwn: false,
+                    mediaType: null,
+                    encrypted: true
                 });
             }
             
             io.to(`user_${req.userId}`).emit('message_sent', responseMessage);
-            
             io.to(`user_${req.userId}`).emit('conversations_update', { userId: req.userId });
             io.to(`user_${toUserId}`).emit('conversations_update', { userId: toUserId });
             
             const fromUser = users.find(u => u.id === req.userId);
             if (fromUser && createNotification) {
-                // 🔥 SOLO NOTIFICAR SI NO HAY BLOQUEO
                 if (!isBlocked(users, toUserId, req.userId)) {
                     createNotification(toUserId, 'message', req.userId, {
                         message: `${fromUser.fullName} te envió un mensaje`,
@@ -269,6 +306,139 @@ module.exports = (read, write, io, encryptMessage, decryptMessage, createNotific
             res.status(201).json(responseMessage);
         } catch (error) {
             console.error('Error enviando mensaje:', error);
+            res.status(500).json({ error: 'Error interno' });
+        }
+    });
+
+    // ============================================================
+    // 🔥 ENVIAR MENSAJE CON MULTIMEDIA - CIFRADO (IMÁGENES, AUDIOS, VIDEOS)
+    // ============================================================
+    router.post('/messages/:userId/media', auth, async (req, res) => {
+        try {
+            const { mediaType, mediaData, caption } = req.body;
+            const toUserId = req.params.userId;
+            
+            if (!mediaData || !mediaType) {
+                return res.status(400).json({ error: 'Datos multimedia requeridos' });
+            }
+            
+            const validTypes = ['image', 'audio', 'video', 'file'];
+            if (!validTypes.includes(mediaType)) {
+                return res.status(400).json({ error: 'Tipo de multimedia no válido' });
+            }
+            
+            const users = read('users.json');
+            
+            if (isBlocked(users, req.userId, toUserId)) {
+                return res.status(404).json({ 
+                    error: 'Usuario no encontrado',
+                    message: 'No puedes enviar mensajes a este usuario'
+                });
+            }
+            
+            // Cifrar datos multimedia (base64)
+            const encryptedMedia = encryptMedia(mediaData);
+            const messages = read('messages.json');
+            
+            const newMessage = {
+                id: Date.now().toString() + '_' + Math.random().toString(36).substr(2, 6),
+                from: req.userId,
+                to: toUserId,
+                content: encryptedMedia,
+                encrypted: true,
+                mediaType: mediaType,
+                caption: caption || null,
+                read: false,
+                timestamp: new Date().toISOString()
+            };
+            
+            messages.push(newMessage);
+            write('messages.json', messages);
+            
+            const responseMessage = {
+                id: newMessage.id,
+                from: newMessage.from,
+                to: newMessage.to,
+                content: caption || `[${mediaType}]`,
+                timestamp: newMessage.timestamp,
+                read: false,
+                isOwn: true,
+                mediaType: mediaType,
+                encrypted: true,
+                hasMedia: true
+            };
+            
+            if (!isBlocked(users, toUserId, req.userId)) {
+                io.to(`user_${toUserId}`).emit('receive_message', {
+                    id: newMessage.id,
+                    from: req.userId,
+                    to: toUserId,
+                    content: caption || `[${mediaType}]`,
+                    timestamp: newMessage.timestamp,
+                    read: false,
+                    isOwn: false,
+                    mediaType: mediaType,
+                    encrypted: true,
+                    hasMedia: true
+                });
+            }
+            
+            io.to(`user_${req.userId}`).emit('message_sent', responseMessage);
+            io.to(`user_${req.userId}`).emit('conversations_update', { userId: req.userId });
+            io.to(`user_${toUserId}`).emit('conversations_update', { userId: toUserId });
+            
+            const fromUser = users.find(u => u.id === req.userId);
+            if (fromUser && createNotification) {
+                if (!isBlocked(users, toUserId, req.userId)) {
+                    createNotification(toUserId, 'message', req.userId, {
+                        message: `${fromUser.fullName} te envió un ${mediaType}`,
+                        preview: `[${mediaType}]`
+                    });
+                }
+            }
+            
+            res.status(201).json(responseMessage);
+        } catch (error) {
+            console.error('Error enviando mensaje multimedia:', error);
+            res.status(500).json({ error: 'Error interno' });
+        }
+    });
+
+    // ============================================================
+    // 🔥 DESCARGAR/OBTENER MEDIA CIFRADA
+    // ============================================================
+    router.get('/messages/:messageId/media', auth, (req, res) => {
+        try {
+            const messages = read('messages.json');
+            const message = messages.find(m => m.id === req.params.messageId);
+            
+            if (!message) {
+                return res.status(404).json({ error: 'Mensaje no encontrado' });
+            }
+            
+            if (message.from !== req.userId && message.to !== req.userId) {
+                return res.status(403).json({ error: 'No tienes permiso para ver este archivo' });
+            }
+            
+            if (!message.mediaType) {
+                return res.status(400).json({ error: 'Este mensaje no contiene multimedia' });
+            }
+            
+            let decryptedMedia = '';
+            try {
+                decryptedMedia = decryptMedia(message.content);
+            } catch (e) {
+                return res.status(500).json({ error: 'Error descifrando el archivo' });
+            }
+            
+            res.json({
+                mediaType: message.mediaType,
+                mediaData: decryptedMedia,
+                caption: message.caption || null,
+                timestamp: message.timestamp
+            });
+        } catch (error) {
+            console.error('Error obteniendo media:', error);
             res.status(500).json({ error: 'Error interno' });
         }
     });
@@ -306,6 +476,52 @@ module.exports = (read, write, io, encryptMessage, decryptMessage, createNotific
     });
 
     // ============================================================
+    // ELIMINAR MENSAJE MULTIMEDIA (también elimina el archivo)
+    // ============================================================
+    router.delete('/messages/:messageId/media', auth, (req, res) => {
+        try {
+            let messages = read('messages.json');
+            const messageIndex = messages.findIndex(m => m.id === req.params.messageId);
+            
+            if (messageIndex === -1) {
+                return res.status(404).json({ error: 'Mensaje no encontrado' });
+            }
+            
+            const message = messages[messageIndex];
+            
+            if (message.from !== req.userId) {
+                return res.status(403).json({ error: 'No tienes permiso para eliminar este mensaje' });
+            }
+            
+            // Si tiene multimedia, limpiar el contenido
+            if (message.mediaType) {
+                message.content = '[Archivo eliminado]';
+                message.mediaType = null;
+                message.encrypted = false;
+                write('messages.json', messages);
+                
+                io.to(`user_${message.to}`).emit('message_updated', { 
+                    messageId: req.params.messageId,
+                    content: '[Archivo eliminado]',
+                    mediaType: null
+                });
+            } else {
+                messages.splice(messageIndex, 1);
+                write('messages.json', messages);
+            }
+            
+            io.to(`user_${message.to}`).emit('message_deleted', { messageId: req.params.messageId });
+            io.to(`user_${req.userId}`).emit('conversations_update', { userId: req.userId });
+            io.to(`user_${message.to}`).emit('conversations_update', { userId: message.to });
+            
+            res.json({ success: true });
+        } catch (error) {
+            console.error('Error eliminando mensaje multimedia:', error);
+            res.status(500).json({ error: 'Error interno' });
+        }
+    });
+
+    // ============================================================
     // MARCAR CONVERSACIÓN COMO LEÍDA - CON VERIFICACIÓN DE BLOQUEOS
     // ============================================================
     router.put('/conversations/:userId/read', auth, (req, res) => {
@@ -313,7 +529,6 @@ module.exports = (read, write, io, encryptMessage, decryptMessage, createNotific
             const targetUserId = req.params.userId;
             const users = read('users.json');
             
-            // 🔥 VERIFICAR BLOQUEOS
             if (isBlocked(users, req.userId, targetUserId)) {
                 return res.status(404).json({ 
                     error: 'Usuario no encontrado',
@@ -366,7 +581,6 @@ module.exports = (read, write, io, encryptMessage, decryptMessage, createNotific
             const messages = read('messages.json');
             const users = read('users.json');
             
-            // 🔥 OBTENER USUARIO ACTUAL PARA BLOQUEOS
             const currentUser = users.find(u => u.id === req.userId);
             if (!currentUser) {
                 return res.json([]);
@@ -375,7 +589,6 @@ module.exports = (read, write, io, encryptMessage, decryptMessage, createNotific
             const blockedIds = currentUser.blocked || [];
             const blockedByIds = currentUser.blockedBy || [];
             
-            // 🔥 FILTRAR MENSAJES - EXCLUIR BLOQUEADOS
             const userMessages = messages.filter(m => {
                 const otherId = m.from === req.userId ? m.to : m.from;
                 if (blockedIds.includes(otherId)) return false;
@@ -394,12 +607,15 @@ module.exports = (read, write, io, encryptMessage, decryptMessage, createNotific
                     decryptedContent = '';
                 }
                 
-                if (decryptedContent.toLowerCase().includes(query)) {
+                // Buscar en contenido o en caption
+                const searchContent = decryptedContent.toLowerCase();
+                const searchCaption = msg.caption ? msg.caption.toLowerCase() : '';
+                
+                if (searchContent.includes(query) || searchCaption.includes(query)) {
                     const otherUserId = msg.from === req.userId ? msg.to : msg.from;
                     const otherUser = users.find(u => u.id === otherUserId);
                     
                     if (otherUser && !results.some(r => r.user.id === otherUserId)) {
-                        // 🔥 VERIFICAR SI EL OTRO USUARIO ESTÁ BLOQUEADO
                         const isBlockedUser = blockedIds.includes(otherUserId);
                         const isBlockedByUser = blockedByIds.includes(otherUserId);
                         
@@ -420,11 +636,17 @@ module.exports = (read, write, io, encryptMessage, decryptMessage, createNotific
                             };
                         }
                         
+                        let matchContent = decryptedContent.substring(0, 50);
+                        if (msg.mediaType) {
+                            matchContent = `[${msg.mediaType}] ${msg.caption || ''}`;
+                        }
+                        
                         results.push({
                             user: userData,
-                            matchContent: decryptedContent.substring(0, 50) + (decryptedContent.length > 50 ? '...' : ''),
+                            matchContent: matchContent + (decryptedContent.length > 50 ? '...' : ''),
                             timestamp: msg.timestamp,
-                            isBlocked: isBlockedUser || isBlockedByUser
+                            isBlocked: isBlockedUser || isBlockedByUser,
+                            mediaType: msg.mediaType || null
                         });
                     }
                 }
@@ -434,6 +656,102 @@ module.exports = (read, write, io, encryptMessage, decryptMessage, createNotific
             res.json(results);
         } catch (error) {
             console.error('Error buscando mensajes:', error);
+            res.status(500).json({ error: 'Error interno' });
+        }
+    });
+
+    // ============================================================
+    // 🔥 OBTENER ESTADÍSTICAS DE MENSAJES (para el usuario)
+    // ============================================================
+    router.get('/stats', auth, (req, res) => {
+        try {
+            const messages = read('messages.json');
+            const userMessages = messages.filter(m => 
+                m.from === req.userId || m.to === req.userId
+            );
+            
+            const totalSent = messages.filter(m => m.from === req.userId).length;
+            const totalReceived = messages.filter(m => m.to === req.userId).length;
+            const unread = messages.filter(m => m.to === req.userId && !m.read).length;
+            
+            // Mensajes por tipo
+            const mediaMessages = messages.filter(m => m.mediaType && (m.from === req.userId || m.to === req.userId));
+            const mediaByType = {};
+            mediaMessages.forEach(m => {
+                if (m.mediaType) {
+                    mediaByType[m.mediaType] = (mediaByType[m.mediaType] || 0) + 1;
+                }
+            });
+            
+            // Última actividad
+            const sortedByDate = [...userMessages].sort((a, b) => 
+                new Date(b.timestamp) - new Date(a.timestamp)
+            );
+            const lastActivity = sortedByDate.length > 0 ? sortedByDate[0].timestamp : null;
+            
+            res.json({
+                totalSent,
+                totalReceived,
+                unread,
+                mediaByType,
+                lastActivity,
+                totalMessages: userMessages.length
+            });
+        } catch (error) {
+            console.error('Error obteniendo estadísticas:', error);
+            res.status(500).json({ error: 'Error interno' });
+        }
+    });
+
+    // ============================================================
+    // 🔥 OBTENER TODOS LOS MENSAJES DE UN USUARIO (para exportar)
+    // ============================================================
+    router.get('/export/:userId', auth, (req, res) => {
+        try {
+            const targetUserId = req.params.userId;
+            const users = read('users.json');
+            
+            // Solo el propio usuario o admin puede exportar
+            if (req.userId !== targetUserId) {
+                const currentUser = users.find(u => u.id === req.userId);
+                if (!currentUser || currentUser.role !== 'admin') {
+                    return res.status(403).json({ error: 'No tienes permiso para exportar estos mensajes' });
+                }
+            }
+            
+            const messages = read('messages.json');
+            const userMessages = messages.filter(m => 
+                (m.from === targetUserId || m.to === targetUserId) &&
+                !isBlocked(users, targetUserId, m.from === targetUserId ? m.to : m.from)
+            ).sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+            
+            const exported = userMessages.map(msg => {
+                let content = '';
+                try {
+                    content = msg.encrypted ? decryptMessage(msg.content) : msg.content;
+                } catch (e) {
+                    content = '[Mensaje corrupto]';
+                }
+                
+                return {
+                    id: msg.id,
+                    from: msg.from,
+                    to: msg.to,
+                    content: content,
+                    timestamp: msg.timestamp,
+                    mediaType: msg.mediaType || null,
+                    read: msg.read
+                };
+            });
+            
+            res.json({
+                userId: targetUserId,
+                totalMessages: exported.length,
+                messages: exported,
+                exportedAt: new Date().toISOString()
+            });
+        } catch (error) {
+            console.error('Error exportando mensajes:', error);
             res.status(500).json({ error: 'Error interno' });
         }
     });
