@@ -10,7 +10,7 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
         /* ============================================================
-           CHAT MOBILE - DISEÑO MEJORADO
+           CHAT MOBILE - DISEÑO MEJORADO (SIN PARPADEOS)
         ============================================================ */
         * {
             margin: 0;
@@ -162,6 +162,7 @@
         .search-conversations {
             padding: 8px 16px 14px;
             flex-shrink: 0;
+            position: relative;
         }
         .search-conversations input {
             width: 100%;
@@ -173,7 +174,6 @@
             font-size: 14px;
             font-family: inherit;
             transition: all 0.3s;
-            position: relative;
         }
         .search-conversations input::placeholder {
             color: rgba(255, 255, 255, 0.2);
@@ -186,9 +186,11 @@
         .search-conversations .search-icon {
             position: absolute;
             left: 28px;
-            margin-top: 11px;
+            top: 50%;
+            transform: translateY(-50%);
             color: rgba(255, 255, 255, 0.15);
             font-size: 14px;
+            pointer-events: none;
         }
 
         .conversations-list {
@@ -210,6 +212,7 @@
             border-radius: 16px;
             margin-bottom: 2px;
             position: relative;
+            will-change: transform;
         }
         .conversation-item:active {
             transform: scale(0.97);
@@ -415,8 +418,19 @@
             -webkit-overflow-scrolling: touch;
             scroll-behavior: smooth;
             background: radial-gradient(ellipse at 50% 0%, rgba(192, 132, 252, 0.02), transparent 70%);
+            /* MEJORA: scroll suave y sin parpadeos */
+            overscroll-behavior: contain;
         }
-        .messages-container::-webkit-scrollbar { width: 0; }
+        .messages-container::-webkit-scrollbar { 
+            width: 3px;
+        }
+        .messages-container::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        .messages-container::-webkit-scrollbar-thumb {
+            background: rgba(192, 132, 252, 0.15);
+            border-radius: 10px;
+        }
 
         /* ===== MESSAGE ===== */
         .message {
@@ -424,6 +438,8 @@
             max-width: 82%;
             animation: messageIn 0.3s ease;
             margin-bottom: 2px;
+            /* MEJORA: evitar parpadeos */
+            will-change: transform, opacity;
         }
         @keyframes messageIn {
             0% { opacity: 0; transform: translateY(10px) scale(0.96); }
@@ -763,7 +779,7 @@
         <div class="spinner"></div>
     </div>
 
-    <!-- HEADER -->
+    <!-- HEADER - UN SOLO BOTÓN DE VOLVER -->
     <header class="chat-header">
         <button class="back-btn" onclick="window.location.href='/feed.html'">
             <i class="fas fa-arrow-left"></i>
@@ -772,9 +788,7 @@
             <i class="fas fa-comment-dots"></i> Mensajes
         </div>
         <div class="header-right">
-            <button class="icon-btn" onclick="window.location.href='/feed.html'" title="Inicio">
-                <i class="fas fa-home"></i>
-            </button>
+            <!-- Solo un botón de inicio, ya que el back está a la izquierda -->
         </div>
     </header>
 
@@ -789,7 +803,7 @@
                     <span class="subtitle">· Tus chats</span>
                 </h2>
             </div>
-            <div class="search-conversations" style="position:relative;">
+            <div class="search-conversations">
                 <i class="fas fa-search search-icon"></i>
                 <input type="text" id="searchConversations" placeholder="Buscar conversaciones..." />
             </div>
@@ -844,7 +858,7 @@
 
     <script type="module">
         // ============================================================
-        // CHAT MOBILE - MEJORADO
+        // CHAT MOBILE - MEJORADO (SIN PARPADEOS)
         // ============================================================
 
         import { getToken, getCurrentUser, showToast as authShowToast } from './auth.js';
@@ -870,6 +884,7 @@
         let userStatuses = new Map();
         let isScrolling = false;
         let scrollTimeout = null;
+        let isInitialLoad = true;
 
         // ============================================================
         // SHOW TOAST
@@ -1113,20 +1128,33 @@
                 if (res.ok) {
                     const newMessages = await res.json();
                     if (loadMore) {
-                        // Prevenir duplicados
+                        // Prevenir duplicados y parpadeos
                         const existingIds = new Set(messages.map(m => m.id));
                         const uniqueNew = newMessages.filter(m => !existingIds.has(m.id));
+                        // Usar spread con precaución para evitar re-renderizados innecesarios
+                        const oldScrollHeight = messagesContainerEl?.scrollHeight || 0;
+                        const oldScrollTop = messagesContainerEl?.scrollTop || 0;
+                        
                         messages = [...uniqueNew.reverse(), ...messages];
                         hasMoreMessages = newMessages.length === MESSAGES_PER_PAGE;
                         nextOffset = offset + MESSAGES_PER_PAGE;
+                        
+                        // Renderizar y restaurar scroll
+                        renderMessages();
+                        if (messagesContainerEl) {
+                            requestAnimationFrame(() => {
+                                const newScrollHeight = messagesContainerEl.scrollHeight;
+                                messagesContainerEl.scrollTop = oldScrollTop + (newScrollHeight - oldScrollHeight);
+                            });
+                        }
                     } else {
                         messages = newMessages;
                         hasMoreMessages = newMessages.length === MESSAGES_PER_PAGE;
                         nextOffset = MESSAGES_PER_PAGE;
-                    }
-                    renderMessages();
-                    if (!loadMore) {
-                        scrollToBottom();
+                        renderMessages();
+                        if (!isInitialLoad) {
+                            scrollToBottom();
+                        }
                         markMessagesAsRead(userId);
                     }
                 }
@@ -1134,11 +1162,21 @@
                 console.error('Error cargando mensajes:', error);
                 if (!loadMore) showToast('❌ Error cargando mensajes', true);
             }
-            if (!loadMore) showLoading(false);
+            if (!loadMore) {
+                showLoading(false);
+                isInitialLoad = false;
+            }
         }
 
         function renderMessages() {
             if (!messagesContainerEl) return;
+            
+            // Guardar posición de scroll para restaurar después
+            const scrollTop = messagesContainerEl.scrollTop;
+            const scrollHeight = messagesContainerEl.scrollHeight;
+            const clientHeight = messagesContainerEl.clientHeight;
+            const wasNearBottom = scrollHeight - (scrollTop + clientHeight) < 100;
+
             if (messages.length === 0) {
                 messagesContainerEl.innerHTML = `
                     <div class="empty-state-chat">
@@ -1149,9 +1187,6 @@
                 `;
                 return;
             }
-
-            // Guardar scroll position
-            const wasNearBottom = messagesContainerEl.scrollHeight - (messagesContainerEl.scrollTop + messagesContainerEl.clientHeight) < 100;
 
             let messagesHtml = '';
             let lastDate = '';
@@ -1182,12 +1217,17 @@
             // Usar requestAnimationFrame para evitar parpadeos
             requestAnimationFrame(() => {
                 messagesContainerEl.innerHTML = messagesHtml;
-
+                
                 // Restaurar scroll si estaba cerca del fondo
                 if (wasNearBottom) {
                     requestAnimationFrame(() => {
                         messagesContainerEl.scrollTop = messagesContainerEl.scrollHeight;
                     });
+                } else {
+                    // Restaurar posición aproximada
+                    const newScrollHeight = messagesContainerEl.scrollHeight;
+                    const ratio = scrollTop / (scrollHeight || 1);
+                    messagesContainerEl.scrollTop = ratio * newScrollHeight;
                 }
             });
         }
@@ -1226,7 +1266,7 @@
         function setupInfiniteScroll() {
             if (!messagesContainerEl) return;
             messagesContainerEl.removeEventListener('scroll', handleScroll);
-            messagesContainerEl.addEventListener('scroll', handleScroll);
+            messagesContainerEl.addEventListener('scroll', handleScroll, { passive: true });
         }
 
         function handleScroll() {
@@ -1236,15 +1276,9 @@
             scrollTimeout = setTimeout(() => {
                 if (messagesContainerEl.scrollTop === 0 && hasMoreMessages && !isLoadingMore && currentConversation) {
                     isLoadingMore = true;
-                    const oldHeight = messagesContainerEl.scrollHeight;
+                    const oldScrollHeight = messagesContainerEl.scrollHeight;
                     loadMessages(currentConversation.id, true, nextOffset).then(() => {
-                        setTimeout(() => {
-                            if (messagesContainerEl) {
-                                const newHeight = messagesContainerEl.scrollHeight;
-                                messagesContainerEl.scrollTop = newHeight - oldHeight;
-                            }
-                            isLoadingMore = false;
-                        }, 100);
+                        isLoadingMore = false;
                     });
                 }
             }, 200);
@@ -1276,6 +1310,7 @@
             await fetchUserStatus(userId);
 
             renderConversations();
+            isInitialLoad = true;
             await loadMessages(userId, false, 0);
             showMessagesPanel();
             updateChatHeaderStatus(userId);
