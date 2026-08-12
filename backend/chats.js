@@ -13,24 +13,42 @@ module.exports = (read, write, io, encryptMessage, decryptMessage, createNotific
         
         if (!blocker || !blocked) return false;
         
-        // Si el bloqueador tiene al bloqueado en su lista de bloqueados
         if (blocker.blocked && blocker.blocked.includes(blockedId)) return true;
-        
-        // Si el bloqueado tiene al bloqueador en su lista de bloqueados
         if (blocked.blockedBy && blocked.blockedBy.includes(blockerId)) return true;
         
         return false;
     }
 
     // ============================================================
-    // FUNCIÓN PARA CIFRAR MULTIMEDIA (BASE64)
+    // 🔥 FUNCIÓN SEGURA PARA DESCIFRAR (CON MANEJO DE ERRORES)
     // ============================================================
-    function encryptMedia(mediaData) {
-        return encryptMessage(mediaData);
-    }
-
-    function decryptMedia(encryptedMedia) {
-        return decryptMessage(encryptedMedia);
+    function safeDecryptMessage(encryptedContent, fallbackMessage = '[Mensaje cifrado]') {
+        if (!encryptedContent) return fallbackMessage;
+        
+        // Si el mensaje no está cifrado, devolverlo tal cual
+        if (typeof encryptedContent === 'string' && !encryptedContent.startsWith('U2FsdGVkX1')) {
+            return encryptedContent;
+        }
+        
+        try {
+            const decrypted = decryptMessage(encryptedContent);
+            if (!decrypted || decrypted === '') {
+                return fallbackMessage;
+            }
+            return decrypted;
+        } catch (error) {
+            console.error('Error descifrando mensaje:', error.message);
+            // Intentar limpiar caracteres no válidos
+            try {
+                const cleaned = encryptedContent.replace(/[^\x20-\x7E]/g, '');
+                if (cleaned && cleaned.length > 0) {
+                    return decryptMessage(cleaned);
+                }
+            } catch (e) {
+                // Silencioso
+            }
+            return fallbackMessage;
+        }
     }
 
     // ============================================================
@@ -84,13 +102,13 @@ module.exports = (read, write, io, encryptMessage, decryptMessage, createNotific
                             };
                         }
                         
-                        // Decrypt last message content
-                        let lastContent = '';
+                        // 🔥 DESCIFRAR DE FORMA SEGURA
+                        let lastContent = '[Mensaje]';
                         if (msg.content) {
-                            try {
-                                lastContent = msg.encrypted ? decryptMessage(msg.content) : msg.content;
-                            } catch (e) {
-                                lastContent = '[Mensaje cifrado]';
+                            if (msg.encrypted) {
+                                lastContent = safeDecryptMessage(msg.content, '[Mensaje cifrado]');
+                            } else {
+                                lastContent = msg.content;
                             }
                         }
                         
@@ -111,12 +129,12 @@ module.exports = (read, write, io, encryptMessage, decryptMessage, createNotific
                 
                 const conv = conversationsMap.get(otherUserId);
                 if (conv && new Date(msg.timestamp) > new Date(conv.lastMessage.timestamp)) {
-                    let lastContent = '';
+                    let lastContent = '[Mensaje]';
                     if (msg.content) {
-                        try {
-                            lastContent = msg.encrypted ? decryptMessage(msg.content) : msg.content;
-                        } catch (e) {
-                            lastContent = '[Mensaje cifrado]';
+                        if (msg.encrypted) {
+                            lastContent = safeDecryptMessage(msg.content, '[Mensaje cifrado]');
+                        } else {
+                            lastContent = msg.content;
                         }
                     }
                     conv.lastMessage = {
@@ -173,11 +191,13 @@ module.exports = (read, write, io, encryptMessage, decryptMessage, createNotific
             const paginated = filtered.slice(offset, offset + limit);
             
             const result = paginated.map(msg => {
-                let content = '';
-                try {
-                    content = msg.encrypted ? decryptMessage(msg.content) : msg.content;
-                } catch (e) {
-                    content = '[Mensaje corrupto]';
+                let content = '[Mensaje]';
+                if (msg.content) {
+                    if (msg.encrypted) {
+                        content = safeDecryptMessage(msg.content, '[Mensaje cifrado]');
+                    } else {
+                        content = msg.content;
+                    }
                 }
                 
                 return {
@@ -246,7 +266,16 @@ module.exports = (read, write, io, encryptMessage, decryptMessage, createNotific
                 });
             }
             
-            const encryptedContent = encryptMessage(content);
+            // 🔥 VERIFICAR QUE EL CONTENIDO SEA UTF-8 VÁLIDO
+            let cleanContent = content;
+            try {
+                // Intentar decodificar y re-codificar para limpiar
+                cleanContent = Buffer.from(content, 'utf8').toString('utf8');
+            } catch (e) {
+                cleanContent = content.replace(/[^\x20-\x7E]/g, '');
+            }
+            
+            const encryptedContent = encryptMessage(cleanContent);
             const messages = read('messages.json');
             
             const newMessage = {
@@ -267,7 +296,7 @@ module.exports = (read, write, io, encryptMessage, decryptMessage, createNotific
                 id: newMessage.id,
                 from: newMessage.from,
                 to: newMessage.to,
-                content: content,
+                content: cleanContent,
                 timestamp: newMessage.timestamp,
                 read: false,
                 isOwn: true,
@@ -280,7 +309,7 @@ module.exports = (read, write, io, encryptMessage, decryptMessage, createNotific
                     id: newMessage.id,
                     from: req.userId,
                     to: toUserId,
-                    content: content,
+                    content: cleanContent,
                     timestamp: newMessage.timestamp,
                     read: false,
                     isOwn: false,
@@ -298,7 +327,7 @@ module.exports = (read, write, io, encryptMessage, decryptMessage, createNotific
                 if (!isBlocked(users, toUserId, req.userId)) {
                     createNotification(toUserId, 'message', req.userId, {
                         message: `${fromUser.fullName} te envió un mensaje`,
-                        preview: content.substring(0, 50)
+                        preview: cleanContent.substring(0, 50)
                     });
                 }
             }
@@ -311,7 +340,7 @@ module.exports = (read, write, io, encryptMessage, decryptMessage, createNotific
     });
 
     // ============================================================
-    // 🔥 ENVIAR MENSAJE CON MULTIMEDIA - CIFRADO (IMÁGENES, AUDIOS, VIDEOS)
+    // ENVIAR MENSAJE CON MULTIMEDIA - CIFRADO
     // ============================================================
     router.post('/messages/:userId/media', auth, async (req, res) => {
         try {
@@ -336,8 +365,15 @@ module.exports = (read, write, io, encryptMessage, decryptMessage, createNotific
                 });
             }
             
-            // Cifrar datos multimedia (base64)
-            const encryptedMedia = encryptMedia(mediaData);
+            // 🔥 LIMPIAR CAPTION
+            let cleanCaption = caption || '';
+            try {
+                cleanCaption = Buffer.from(cleanCaption, 'utf8').toString('utf8');
+            } catch (e) {
+                cleanCaption = cleanCaption.replace(/[^\x20-\x7E]/g, '');
+            }
+            
+            const encryptedMedia = encryptMessage(mediaData);
             const messages = read('messages.json');
             
             const newMessage = {
@@ -347,7 +383,7 @@ module.exports = (read, write, io, encryptMessage, decryptMessage, createNotific
                 content: encryptedMedia,
                 encrypted: true,
                 mediaType: mediaType,
-                caption: caption || null,
+                caption: cleanCaption || null,
                 read: false,
                 timestamp: new Date().toISOString()
             };
@@ -359,7 +395,7 @@ module.exports = (read, write, io, encryptMessage, decryptMessage, createNotific
                 id: newMessage.id,
                 from: newMessage.from,
                 to: newMessage.to,
-                content: caption || `[${mediaType}]`,
+                content: cleanCaption || `[${mediaType}]`,
                 timestamp: newMessage.timestamp,
                 read: false,
                 isOwn: true,
@@ -373,7 +409,7 @@ module.exports = (read, write, io, encryptMessage, decryptMessage, createNotific
                     id: newMessage.id,
                     from: req.userId,
                     to: toUserId,
-                    content: caption || `[${mediaType}]`,
+                    content: cleanCaption || `[${mediaType}]`,
                     timestamp: newMessage.timestamp,
                     read: false,
                     isOwn: false,
@@ -405,7 +441,7 @@ module.exports = (read, write, io, encryptMessage, decryptMessage, createNotific
     });
 
     // ============================================================
-    // 🔥 DESCARGAR/OBTENER MEDIA CIFRADA
+    // DESCARGAR/OBTENER MEDIA CIFRADA
     // ============================================================
     router.get('/messages/:messageId/media', auth, (req, res) => {
         try {
@@ -426,15 +462,23 @@ module.exports = (read, write, io, encryptMessage, decryptMessage, createNotific
             
             let decryptedMedia = '';
             try {
-                decryptedMedia = decryptMedia(message.content);
+                decryptedMedia = decryptMessage(message.content);
             } catch (e) {
+                console.error('Error descifrando media:', e.message);
                 return res.status(500).json({ error: 'Error descifrando el archivo' });
+            }
+            
+            let cleanCaption = message.caption || '';
+            try {
+                cleanCaption = Buffer.from(cleanCaption, 'utf8').toString('utf8');
+            } catch (e) {
+                cleanCaption = cleanCaption.replace(/[^\x20-\x7E]/g, '');
             }
             
             res.json({
                 mediaType: message.mediaType,
                 mediaData: decryptedMedia,
-                caption: message.caption || null,
+                caption: cleanCaption || null,
                 timestamp: message.timestamp
             });
         } catch (error) {
@@ -476,7 +520,7 @@ module.exports = (read, write, io, encryptMessage, decryptMessage, createNotific
     });
 
     // ============================================================
-    // ELIMINAR MENSAJE MULTIMEDIA (también elimina el archivo)
+    // ELIMINAR MENSAJE MULTIMEDIA
     // ============================================================
     router.delete('/messages/:messageId/media', auth, (req, res) => {
         try {
@@ -493,7 +537,6 @@ module.exports = (read, write, io, encryptMessage, decryptMessage, createNotific
                 return res.status(403).json({ error: 'No tienes permiso para eliminar este mensaje' });
             }
             
-            // Si tiene multimedia, limpiar el contenido
             if (message.mediaType) {
                 message.content = '[Archivo eliminado]';
                 message.mediaType = null;
@@ -522,7 +565,7 @@ module.exports = (read, write, io, encryptMessage, decryptMessage, createNotific
     });
 
     // ============================================================
-    // MARCAR CONVERSACIÓN COMO LEÍDA - CON VERIFICACIÓN DE BLOQUEOS
+    // MARCAR CONVERSACIÓN COMO LEÍDA
     // ============================================================
     router.put('/conversations/:userId/read', auth, (req, res) => {
         try {
@@ -569,7 +612,7 @@ module.exports = (read, write, io, encryptMessage, decryptMessage, createNotific
     });
 
     // ============================================================
-    // BUSCAR MENSAJES - CON FILTRO DE BLOQUEOS
+    // BUSCAR MENSAJES
     // ============================================================
     router.get('/search', auth, (req, res) => {
         try {
@@ -602,14 +645,17 @@ module.exports = (read, write, io, encryptMessage, decryptMessage, createNotific
             userMessages.forEach(msg => {
                 let decryptedContent = '';
                 try {
-                    decryptedContent = msg.encrypted ? decryptMessage(msg.content) : msg.content;
+                    if (msg.encrypted) {
+                        decryptedContent = safeDecryptMessage(msg.content, '');
+                    } else {
+                        decryptedContent = msg.content || '';
+                    }
                 } catch (e) {
                     decryptedContent = '';
                 }
                 
-                // Buscar en contenido o en caption
-                const searchContent = decryptedContent.toLowerCase();
                 const searchCaption = msg.caption ? msg.caption.toLowerCase() : '';
+                const searchContent = decryptedContent.toLowerCase();
                 
                 if (searchContent.includes(query) || searchCaption.includes(query)) {
                     const otherUserId = msg.from === req.userId ? msg.to : msg.from;
@@ -661,7 +707,7 @@ module.exports = (read, write, io, encryptMessage, decryptMessage, createNotific
     });
 
     // ============================================================
-    // 🔥 OBTENER ESTADÍSTICAS DE MENSAJES (para el usuario)
+    // OBTENER ESTADÍSTICAS DE MENSAJES
     // ============================================================
     router.get('/stats', auth, (req, res) => {
         try {
@@ -674,7 +720,6 @@ module.exports = (read, write, io, encryptMessage, decryptMessage, createNotific
             const totalReceived = messages.filter(m => m.to === req.userId).length;
             const unread = messages.filter(m => m.to === req.userId && !m.read).length;
             
-            // Mensajes por tipo
             const mediaMessages = messages.filter(m => m.mediaType && (m.from === req.userId || m.to === req.userId));
             const mediaByType = {};
             mediaMessages.forEach(m => {
@@ -683,7 +728,6 @@ module.exports = (read, write, io, encryptMessage, decryptMessage, createNotific
                 }
             });
             
-            // Última actividad
             const sortedByDate = [...userMessages].sort((a, b) => 
                 new Date(b.timestamp) - new Date(a.timestamp)
             );
@@ -704,14 +748,13 @@ module.exports = (read, write, io, encryptMessage, decryptMessage, createNotific
     });
 
     // ============================================================
-    // 🔥 OBTENER TODOS LOS MENSAJES DE UN USUARIO (para exportar)
+    // EXPORTAR MENSAJES
     // ============================================================
     router.get('/export/:userId', auth, (req, res) => {
         try {
             const targetUserId = req.params.userId;
             const users = read('users.json');
             
-            // Solo el propio usuario o admin puede exportar
             if (req.userId !== targetUserId) {
                 const currentUser = users.find(u => u.id === req.userId);
                 if (!currentUser || currentUser.role !== 'admin') {
@@ -728,7 +771,11 @@ module.exports = (read, write, io, encryptMessage, decryptMessage, createNotific
             const exported = userMessages.map(msg => {
                 let content = '';
                 try {
-                    content = msg.encrypted ? decryptMessage(msg.content) : msg.content;
+                    if (msg.encrypted) {
+                        content = safeDecryptMessage(msg.content, '[Mensaje cifrado]');
+                    } else {
+                        content = msg.content || '';
+                    }
                 } catch (e) {
                     content = '[Mensaje corrupto]';
                 }
