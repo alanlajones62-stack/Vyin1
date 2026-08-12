@@ -863,8 +863,8 @@ async function loadStoryData(storyId, isNavigation = false) {
                 updateModalUI(currentStoryData);
                 updateProgress();
                 const highlightCommentId = window._activityCommentId || null;
-                // NO forzar recarga si ya hay caché
-                await initComments(storyId, 'commentsList', highlightCommentId, false);
+                // 🔥 FORZAR RECARGA DE COMENTARIOS AL ABRIR EL MODAL
+                await initComments(storyId, 'commentsList', highlightCommentId, true);
                 return;
             }
             if (currentStoriesList.length > 0) {
@@ -874,7 +874,8 @@ async function loadStoryData(storyId, isNavigation = false) {
                     updateModalUI(currentStoryData);
                     updateProgress();
                     const highlightCommentId = window._activityCommentId || null;
-                    await initComments(storyId, 'commentsList', highlightCommentId, false);
+                    // 🔥 FORZAR RECARGA DE COMENTARIOS AL ABRIR EL MODAL
+                    await initComments(storyId, 'commentsList', highlightCommentId, true);
                     return;
                 }
             }
@@ -925,8 +926,9 @@ async function loadStoryData(storyId, isNavigation = false) {
         updateProgress();
         
         const highlightCommentId = window._activityCommentId || null;
-        // SOLO forzar recarga si es la primera vez o si es navegación y no hay caché
-        const forceReload = isNavigation && !commentsCache.has(storyId);
+        // 🔥 FORZAR RECARGA DE COMENTARIOS SIEMPRE QUE SE ABRE EL MODAL
+        // (excepto cuando es navegación entre historias del carrusel)
+        const forceReload = !isNavigation || true; // Siempre forzar recarga para mostrar nuevos comentarios
         await initComments(storyId, 'commentsList', highlightCommentId, forceReload);
         
         await registerView(storyId);

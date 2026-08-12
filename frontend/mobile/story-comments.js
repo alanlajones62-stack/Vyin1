@@ -96,16 +96,6 @@ export function addCommentToCache(storyId, comment) {
         return;
     }
     
-    // Verificar si ya está renderizado en UI
-    const container = document.getElementById('commentsList');
-    if (container) {
-        const existingElement = container.querySelector(`[data-comment-id="${comment.id}"]`);
-        if (existingElement) {
-            console.log('⚠️ Comentario ya existe en UI, omitiendo caché');
-            return;
-        }
-    }
-    
     // Añadir al principio (nuevos primero)
     comments.unshift(comment);
     commentsCache.set(storyId, comments);
@@ -149,16 +139,6 @@ export function addReplyToCache(storyId, parentCommentId, reply) {
         return;
     }
     
-    // Verificar si ya está renderizado en UI
-    const container = document.getElementById('commentsList');
-    if (container) {
-        const existingElement = container.querySelector(`[data-reply-id="${reply.id}"]`);
-        if (existingElement) {
-            console.log('⚠️ Respuesta ya existe en UI, omitiendo caché');
-            return;
-        }
-    }
-    
     parentComment.replies.push(reply);
     
     // Ordenar respuestas (viejas primero)
@@ -176,7 +156,10 @@ export function addReplyToCache(storyId, parentCommentId, reply) {
         commentLikes.set(reply.id, new Set(reply.likes));
     }
     
-    console.log(`✅ Respuesta ${reply.id} añadida al caché`);
+    // 🔥 EXPANDIR AUTOMÁTICAMENTE EL PADRE PARA MOSTRAR LA NUEVA RESPUESTA
+    repliesVisibility.set(parentCommentId, true);
+    
+    console.log(`✅ Respuesta ${reply.id} añadida al caché, padre expandido`);
 }
 
 export function updateCommentLikes(storyId, commentId, liked) {
@@ -228,6 +211,13 @@ export async function loadComments(storyId, forceReload = false) {
     const token = getToken();
     if (!token) return [];
 
+    // 🔥 SI forceReload es true, forzar recarga del servidor
+    if (forceReload) {
+        console.log(`🔄 Forzando recarga de comentarios desde servidor para historia ${storyId}`);
+        commentsCache.delete(storyId);
+    }
+
+    // Si hay caché y no se fuerza recarga, usar caché
     if (!forceReload && commentsCache.has(storyId)) {
         return commentsCache.get(storyId);
     }
@@ -286,6 +276,7 @@ export async function loadComments(storyId, forceReload = false) {
             }
         });
 
+        console.log(`📦 Cargados ${comments.length} comentarios desde servidor para historia ${storyId}`);
         return comments;
     } catch (error) {
         console.error('Error loading comments:', error);
@@ -766,12 +757,13 @@ window.handleReplySubmit = async function(storyId, parentCommentId) {
         input.value = '';
         const container = document.getElementById(`reply-input-${parentCommentId}`);
         if (container) container.style.display = 'none';
+        // 🔥 FORZAR ACTUALIZACIÓN DE UI CON CACHÉ ACTUALIZADO
         updateCommentsUI(storyId);
     }
 };
 
 // ============================================================
-// 🔥 TOGGLE VISIBILIDAD DE RESPUESTAS (CORREGIDO)
+// 🔥 TOGGLE VISIBILIDAD DE RESPUESTAS
 // ============================================================
 
 window.toggleRepliesVisibility = function(commentId) {
@@ -803,15 +795,19 @@ export async function initComments(storyId, containerId = 'commentsList', highli
     container.dataset.storyId = storyId;
     window._currentStoryId = storyId;
 
-    // SOLO FORZAR RECARGA COMPLETA DESDE EL SERVIDOR si se solicita EXPLÍCITAMENTE
-    // y si NO hay datos en caché o si forceReload es true
-    let comments = commentsCache.get(storyId);
-    
-    if (forceReload || !comments || comments.length === 0) {
-        comments = await loadComments(storyId, forceReload);
+    // 🔥 SI forceReload es true, FORZAR RECARGA COMPLETA DEL SERVIDOR
+    let comments;
+    if (forceReload) {
+        console.log(`🔄 FORZANDO RECARGA DE COMENTARIOS PARA HISTORIA ${storyId}`);
+        comments = await loadComments(storyId, true);
     } else {
-        // Si ya hay datos en caché, NO recargar del servidor
-        console.log(`📦 Usando caché de comentarios para historia ${storyId} (${comments.length} comentarios)`);
+        // Si no hay forceReload, usar caché o cargar si no existe
+        comments = commentsCache.get(storyId);
+        if (!comments || comments.length === 0) {
+            comments = await loadComments(storyId, false);
+        } else {
+            console.log(`📦 Usando caché de comentarios para historia ${storyId} (${comments.length} comentarios)`);
+        }
     }
     
     const currentUser = getCurrentUser();
@@ -860,7 +856,8 @@ export async function initComments(storyId, containerId = 'commentsList', highli
             const newComment = await addComment(storyId, content);
             if (newComment) {
                 newInput.value = '';
-                updateCommentsUI(storyId);
+                // 🔥 FORZAR RECARGA PARA MOSTRAR EL NUEVO COMENTARIO
+                await initComments(storyId, containerId, null, false);
             }
             newSendBtn.disabled = false;
         };
