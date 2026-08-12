@@ -1,5 +1,5 @@
 // ============================================================
-// edit-profile-modal.js - Modal para editar perfil CON TABS
+// edit-profile-modal.js - Modal para editar perfil CON TABS Y DOWNGRADE DE EMPRESA
 // ============================================================
 
 import {
@@ -430,6 +430,35 @@ function injectStyles() {
         .account-type-locked i { color: #c084fc; }
         
         /* ============================================================
+           🆕 BOTÓN DE DEJAR DE SER EMPRESA
+           ============================================================ */
+        .btn-downgrade-business {
+            width: 100%;
+            padding: 12px;
+            background: rgba(239, 68, 68, 0.08);
+            border: 2px solid rgba(239, 68, 68, 0.15);
+            border-radius: 12px;
+            color: #ff6b6b;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+            font-family: inherit;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            margin-top: 12px;
+        }
+        .btn-downgrade-business:hover {
+            background: rgba(239, 68, 68, 0.15);
+            border-color: #ff6b6b;
+            transform: translateY(-2px);
+        }
+        .btn-downgrade-business:active { transform: scale(0.97); }
+        .btn-downgrade-business i { font-size: 14px; }
+        
+        /* ============================================================
            🆕 COMMUNITY RULES SECTION
            ============================================================ */
         .community-rules-section {
@@ -768,6 +797,7 @@ function injectStyles() {
             .blocked-item { padding: 10px 12px; }
             .blocked-item .user-avatar { width: 32px; height: 32px; }
             .btn-unblock { font-size: 11px; padding: 4px 12px; }
+            .btn-downgrade-business { font-size: 13px; padding: 10px; }
         }
         @media (max-height: 600px) {
             .edit-profile-header { padding: 10px 16px 8px; }
@@ -788,6 +818,7 @@ function injectStyles() {
             .rules-footer { font-size: 11px; padding: 8px 12px; }
             .blocked-item .user-avatar { width: 28px; height: 28px; }
             .btn-unblock { font-size: 10px; padding: 3px 10px; }
+            .btn-downgrade-business { font-size: 12px; padding: 8px; }
         }
     `;
     document.head.appendChild(styles);
@@ -948,6 +979,7 @@ function createEditProfileHTML() {
     window.switchEditTab = switchEditTab;
     window.unblockUser = unblockUser;
     window.loadBlockedList = loadBlockedList;
+    window.downgradeBusinessAccount = downgradeBusinessAccount;
 }
 
 // ============================================================
@@ -1170,6 +1202,9 @@ function loadEditProfileData(user) {
     const daysRemaining = getDaysUntilNextChange(lastUsernameChange);
     const usernameDisabled = daysRemaining > 0;
 
+    // ============================================================
+    // 🆕 SECCIÓN DE EMPRESA ACTUALIZADA CON DOWNGRADE
+    // ============================================================
     let businessSectionHtml = '';
     
     if (isAdmin) {
@@ -1180,6 +1215,7 @@ function loadEditProfileData(user) {
             </div>
         `;
     } else if (accountType === 'personal' || accountType === 'verified') {
+        // USUARIO PERSONAL O VERIFICADO - Mostrar opción de solicitar empresa
         if (hasBusinessRequest || isBusinessRequestSent) {
             businessSectionHtml = `
                 <div class="edit-section business-request-section">
@@ -1202,7 +1238,8 @@ function loadEditProfileData(user) {
                 </div>
             `;
         }
-    } else {
+    } else if (accountType === 'business') {
+        // 🆕 CUENTA DE EMPRESA (NO VERIFICADA) - Mostrar opción de dejar de ser empresa
         businessSectionHtml = `
             <div class="edit-section business-info-section">
                 <div class="edit-section-title"><i class="fas fa-building" style="color:#fbbf24;"></i> Cuenta de empresa</div>
@@ -1210,11 +1247,49 @@ function loadEditProfileData(user) {
                     <div class="business-info-display">
                         <div><strong>Nombre:</strong> ${escapeHtml(user.businessInfo.name || '')}</div>
                         <div><strong>Tipo:</strong> ${escapeHtml(user.businessInfo.type || '')}</div>
-                        <div><strong>Estado:</strong> ${accountType === 'business_verified' ? '✅ Verificada' : '⏳ Pendiente de verificación'}</div>
+                        <div><strong>Estado:</strong> ⏳ Pendiente de verificación</div>
+                        ${user.businessInfo.trialEndsAt ? `
+                            <div style="margin-top:8px;font-size:12px;color:rgba(255,255,255,0.3);">
+                                <i class="fas fa-clock"></i> Período de prueba hasta: ${new Date(user.businessInfo.trialEndsAt).toLocaleDateString()}
+                            </div>
+                        ` : ''}
                     </div>
                 ` : `
                     <div class="edit-helper">Cuenta de empresa activa</div>
                 `}
+                
+                <!-- 🔥 BOTÓN PARA DEJAR DE SER EMPRESA -->
+                <button class="btn-downgrade-business" onclick="window.downgradeBusinessAccount()">
+                    <i class="fas fa-user"></i> Dejar de ser empresa
+                </button>
+                <div class="edit-helper" style="color:#fbbf24;">
+                    <i class="fas fa-info-circle"></i> Al dejar de ser empresa, volverás a una cuenta personal
+                </div>
+            </div>
+        `;
+    } else {
+        // CUENTA BUSINESS_VERIFIED o VERIFIED - No se puede cambiar
+        businessSectionHtml = `
+            <div class="edit-section business-info-section">
+                <div class="edit-section-title"><i class="fas fa-building" style="color:#4ade80;"></i> Cuenta de empresa verificada</div>
+                ${user.businessInfo ? `
+                    <div class="business-info-display">
+                        <div><strong>Nombre:</strong> ${escapeHtml(user.businessInfo.name || '')}</div>
+                        <div><strong>Tipo:</strong> ${escapeHtml(user.businessInfo.type || '')}</div>
+                        <div><strong>Estado:</strong> ✅ Verificada</div>
+                        <div style="margin-top:8px;font-size:12px;color:#4ade80;">
+                            <i class="fas fa-check-circle"></i> Cuenta verificada por el equipo de moderación
+                        </div>
+                    </div>
+                ` : `
+                    <div class="edit-helper" style="color:#4ade80;">
+                        <i class="fas fa-check-circle"></i> Cuenta de empresa verificada
+                    </div>
+                `}
+                <div class="account-type-locked" style="border-color:rgba(74,222,128,0.2);">
+                    <i class="fas fa-lock" style="color:#4ade80;"></i>
+                    No puedes cambiar una cuenta verificada. Contacta al soporte.
+                </div>
             </div>
         `;
     }
@@ -1495,6 +1570,79 @@ function loadEditProfileData(user) {
     setTimeout(() => {
         updateSaveStatus('saved');
     }, 500);
+}
+
+// ============================================================
+// 🔥 DEJAR DE SER EMPRESA (DOWNGRADE)
+// ============================================================
+
+async function downgradeBusinessAccount() {
+    const user = getCurrentUser();
+    if (!user) {
+        showToast('Inicia sesión para realizar esta acción', true);
+        return;
+    }
+
+    // Verificar que es cuenta business (no verificada)
+    if (user.accountType !== 'business') {
+        showToast('❌ No puedes realizar esta acción', true);
+        return;
+    }
+
+    // Confirmar con el usuario
+    if (!confirm('¿Estás seguro de que quieres dejar de ser una cuenta de empresa?\n\nVolverás a una cuenta personal y perderás los beneficios de empresa.')) {
+        return;
+    }
+
+    const token = getToken();
+    if (!token) {
+        showToast('Inicia sesión para realizar esta acción', true);
+        return;
+    }
+
+    showToast('⏳ Procesando...', false, 2000);
+
+    try {
+        const response = await fetch(`${API_URL}/api/verified/business/downgrade`, {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json'
+            }
+        });
+
+        const data = await response.json();
+
+        if (response.ok) {
+            showToast('✅ Has dejado de ser una cuenta de empresa', false);
+            
+            // Actualizar el usuario en localStorage
+            if (currentUserData) {
+                currentUserData.accountType = 'personal';
+                currentUserData.businessInfo = null;
+                setCurrentUser(currentUserData);
+            }
+            
+            // Recargar los datos del perfil
+            loadEditProfileData(currentUserData || getCurrentUser());
+            
+            // Actualizar el perfil si está abierto
+            const profileOverlay = document.getElementById('profileModalOverlay');
+            if (profileOverlay && profileOverlay.classList.contains('active')) {
+                const userId = user.id;
+                const profileCache = window._profileCache || new Map();
+                profileCache.delete(userId);
+                if (window.loadProfileData) {
+                    window.loadProfileData(userId);
+                }
+            }
+        } else {
+            showToast(`❌ ${data.error || 'Error al procesar la solicitud'}`, true);
+        }
+    } catch (error) {
+        console.error('Error downgrading business account:', error);
+        showToast('❌ Error de conexión', true);
+    }
 }
 
 // ============================================================
@@ -1925,5 +2073,6 @@ if (typeof window !== 'undefined') {
     window.switchEditTab = switchEditTab;
     window.unblockUser = unblockUser;
     window.loadBlockedList = loadBlockedList;
+    window.downgradeBusinessAccount = downgradeBusinessAccount;
     console.log('✅ edit-profile-modal: Funciones asignadas a window');
 }

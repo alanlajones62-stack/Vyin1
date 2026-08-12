@@ -1,4 +1,4 @@
-// backend/verified-accounts.js - Sistema de verificación y cuentas de empresa (VERSIÓN COMPLETA CON ADMIN VERIFICADO)
+// backend/verified-accounts.js - Sistema de verificación y cuentas de empresa (VERSIÓN COMPLETA CON DOWNGRADE)
 
 const auth = require('./middleware/auth');
 
@@ -314,6 +314,65 @@ module.exports = function(read, write, io, logger) {
             });
         } catch (error) {
             logger.error('Error solicitando cuenta de empresa:', { error: error.message });
+            res.status(500).json({ error: 'Error interno' });
+        }
+    });
+
+    // ============================================================
+    // 🔥 DEJAR DE SER EMPRESA (DOWNGRADE) - NUEVO ENDPOINT
+    // ============================================================
+    router.post('/business/downgrade', auth, async (req, res) => {
+        try {
+            const userId = req.userId;
+            const users = read('users.json');
+            const userIndex = users.findIndex(u => u.id === userId);
+            
+            if (userIndex === -1) {
+                return res.status(404).json({ error: 'Usuario no encontrado' });
+            }
+            
+            const user = users[userIndex];
+            
+            // ❌ No permitir si es cuenta verificada o business_verified
+            if (user.accountType === ACCOUNT_TYPES.VERIFIED || 
+                user.accountType === ACCOUNT_TYPES.BUSINESS_VERIFIED) {
+                return res.status(403).json({ 
+                    error: 'No puedes cambiar una cuenta verificada. Contacta al soporte.',
+                    accountType: user.accountType
+                });
+            }
+            
+            // ❌ No permitir si no es business
+            if (user.accountType !== ACCOUNT_TYPES.BUSINESS) {
+                return res.status(400).json({ 
+                    error: 'Tu cuenta no es una cuenta de empresa',
+                    accountType: user.accountType
+                });
+            }
+            
+            // ✅ Cambiar a personal
+            user.accountType = ACCOUNT_TYPES.PERSONAL;
+            user.businessInfo = null; // Eliminar información de empresa
+            
+            write('users.json', users);
+            
+            // Notificar al usuario
+            io.to(`user_${userId}`).emit('account_downgraded', {
+                userId: userId,
+                newAccountType: ACCOUNT_TYPES.PERSONAL,
+                message: 'Tu cuenta ha sido cambiada a Personal'
+            });
+            
+            logger.info(`📊 Usuario ${user.username} cambió de empresa a personal`);
+            
+            res.json({
+                success: true,
+                message: 'Cuenta cambiada de Empresa a Personal correctamente',
+                accountType: ACCOUNT_TYPES.PERSONAL
+            });
+            
+        } catch (error) {
+            logger.error('Error cambiando de empresa a personal:', { error: error.message });
             res.status(500).json({ error: 'Error interno' });
         }
     });
