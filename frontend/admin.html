@@ -785,6 +785,11 @@
             <i class="fas fa-clock"></i> Solicitudes
             <span class="count" id="pendingRequests">0</span>
         </button>
+        <!-- 🔥 NUEVA PESTAÑA: PUBLICIDADES -->
+        <button class="tab-btn" data-tab="ads">
+            <i class="fas fa-bullhorn"></i> Publicidades
+            <span class="count" id="pendingAdsCount">0</span>
+        </button>
         <button class="tab-btn" data-tab="register">
             <i class="fas fa-user-plus"></i> Registrar Admin
         </button>
@@ -848,6 +853,19 @@
         </div>
     </div>
 
+    <!-- ===== TAB: PUBLICIDADES PENDIENTES ===== -->
+    <div class="tab-content" id="tab-ads">
+        <h3 style="color: rgba(255,255,255,0.7); margin-bottom: 16px;">
+            <i class="fas fa-bullhorn" style="color: #fbbf24;"></i> Publicidades pendientes de aprobación
+        </h3>
+        <div id="pendingAdsList">
+            <div class="loading">
+                <i class="fas fa-spinner fa-spin"></i>
+                Cargando publicidades pendientes...
+            </div>
+        </div>
+    </div>
+
     <!-- ===== TAB: REGISTER ADMIN ===== -->
     <div class="tab-content" id="tab-register">
         <div class="register-admin-form">
@@ -889,7 +907,7 @@
     <!-- ===== SOCKET.IO ===== -->
     <script src="https://cdn.socket.io/4.6.0/socket.io.min.js"></script>
 
-    <!-- ===== SCRIPT - SEPARADO ===== -->
+    <!-- ===== SCRIPT ===== -->
     <script src="/admin/admin.js"></script>
 
 </body>

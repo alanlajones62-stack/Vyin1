@@ -1,4 +1,4 @@
-// admin/admin.js - Lógica del panel de administración (CON VERIFICACIÓN DE CUENTAS)
+// admin/admin.js - Lógica del panel de administración (CON VERIFICACIÓN DE CUENTAS Y PUBLICIDADES)
 
 // ============================================================
 // CONFIGURACIÓN
@@ -155,7 +155,7 @@ async function checkAuth() {
 }
 
 // ============================================================
-// STATS - ACTUALIZADO CON ESTADÍSTICAS DE VERIFICACIÓN
+// STATS - ACTUALIZADO CON PUBLICIDADES
 // ============================================================
 
 async function loadStats() {
@@ -183,14 +183,26 @@ async function loadStats() {
 
             if (verifyResponse.ok) {
                 const verifyStats = await verifyResponse.json();
-                document.getElementById('verifiedCount').textContent = verifyStats.verifiedCount || 0;
-                document.getElementById('businessCount').textContent = verifyStats.businessCount || 0;
                 document.getElementById('totalAdmins').textContent = verifyStats.totalAdmins || 0;
                 document.getElementById('adminCount').textContent = verifyStats.totalAdmins || 0;
                 document.getElementById('pendingRequests').textContent = verifyStats.pendingBusinessRequests || 0;
             }
         } catch (e) {
             console.warn('Error cargando estadísticas de verificación:', e);
+        }
+
+        // 🔥 Cargar publicidades pendientes
+        try {
+            const adsResponse = await fetch(`${API_URL}/api/ads/pending`, {
+                headers: getHeaders()
+            });
+            if (adsResponse.ok) {
+                const adsData = await adsResponse.json();
+                const pendingCount = adsData.ads?.filter(a => a.status === 'pending').length || 0;
+                document.getElementById('pendingAdsCount').textContent = pendingCount;
+            }
+        } catch (e) {
+            console.warn('Error cargando publicidades pendientes:', e);
         }
 
     } catch (error) {
@@ -1253,6 +1265,166 @@ async function loadPendingBusinessRequests() {
 }
 
 // ============================================================
+// 🔥 PUBLICIDADES - ADMIN
+// ============================================================
+
+// Cargar publicidades pendientes
+async function loadPendingAds() {
+    const container = document.getElementById('pendingAdsList');
+    if (!container) return;
+    
+    container.innerHTML = '<div class="loading"><i class="fas fa-spinner fa-spin"></i> Cargando publicidades pendientes...</div>';
+
+    try {
+        const response = await fetch(`${API_URL}/api/ads/pending`, {
+            headers: getHeaders()
+        });
+
+        if (!response.ok) {
+            if (response.status === 403) {
+                container.innerHTML = `
+                    <div class="empty-state">
+                        <i class="fas fa-exclamation-triangle"></i>
+                        <h3>Acceso denegado</h3>
+                        <p>No tienes permisos</p>
+                    </div>
+                `;
+                return;
+            }
+            throw new Error('Error cargando publicidades pendientes');
+        }
+
+        const data = await response.json();
+        const ads = data.ads || [];
+
+        if (ads.length === 0) {
+            container.innerHTML = `
+                <div class="empty-state">
+                    <i class="fas fa-check-circle"></i>
+                    <h3>No hay publicidades pendientes</h3>
+                    <p>Todas las publicidades han sido revisadas</p>
+                </div>
+            `;
+            return;
+        }
+
+        container.innerHTML = ads.map(ad => `
+            <div class="report-item">
+                <div class="header">
+                    <div>
+                        <span class="report-id">#${ad.id.substring(0, 8)}</span>
+                        <span style="margin-left: 12px; font-size: 14px; font-weight: 500;">
+                            ${ad.user?.fullName || 'Empresa'} 
+                            <span style="color: rgba(255,255,255,0.3); font-weight: 400;">publicó</span>
+                            <span style="color: #fbbf24;">${escapeHtml(ad.title)}</span>
+                        </span>
+                    </div>
+                    <div>
+                        <span class="status-badge pending">⏳ Pendiente</span>
+                    </div>
+                </div>
+
+                <div class="meta">
+                    <span><i class="fas fa-building"></i> ${escapeHtml(ad.businessName || 'Empresa')}</span>
+                    <span><i class="fas fa-calendar"></i> ${new Date(ad.createdAt).toLocaleString()}</span>
+                    <span><i class="fas fa-clock"></i> ${ad.durationDays || 7} días</span>
+                    <span><i class="fas fa-users"></i> ${ad.targetAudience || 'all'}</span>
+                </div>
+
+                ${ad.imageUrl ? `
+                    <div class="story-preview">
+                        <img src="${ad.imageUrl}" alt="Publicidad" loading="lazy" 
+                             onerror="this.style.display='none'; this.parentElement.innerHTML='<div class=\\'no-content\\'><i class=\\'fas fa-image\\'></i> Imagen no disponible</div>'">
+                        <div class="caption">${escapeHtml(ad.title)}</div>
+                    </div>
+                ` : ''}
+
+                <div style="margin: 12px 0; padding: 12px 16px; background: rgba(0,0,0,0.3); border-radius: 10px; font-size: 14px; color: rgba(255,255,255,0.7); border-left: 3px solid rgba(251,191,36,0.3);">
+                    <strong style="color: rgba(255,255,255,0.3);">Descripción:</strong><br>
+                    ${escapeHtml(ad.description)}
+                </div>
+
+                ${ad.linkUrl ? `
+                    <div style="margin: 8px 0; font-size: 13px; color: rgba(255,255,255,0.3);">
+                        <i class="fas fa-link"></i> <a href="${escapeHtml(ad.linkUrl)}" target="_blank" style="color: #c084fc; text-decoration: none;">${escapeHtml(ad.linkUrl)}</a>
+                    </div>
+                ` : ''}
+
+                <div class="actions">
+                    <button class="btn-review" onclick="approveAd('${ad.id}')" style="background: rgba(34,197,94,0.2); color: #22c55e;">
+                        <i class="fas fa-check"></i> Aprobar publicidad
+                    </button>
+                    <button class="btn-dismiss" onclick="rejectAd('${ad.id}')" style="background: rgba(239,68,68,0.2); color: #ef4444;">
+                        <i class="fas fa-times"></i> Rechazar
+                    </button>
+                </div>
+            </div>
+        `).join('');
+
+    } catch (error) {
+        console.error('Error:', error);
+        container.innerHTML = `
+            <div class="empty-state">
+                <i class="fas fa-exclamation-triangle"></i>
+                <h3>Error al cargar</h3>
+                <p>${error.message}</p>
+            </div>
+        `;
+    }
+}
+
+// Aprobar publicidad
+window.approveAd = async function(adId) {
+    if (!confirm('¿Aprobar esta publicidad? Aparecerá en el feed de los usuarios.')) return;
+
+    try {
+        const response = await fetch(`${API_URL}/api/ads/approve/${adId}`, {
+            method: 'POST',
+            headers: getHeaders()
+        });
+
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.error || 'Error al aprobar publicidad');
+        }
+
+        showToast('✅ Publicidad aprobada correctamente', false);
+        await loadPendingAds();
+        await loadStats();
+
+    } catch (error) {
+        console.error('Error:', error);
+        showToast(`❌ ${error.message}`, true);
+    }
+};
+
+// Rechazar publicidad
+window.rejectAd = async function(adId) {
+    const reason = prompt('Motivo del rechazo (opcional):');
+    
+    try {
+        const response = await fetch(`${API_URL}/api/ads/reject/${adId}`, {
+            method: 'POST',
+            headers: getHeaders(),
+            body: JSON.stringify({ reason: reason || 'No cumple con las políticas de la plataforma' })
+        });
+
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.error || 'Error al rechazar publicidad');
+        }
+
+        showToast('❌ Publicidad rechazada', false);
+        await loadPendingAds();
+        await loadStats();
+
+    } catch (error) {
+        console.error('Error:', error);
+        showToast(`❌ ${error.message}`, true);
+    }
+};
+
+// ============================================================
 // ACCIONES DE VERIFICACIÓN
 // ============================================================
 
@@ -1383,7 +1555,7 @@ window.runMassVerification = async function() {
 };
 
 // ============================================================
-// TABS - ACTUALIZADO CON TABS DE VERIFICACIÓN
+// TABS
 // ============================================================
 
 document.querySelectorAll('.tab-btn').forEach(btn => {
@@ -1403,6 +1575,8 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
             loadBusinessAccounts();
         } else if (btn.dataset.tab === 'requests') {
             loadPendingBusinessRequests();
+        } else if (btn.dataset.tab === 'ads') {
+            loadPendingAds();
         }
     });
 });
@@ -1454,6 +1628,24 @@ function initSocket() {
             showToast(`✅ Cuenta de empresa aprobada`, false);
             loadBusinessAccounts();
             loadPendingBusinessRequests();
+            loadStats();
+        });
+
+        socket.on('new_ad_pending', (data) => {
+            showToast(`📢 Nueva publicidad pendiente: ${data.title}`, false);
+            loadPendingAds();
+            loadStats();
+        });
+
+        socket.on('ad_approved', (data) => {
+            showToast(`✅ Publicidad aprobada: ${data.title}`, false);
+            loadPendingAds();
+            loadStats();
+        });
+
+        socket.on('ad_rejected', (data) => {
+            showToast(`❌ Publicidad rechazada: ${data.title}`, false);
+            loadPendingAds();
             loadStats();
         });
 
@@ -1510,6 +1702,7 @@ async function init() {
     await loadVerifiedUsers();
     await loadBusinessAccounts();
     await loadPendingBusinessRequests();
+    await loadPendingAds();
 
     setTimeout(initSocket, 500);
 
@@ -1518,6 +1711,7 @@ async function init() {
     console.log('   📌 Botón "Analizar contenido" clasifica con IA (3 clases)');
     console.log('   👑 Gestión de cuentas verificadas');
     console.log('   🏢 Gestión de cuentas de empresa');
+    console.log('   📢 Gestión de publicidades pendientes');
 }
 
 document.addEventListener('DOMContentLoaded', init);
