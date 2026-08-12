@@ -9,7 +9,7 @@ import {
 } from './auth.js';
 
 import { formatNumber } from './utils.js';
-import { loadComments, initComments } from './story-comments.js';
+import { loadComments, initComments, addCommentToCache, addReplyToCache, updateCommentLikes } from './story-comments.js';
 
 const API_URL = window.location.origin;
 let currentStoryId = null;
@@ -436,22 +436,11 @@ async function handleSendComment() {
             // Actualizar contador
             updateCommentCount(1);
             
-            // Actualizar datos
-            if (currentStoryData) {
-                if (!currentStoryData.comments) currentStoryData.comments = [];
-                currentStoryData.comments.push(data);
-            }
+            // 🔥 SOLO ACTUALIZAR EL CACHÉ DE COMENTARIOS (no duplicar en múltiples lugares)
+            addCommentToCache(currentStoryId, data);
             
-            if (currentStoriesList && currentStoriesList.length > 0) {
-                const idx = currentStoriesList.findIndex(s => s.id === currentStoryId);
-                if (idx !== -1 && currentStoriesList[idx]) {
-                    if (!currentStoriesList[idx].comments) currentStoriesList[idx].comments = [];
-                    currentStoriesList[idx].comments.push(data);
-                }
-            }
-
-            // Añadir a la UI sin duplicar
-            addCommentToUI(data);
+            // Actualizar UI (solo una vez, desde el caché)
+            await initComments(currentStoryId, 'commentsList', null, true);
             
             showToast('💬 Comentario enviado');
         } else {
@@ -519,8 +508,11 @@ async function handleSendReply(storyId, commentId) {
             // Actualizar contador
             updateCommentCount(1);
 
-            // Añadir respuesta a la UI sin duplicar
-            addReplyToUI(commentId, data);
+            // 🔥 SOLO ACTUALIZAR EL CACHÉ DE COMENTARIOS
+            addReplyToCache(storyId, commentId, data);
+            
+            // Actualizar UI (solo una vez, desde el caché)
+            await initComments(storyId, 'commentsList', null, true);
             
             showToast('💬 Respuesta enviada');
         } else {
@@ -537,118 +529,6 @@ async function handleSendReply(storyId, commentId) {
         }
         input.focus();
     }
-}
-
-// ============================================================
-// 🔥 AÑADIR RESPUESTA A LA UI (SIN DUPLICAR)
-// ============================================================
-
-function addReplyToUI(parentCommentId, reply) {
-    const repliesContainer = document.getElementById(`replies-${parentCommentId}`);
-    if (!repliesContainer) return;
-
-    // Verificar si la respuesta ya existe
-    const existingReply = repliesContainer.querySelector(`[data-comment-id="${reply.id}"]`);
-    if (existingReply) {
-        console.log('⚠️ Respuesta ya existe en la UI, omitiendo duplicado');
-        return;
-    }
-
-    const currentUser = getCurrentUser();
-    const userAvatar = currentUser?.avatar || getAvatar(currentUser?.fullName || 'U');
-
-    const replyHtml = `
-        <div class="comment-item" data-comment-id="${reply.id}">
-            <img class="avatar" src="${reply.avatar || userAvatar}" alt="${reply.fullName}" />
-            <div class="comment-body">
-                <div class="comment-user">
-                    ${escapeHtml(reply.fullName)}
-                    <span class="handle">@${reply.username || 'usuario'}</span>
-                    <span class="time">${formatDate(reply.createdAt)}</span>
-                </div>
-                <div class="comment-text">${escapeHtml(reply.content)}</div>
-                <div class="comment-meta">
-                    <button class="btn-like-comment" data-comment-id="${reply.id}">
-                        <i class="fas fa-heart"></i> <span class="like-count">0</span>
-                    </button>
-                    <button class="btn-reply-comment" data-comment-id="${reply.id}">
-                        <i class="fas fa-reply"></i> Responder
-                    </button>
-                </div>
-                <div class="replies" id="replies-${reply.id}"></div>
-                <div class="reply-input-container" id="reply-input-${reply.id}" style="display:none;">
-                    <input type="text" class="reply-input" placeholder="Escribe una respuesta..." maxlength="500" />
-                    <button class="reply-send-btn" data-comment-id="${reply.id}">Enviar</button>
-                </div>
-            </div>
-        </div>
-    `;
-
-    const tempDiv = document.createElement('div');
-    tempDiv.innerHTML = replyHtml;
-    const replyElement = tempDiv.firstElementChild;
-    
-    repliesContainer.appendChild(replyElement);
-    
-    console.log('✅ Respuesta añadida a la UI');
-}
-
-// ============================================================
-// 🔥 AÑADIR COMENTARIO A LA UI (SIN DUPLICAR)
-// ============================================================
-
-function addCommentToUI(comment) {
-    const commentsList = document.getElementById('commentsList');
-    if (!commentsList) return;
-
-    const existingComment = commentsList.querySelector(`[data-comment-id="${comment.id}"]`);
-    if (existingComment) {
-        console.log('⚠️ Comentario ya existe en la UI, omitiendo duplicado');
-        return;
-    }
-
-    const noComments = commentsList.querySelector('.no-comments');
-    if (noComments) {
-        noComments.remove();
-    }
-
-    const currentUser = getCurrentUser();
-    const userAvatar = currentUser?.avatar || getAvatar(currentUser?.fullName || 'U');
-
-    const commentHtml = `
-        <div class="comment-item" data-comment-id="${comment.id}">
-            <img class="avatar" src="${comment.avatar || userAvatar}" alt="${comment.fullName}" />
-            <div class="comment-body">
-                <div class="comment-user">
-                    ${escapeHtml(comment.fullName)}
-                    <span class="handle">@${comment.username || 'usuario'}</span>
-                    <span class="time">${formatDate(comment.createdAt)}</span>
-                </div>
-                <div class="comment-text">${escapeHtml(comment.content)}</div>
-                <div class="comment-meta">
-                    <button class="btn-like-comment" data-comment-id="${comment.id}">
-                        <i class="fas fa-heart"></i> <span class="like-count">0</span>
-                    </button>
-                    <button class="btn-reply-comment" data-comment-id="${comment.id}">
-                        <i class="fas fa-reply"></i> Responder
-                    </button>
-                </div>
-                <div class="replies" id="replies-${comment.id}"></div>
-                <div class="reply-input-container" id="reply-input-${comment.id}" style="display:none;">
-                    <input type="text" class="reply-input" placeholder="Escribe una respuesta..." maxlength="500" />
-                    <button class="reply-send-btn" data-comment-id="${comment.id}">Enviar</button>
-                </div>
-            </div>
-        </div>
-    `;
-
-    const tempDiv = document.createElement('div');
-    tempDiv.innerHTML = commentHtml;
-    const commentElement = tempDiv.firstElementChild;
-    
-    commentsList.insertBefore(commentElement, commentsList.firstChild);
-    
-    console.log('✅ Comentario añadido a la UI');
 }
 
 // ============================================================
@@ -992,7 +872,7 @@ async function loadStoryData(storyId, isNavigation = false) {
                 updateModalUI(currentStoryData);
                 updateProgress();
                 const highlightCommentId = window._activityCommentId || null;
-                await initComments(storyId, 'commentsList', highlightCommentId);
+                await initComments(storyId, 'commentsList', highlightCommentId, true);
                 return;
             }
             if (currentStoriesList.length > 0) {
@@ -1002,7 +882,7 @@ async function loadStoryData(storyId, isNavigation = false) {
                     updateModalUI(currentStoryData);
                     updateProgress();
                     const highlightCommentId = window._activityCommentId || null;
-                    await initComments(storyId, 'commentsList', highlightCommentId);
+                    await initComments(storyId, 'commentsList', highlightCommentId, true);
                     return;
                 }
             }
@@ -1053,7 +933,7 @@ async function loadStoryData(storyId, isNavigation = false) {
         updateProgress();
         
         const highlightCommentId = window._activityCommentId || null;
-        await initComments(storyId, 'commentsList', highlightCommentId);
+        await initComments(storyId, 'commentsList', highlightCommentId, true);
         
         await registerView(storyId);
 
@@ -1351,6 +1231,7 @@ async function handleModalLike() {
 window.openStoryModal = openStoryModal;
 window.closeStoryModal = closeStoryModal;
 window.navigateStory = navigateStory;
+window.handleSendReply = handleSendReply;
 
 window.openProfileFromModal = function() {
     const userId = window._modalUserId;
