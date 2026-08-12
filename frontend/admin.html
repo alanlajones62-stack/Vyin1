@@ -1,0 +1,896 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Panel de Administración - Vyn Social</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        /* ===== ESTILOS COMPLETOS ===== */
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+            background: #0f0f1a;
+            color: #fff;
+            min-height: 100vh;
+        }
+
+        .admin-header {
+            background: linear-gradient(135deg, #1a1a2e, #2d1b4e);
+            padding: 20px 30px;
+            border-bottom: 1px solid rgba(192,132,252,0.15);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            backdrop-filter: blur(12px);
+            flex-wrap: wrap;
+            gap: 12px;
+        }
+        .admin-header h1 {
+            font-size: 22px;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        .admin-header h1 i { color: #c084fc; }
+        .admin-header .badge {
+            background: linear-gradient(135deg, #c084fc, #db2777);
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 11px;
+            font-weight: 600;
+        }
+        .admin-header .user-info {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            flex-wrap: wrap;
+        }
+        .admin-header .user-avatar {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #c084fc, #db2777);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 600;
+            font-size: 16px;
+            cursor: pointer;
+            overflow: hidden;
+            flex-shrink: 0;
+        }
+        .admin-header .user-avatar img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+        .admin-header .back-btn {
+            background: rgba(255,255,255,0.05);
+            border: 1px solid rgba(255,255,255,0.08);
+            border-radius: 10px;
+            padding: 8px 16px;
+            color: rgba(255,255,255,0.6);
+            cursor: pointer;
+            transition: all 0.2s;
+            text-decoration: none;
+            font-size: 13px;
+            font-family: inherit;
+        }
+        .admin-header .back-btn:hover {
+            background: rgba(255,255,255,0.1);
+            color: #fff;
+        }
+        .admin-header .logout-btn {
+            background: rgba(239,68,68,0.15);
+            border: 1px solid rgba(239,68,68,0.2);
+            border-radius: 10px;
+            padding: 8px 16px;
+            color: #ef4444;
+            cursor: pointer;
+            transition: all 0.2s;
+            font-size: 13px;
+            font-family: inherit;
+        }
+        .admin-header .logout-btn:hover {
+            background: rgba(239,68,68,0.25);
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+            gap: 16px;
+            padding: 24px 30px;
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+        .stat-card {
+            background: rgba(255,255,255,0.03);
+            border: 1px solid rgba(255,255,255,0.06);
+            border-radius: 16px;
+            padding: 18px 20px;
+            transition: all 0.3s;
+        }
+        .stat-card:hover {
+            background: rgba(255,255,255,0.05);
+            border-color: rgba(192,132,252,0.2);
+            transform: translateY(-2px);
+        }
+        .stat-card .number {
+            font-size: 28px;
+            font-weight: 700;
+            color: #c084fc;
+        }
+        .stat-card .label {
+            color: rgba(255,255,255,0.4);
+            font-size: 12px;
+            margin-top: 4px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        .stat-card .icon {
+            float: right;
+            font-size: 24px;
+            opacity: 0.3;
+        }
+
+        .tabs {
+            display: flex;
+            gap: 4px;
+            padding: 0 30px;
+            max-width: 1400px;
+            margin: 0 auto;
+            border-bottom: 1px solid rgba(255,255,255,0.05);
+            overflow-x: auto;
+        }
+        .tab-btn {
+            padding: 12px 24px;
+            background: transparent;
+            border: none;
+            color: rgba(255,255,255,0.4);
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+            transition: all 0.3s;
+            position: relative;
+            font-family: inherit;
+            white-space: nowrap;
+        }
+        .tab-btn:hover { color: rgba(255,255,255,0.7); }
+        .tab-btn.active { color: #c084fc; }
+        .tab-btn.active::after {
+            content: '';
+            position: absolute;
+            bottom: -1px;
+            left: 0;
+            right: 0;
+            height: 2px;
+            background: linear-gradient(90deg, #c084fc, #db2777);
+            border-radius: 2px;
+        }
+        .tab-btn .count {
+            background: rgba(192,132,252,0.2);
+            padding: 1px 8px;
+            border-radius: 12px;
+            font-size: 11px;
+            margin-left: 6px;
+        }
+
+        .tab-content {
+            display: none;
+            padding: 24px 30px;
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+        .tab-content.active { display: block; }
+
+        /* ===== REPORT ITEMS ===== */
+        .report-item {
+            background: rgba(255,255,255,0.02);
+            border: 1px solid rgba(255,255,255,0.06);
+            border-radius: 16px;
+            padding: 20px;
+            margin-bottom: 16px;
+            transition: all 0.3s;
+        }
+        .report-item:hover {
+            border-color: rgba(192,132,252,0.15);
+            background: rgba(255,255,255,0.03);
+        }
+        .report-item .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            flex-wrap: wrap;
+            gap: 12px;
+            margin-bottom: 12px;
+        }
+        .report-item .report-id {
+            font-size: 12px;
+            color: rgba(255,255,255,0.2);
+            font-family: monospace;
+        }
+        .report-item .status-badge {
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 11px;
+            font-weight: 600;
+        }
+        .status-badge.pending { background: rgba(251,191,36,0.2); color: #fbbf24; }
+        .status-badge.reviewing { background: rgba(59,130,246,0.2); color: #3b82f6; }
+        .status-badge.resolved { background: rgba(34,197,94,0.2); color: #22c55e; }
+        .status-badge.dismissed { background: rgba(107,114,128,0.2); color: #6b7280; }
+        .status-badge.auto_hidden { background: rgba(239,68,68,0.2); color: #ef4444; }
+
+        .report-item .meta {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 16px;
+            font-size: 13px;
+            color: rgba(255,255,255,0.5);
+        }
+        .report-item .meta i { width: 16px; color: rgba(192,132,252,0.3); }
+
+        /* ===== STORY PREVIEW ===== */
+        .story-preview {
+            margin: 12px 0;
+            background: rgba(0,0,0,0.4);
+            border-radius: 12px;
+            overflow: hidden;
+            max-height: 450px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            border: 1px solid rgba(255,255,255,0.05);
+            position: relative;
+        }
+        .story-preview img {
+            width: 100%;
+            max-height: 400px;
+            object-fit: contain;
+            display: block;
+            background: #0a0a1a;
+        }
+        .story-preview video {
+            width: 100%;
+            max-height: 400px;
+            object-fit: contain;
+            display: block;
+            background: #0a0a1a;
+        }
+        .story-preview .text-content {
+            padding: 40px 30px;
+            width: 100%;
+            min-height: 150px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            font-size: 18px;
+            color: #fff;
+            line-height: 1.6;
+        }
+        .story-preview .audio-content {
+            padding: 40px 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 12px;
+            width: 100%;
+        }
+        .story-preview .audio-content i {
+            font-size: 48px;
+            color: #c084fc;
+            opacity: 0.7;
+        }
+        .story-preview .audio-content audio {
+            width: 100%;
+            max-width: 300px;
+        }
+        .story-preview .caption {
+            padding: 8px 16px;
+            background: rgba(0,0,0,0.5);
+            color: rgba(255,255,255,0.6);
+            font-size: 13px;
+            width: 100%;
+            text-align: center;
+            border-top: 1px solid rgba(255,255,255,0.05);
+        }
+        .story-preview .no-content {
+            padding: 60px 20px;
+            color: rgba(255,255,255,0.2);
+            text-align: center;
+        }
+        .story-preview .no-content i {
+            font-size: 40px;
+            display: block;
+            margin-bottom: 12px;
+            opacity: 0.5;
+        }
+
+        .report-item .reason {
+            margin: 12px 0;
+            padding: 12px 16px;
+            background: rgba(0,0,0,0.3);
+            border-radius: 10px;
+            font-size: 14px;
+            color: rgba(255,255,255,0.7);
+            border-left: 3px solid rgba(192,132,252,0.3);
+        }
+        .report-item .analysis {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin: 8px 0;
+        }
+        .analysis-tag {
+            padding: 2px 10px;
+            border-radius: 12px;
+            font-size: 11px;
+            font-weight: 500;
+        }
+        .analysis-tag.high { background: rgba(239,68,68,0.2); color: #ef4444; }
+        .analysis-tag.medium { background: rgba(251,191,36,0.2); color: #fbbf24; }
+        .analysis-tag.low { background: rgba(34,197,94,0.2); color: #22c55e; }
+
+        .report-item .actions {
+            display: flex;
+            gap: 8px;
+            margin-top: 12px;
+            flex-wrap: wrap;
+        }
+        .report-item .actions button {
+            padding: 6px 16px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 12px;
+            font-weight: 500;
+            transition: all 0.2s;
+            font-family: inherit;
+        }
+        .btn-review { background: rgba(59,130,246,0.2); color: #3b82f6; }
+        .btn-review:hover { background: rgba(59,130,246,0.3); }
+        .btn-resolve { background: rgba(34,197,94,0.2); color: #22c55e; }
+        .btn-resolve:hover { background: rgba(34,197,94,0.3); }
+        .btn-dismiss { background: rgba(107,114,128,0.2); color: #6b7280; }
+        .btn-dismiss:hover { background: rgba(107,114,128,0.3); }
+        .btn-delete { background: rgba(239,68,68,0.2); color: #ef4444; }
+        .btn-delete:hover { background: rgba(239,68,68,0.3); }
+        .btn-analyze { 
+            background: rgba(192,132,252,0.2); 
+            color: #c084fc; 
+        }
+        .btn-analyze:hover { 
+            background: rgba(192,132,252,0.3); 
+        }
+        .btn-analyze:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        .btn-analyze.analyzing {
+            opacity: 0.6;
+            cursor: wait;
+            pointer-events: none;
+        }
+
+        .admin-item {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            padding: 14px 18px;
+            background: rgba(255,255,255,0.02);
+            border: 1px solid rgba(255,255,255,0.06);
+            border-radius: 12px;
+            margin-bottom: 10px;
+        }
+        .admin-item .avatar {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #c084fc, #db2777);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 600;
+            flex-shrink: 0;
+            font-size: 16px;
+            overflow: hidden;
+        }
+        .admin-item .avatar img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+        .admin-item .info { flex: 1; }
+        .admin-item .info .name { font-weight: 500; }
+        .admin-item .info .email { font-size: 13px; color: rgba(255,255,255,0.3); }
+        .admin-item .remove-btn {
+            background: rgba(239,68,68,0.15);
+            border: none;
+            color: #ef4444;
+            padding: 6px 14px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 12px;
+            transition: all 0.2s;
+            font-family: inherit;
+        }
+        .admin-item .remove-btn:hover { background: rgba(239,68,68,0.25); }
+
+        /* ===== BOTONES DE VERIFICACIÓN ===== */
+        .verify-btn {
+            background: rgba(34,197,94,0.15);
+            border: none;
+            color: #22c55e;
+            padding: 6px 14px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 12px;
+            transition: all 0.2s;
+            font-family: inherit;
+        }
+        .verify-btn:hover { background: rgba(34,197,94,0.25); }
+
+        .register-admin-form {
+            background: rgba(255,255,255,0.02);
+            border: 1px solid rgba(255,255,255,0.06);
+            border-radius: 16px;
+            padding: 24px;
+            max-width: 500px;
+            margin-top: 16px;
+        }
+        .register-admin-form h3 {
+            margin-bottom: 16px;
+            font-size: 16px;
+            color: rgba(255,255,255,0.7);
+        }
+        .register-admin-form input {
+            width: 100%;
+            padding: 12px 16px;
+            background: rgba(0,0,0,0.3);
+            border: 1px solid rgba(255,255,255,0.06);
+            border-radius: 10px;
+            color: #fff;
+            font-size: 14px;
+            margin-bottom: 10px;
+            transition: border-color 0.2s;
+            font-family: inherit;
+        }
+        .register-admin-form input:focus {
+            outline: none;
+            border-color: rgba(192,132,252,0.4);
+        }
+        .register-admin-form input::placeholder { color: rgba(255,255,255,0.2); }
+        .register-admin-form .form-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+        }
+        .register-admin-form .submit-btn {
+            width: 100%;
+            padding: 12px;
+            background: linear-gradient(135deg, #c084fc, #db2777);
+            border: none;
+            border-radius: 10px;
+            color: #fff;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            font-family: inherit;
+            font-size: 14px;
+        }
+        .register-admin-form .submit-btn:hover { transform: scale(1.02); }
+        .register-admin-form .submit-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 60px 20px;
+            color: rgba(255,255,255,0.3);
+        }
+        .loading i {
+            font-size: 32px;
+            margin-bottom: 16px;
+            display: block;
+        }
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+            color: rgba(255,255,255,0.3);
+        }
+        .empty-state i {
+            font-size: 48px;
+            margin-bottom: 16px;
+            display: block;
+            opacity: 0.3;
+        }
+        .empty-state h3 {
+            color: rgba(255,255,255,0.5);
+            margin-bottom: 8px;
+        }
+
+        .toast-custom {
+            position: fixed;
+            bottom: 30px;
+            right: 30px;
+            padding: 14px 24px;
+            border-radius: 12px;
+            z-index: 99999;
+            max-width: 400px;
+            font-family: 'Segoe UI', system-ui, sans-serif;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.5);
+            animation: slideIn 0.3s ease;
+        }
+        .toast-custom.success {
+            background: #0f1a0f;
+            border: 1px solid rgba(34,197,94,0.3);
+            color: #fff;
+        }
+        .toast-custom.error {
+            background: #1a0f0f;
+            border: 1px solid rgba(239,68,68,0.3);
+            color: #fff;
+        }
+        @keyframes slideIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* ===== MODAL DE ANÁLISIS ===== */
+        .analysis-modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0,0,0,0.9);
+            z-index: 99999;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+            backdrop-filter: blur(10px);
+        }
+        .analysis-modal.active {
+            display: flex;
+        }
+        .analysis-modal-content {
+            background: linear-gradient(145deg, #1a1a2e, #0f0f1a);
+            border-radius: 24px;
+            max-width: 700px;
+            width: 100%;
+            max-height: 90vh;
+            overflow-y: auto;
+            padding: 30px;
+            border: 1px solid rgba(192,132,252,0.15);
+            position: relative;
+        }
+        .analysis-modal-content .close-btn {
+            position: absolute;
+            top: 14px;
+            right: 18px;
+            background: transparent;
+            border: none;
+            color: rgba(255,255,255,0.3);
+            font-size: 28px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .analysis-modal-content .close-btn:hover {
+            color: #fff;
+        }
+        .analysis-modal-content h2 {
+            color: #c084fc;
+            margin-bottom: 16px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        .analysis-modal-content .analysis-section {
+            background: rgba(0,0,0,0.3);
+            border-radius: 12px;
+            padding: 16px;
+            margin-bottom: 12px;
+            border-left: 3px solid rgba(192,132,252,0.3);
+        }
+        .analysis-modal-content .analysis-section h4 {
+            color: rgba(255,255,255,0.6);
+            font-size: 13px;
+            margin-bottom: 8px;
+        }
+        .analysis-modal-content .analysis-section .value {
+            font-size: 20px;
+            font-weight: 700;
+        }
+        .analysis-modal-content .analysis-section .value.high { color: #ef4444; }
+        .analysis-modal-content .analysis-section .value.medium { color: #fbbf24; }
+        .analysis-modal-content .analysis-section .value.low { color: #22c55e; }
+        .analysis-modal-content .analysis-detail {
+            color: rgba(255,255,255,0.5);
+            font-size: 13px;
+            padding: 4px 0;
+            border-bottom: 1px solid rgba(255,255,255,0.03);
+        }
+
+        /* ===== RESULTADO DEL ANÁLISIS ===== */
+        .analysis-result-nsfw {
+            border-left: 4px solid #ef4444 !important;
+            background: rgba(239,68,68,0.1) !important;
+        }
+        .analysis-result-safe {
+            border-left: 4px solid #22c55e !important;
+            background: rgba(34,197,94,0.1) !important;
+        }
+        .analysis-result-unknown {
+            border-left: 4px solid #fbbf24 !important;
+            background: rgba(251,191,36,0.1) !important;
+        }
+        .action-result {
+            margin-top: 12px;
+            padding: 12px 16px;
+            border-radius: 10px;
+            font-weight: 500;
+        }
+        .action-result.deleted {
+            background: rgba(239,68,68,0.2);
+            color: #ef4444;
+        }
+        .action-result.safe {
+            background: rgba(34,197,94,0.2);
+            color: #22c55e;
+        }
+        .action-result.unknown {
+            background: rgba(251,191,36,0.1);
+            color: #fbbf24;
+            border: 1px solid rgba(251,191,36,0.15);
+        }
+        .action-result.suspicious {
+            background: rgba(251,191,36,0.2);
+            color: #fbbf24;
+            border: 1px solid rgba(251,191,36,0.3);
+        }
+
+        /* ===== MASS VERIFICATION BUTTON ===== */
+        .mass-verify-btn {
+            background: linear-gradient(135deg, #22c55e, #16a34a);
+            border: none;
+            color: #fff;
+            padding: 10px 24px;
+            border-radius: 10px;
+            cursor: pointer;
+            font-weight: 600;
+            font-size: 14px;
+            transition: all 0.2s;
+            font-family: inherit;
+            margin-bottom: 16px;
+        }
+        .mass-verify-btn:hover {
+            transform: scale(1.02);
+            box-shadow: 0 4px 20px rgba(34,197,94,0.3);
+        }
+
+        @media (max-width: 768px) {
+            .admin-header {
+                flex-direction: column;
+                padding: 16px 20px;
+            }
+            .admin-header .user-info {
+                width: 100%;
+                justify-content: space-between;
+            }
+            .stats-grid {
+                grid-template-columns: repeat(2, 1fr);
+                padding: 16px 20px;
+            }
+            .tabs { padding: 0 16px; }
+            .tab-btn { padding: 10px 16px; font-size: 13px; }
+            .tab-content { padding: 16px 20px; }
+            .report-item .header { flex-direction: column; }
+            .register-admin-form .form-row { grid-template-columns: 1fr; }
+            .story-preview { max-height: 250px; }
+            .story-preview img,
+            .story-preview video { max-height: 250px; }
+            .analysis-modal-content { padding: 20px; margin: 10px; }
+            .admin-item { flex-wrap: wrap; }
+            .admin-item .remove-btn { margin-top: 4px; }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- ===== HEADER ===== -->
+    <header class="admin-header">
+        <div>
+            <h1>
+                <i class="fas fa-shield-alt"></i>
+                Panel de Administración
+                <span class="badge">v1.0</span>
+            </h1>
+        </div>
+        <div class="user-info">
+            <a href="/feed.html" class="back-btn">
+                <i class="fas fa-arrow-left"></i> Volver al feed
+            </a>
+            <div class="user-avatar" id="adminAvatar">
+                <img id="avatarImg" src="" alt="Avatar" style="display:none;">
+                <span id="avatarLetter">A</span>
+            </div>
+            <span id="adminName" style="font-size: 14px; color: rgba(255,255,255,0.7);">Cargando...</span>
+            <button class="logout-btn" id="logoutBtn">
+                <i class="fas fa-sign-out-alt"></i> Salir
+            </button>
+        </div>
+    </header>
+
+    <!-- ===== STATS ===== -->
+    <div class="stats-grid" id="statsGrid">
+        <div class="stat-card">
+            <i class="fas fa-flag icon"></i>
+            <div class="number" id="totalReports">-</div>
+            <div class="label">Total Denuncias</div>
+        </div>
+        <div class="stat-card">
+            <i class="fas fa-clock icon"></i>
+            <div class="number" id="pendingReports">-</div>
+            <div class="label">Pendientes</div>
+        </div>
+        <div class="stat-card">
+            <i class="fas fa-check-circle icon" style="color: #22c55e;"></i>
+            <div class="number" id="resolvedReports">-</div>
+            <div class="label">Resueltas</div>
+        </div>
+        <div class="stat-card">
+            <i class="fas fa-exclamation-triangle icon" style="color: #ef4444;"></i>
+            <div class="number" id="autoHiddenReports">-</div>
+            <div class="label">Auto-ocultadas</div>
+        </div>
+        <div class="stat-card">
+            <i class="fas fa-users icon"></i>
+            <div class="number" id="totalAdmins">-</div>
+            <div class="label">Administradores</div>
+        </div>
+        <div class="stat-card">
+            <i class="fas fa-chart-line icon"></i>
+            <div class="number" id="avgScore">-</div>
+            <div class="label">Score Promedio</div>
+        </div>
+    </div>
+
+    <!-- ===== TABS ===== -->
+    <div class="tabs">
+        <button class="tab-btn active" data-tab="reports">
+            <i class="fas fa-flag"></i> Denuncias
+            <span class="count" id="pendingCount">0</span>
+        </button>
+        <button class="tab-btn" data-tab="admins">
+            <i class="fas fa-user-shield"></i> Administradores
+            <span class="count" id="adminCount">0</span>
+        </button>
+        <button class="tab-btn" data-tab="verified">
+            <i class="fas fa-check-circle"></i> Verificados
+        </button>
+        <button class="tab-btn" data-tab="business">
+            <i class="fas fa-building"></i> Empresas
+        </button>
+        <button class="tab-btn" data-tab="requests">
+            <i class="fas fa-clock"></i> Solicitudes
+            <span class="count" id="pendingRequests">0</span>
+        </button>
+        <button class="tab-btn" data-tab="register">
+            <i class="fas fa-user-plus"></i> Registrar Admin
+        </button>
+    </div>
+
+    <!-- ===== TAB: REPORTS ===== -->
+    <div class="tab-content active" id="tab-reports">
+        <div id="reportsList">
+            <div class="loading">
+                <i class="fas fa-spinner fa-spin"></i>
+                Cargando denuncias...
+            </div>
+        </div>
+    </div>
+
+    <!-- ===== TAB: ADMINS ===== -->
+    <div class="tab-content" id="tab-admins">
+        <div id="adminsList">
+            <div class="loading">
+                <i class="fas fa-spinner fa-spin"></i>
+                Cargando administradores...
+            </div>
+        </div>
+    </div>
+
+    <!-- ===== TAB: VERIFIED USERS ===== -->
+    <div class="tab-content" id="tab-verified">
+        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; margin-bottom: 16px;">
+            <h3 style="color: rgba(255,255,255,0.7);"><i class="fas fa-check-circle" style="color: #22c55e;"></i> Usuarios verificados</h3>
+            <button class="mass-verify-btn" onclick="runMassVerification()">
+                <i class="fas fa-robot"></i> Verificación masiva
+            </button>
+        </div>
+        <div id="verifiedList">
+            <div class="loading">
+                <i class="fas fa-spinner fa-spin"></i>
+                Cargando usuarios verificados...
+            </div>
+        </div>
+    </div>
+
+    <!-- ===== TAB: BUSINESS ACCOUNTS ===== -->
+    <div class="tab-content" id="tab-business">
+        <h3 style="color: rgba(255,255,255,0.7); margin-bottom: 16px;"><i class="fas fa-building" style="color: #fbbf24;"></i> Cuentas de empresa</h3>
+        <div id="businessList">
+            <div class="loading">
+                <i class="fas fa-spinner fa-spin"></i>
+                Cargando cuentas de empresa...
+            </div>
+        </div>
+    </div>
+
+    <!-- ===== TAB: PENDING REQUESTS ===== -->
+    <div class="tab-content" id="tab-requests">
+        <h3 style="color: rgba(255,255,255,0.7); margin-bottom: 16px;"><i class="fas fa-clock" style="color: #fbbf24;"></i> Solicitudes pendientes de verificación</h3>
+        <div id="pendingBusinessRequests">
+            <div class="loading">
+                <i class="fas fa-spinner fa-spin"></i>
+                Cargando solicitudes...
+            </div>
+        </div>
+    </div>
+
+    <!-- ===== TAB: REGISTER ADMIN ===== -->
+    <div class="tab-content" id="tab-register">
+        <div class="register-admin-form">
+            <h3><i class="fas fa-user-plus" style="color: #c084fc;"></i> Registrar nuevo administrador</h3>
+            <p style="color: rgba(255,255,255,0.3); font-size: 13px; margin-bottom: 16px;">
+                Solo administradores pueden registrar nuevos administradores.
+            </p>
+            <form id="registerAdminForm">
+                <div class="form-row">
+                    <input type="text" id="regUsername" placeholder="Nombre de usuario" required>
+                    <input type="email" id="regEmail" placeholder="Correo electrónico" required>
+                </div>
+                <div class="form-row">
+                    <input type="text" id="regFullName" placeholder="Nombre completo" required>
+                    <input type="password" id="regPassword" placeholder="Contraseña (mín. 6 caracteres)" required minlength="6">
+                </div>
+                <button type="submit" class="submit-btn">
+                    <i class="fas fa-user-shield"></i> Registrar Administrador
+                </button>
+            </form>
+            <div id="registerMessage" style="margin-top: 12px; font-size: 14px;"></div>
+        </div>
+    </div>
+
+    <!-- ===== MODAL DE ANÁLISIS ===== -->
+    <div class="analysis-modal" id="analysisModal">
+        <div class="analysis-modal-content">
+            <button class="close-btn" onclick="closeAnalysisModal()">&times;</button>
+            <h2><i class="fas fa-microscope"></i> Análisis de Contenido</h2>
+            <div id="analysisResult">
+                <div style="text-align:center; padding: 40px; color: rgba(255,255,255,0.3);">
+                    <i class="fas fa-spinner fa-spin" style="font-size: 32px; display:block; margin-bottom:12px;"></i>
+                    Analizando contenido...
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ===== SOCKET.IO ===== -->
+    <script src="https://cdn.socket.io/4.6.0/socket.io.min.js"></script>
+
+    <!-- ===== SCRIPT - SEPARADO ===== -->
+    <script src="/admin/admin.js"></script>
+
+</body>
+</html>
