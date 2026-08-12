@@ -444,8 +444,26 @@ function setupModalEvents() {
         await toggleTranslation();
     });
 
-    // ENVÍO DE COMENTARIO - Los eventos se configuran en initComments ahora
-    // para evitar duplicados
+    // 🔥 CONFIGURAR ENVÍO DE COMENTARIO - Evento directo al botón
+    const sendBtn = document.getElementById('sendCommentBtn');
+    if (sendBtn) {
+        // Remover listeners anteriores clonando
+        const newSendBtn = sendBtn.cloneNode(true);
+        sendBtn.parentNode.replaceChild(newSendBtn, sendBtn);
+        newSendBtn.addEventListener('click', handleSendComment);
+    }
+
+    const input = document.getElementById('commentInput');
+    if (input) {
+        const newInput = input.cloneNode(true);
+        input.parentNode.replaceChild(newInput, input);
+        newInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                handleSendComment();
+            }
+        });
+    }
 
     let touchStartX = 0;
     let touchStartY = 0;
