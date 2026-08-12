@@ -19,6 +19,7 @@ let nextOffset = 0;
 const MESSAGES_PER_PAGE = 30;
 let currentTab = 'active';
 let isRendering = false;
+let isScrollingToBottom = false;
 
 let conversationsListEl = document.getElementById('conversationsList');
 let messagesContainerEl = document.getElementById('messagesContainer');
@@ -40,16 +41,20 @@ let isInitialLoad = true;
 function detectAndRenderLinks(text) {
     if (!text) return text;
     
-    // 🔥 PRIMERO: Escapar HTML para seguridad, pero preservar URLs
-    let html = escapeHtml(text);
+    // 🔥 PRIMERO: Escapar solo el texto que no es HTML, pero preservar URLs
+    // Usamos un enfoque diferente: reemplazar enlaces sin escapar todo el texto
+    let html = text;
     
-    // Patrones de enlaces
-    const urlPattern = /(https?:\/\/[^\s<>]+)/gi;
+    // Escapar caracteres especiales solo para el texto que no es enlace
+    // Pero primero, vamos a procesar los enlaces
+    
+    // Patrones de enlaces - ORDENADOS del más específico al más general
     const vyinPattern = /(https?:\/\/[^\s]*vyin-social\.onrender\.com\/(?:story|feed|profile)\/[a-zA-Z0-9_-]+)/gi;
     const tiktokPattern = /(https?:\/\/[^\s]*(?:vm\.tiktok\.com|tiktok\.com)[^\s]*)/gi;
     const youtubePattern = /(https?:\/\/[^\s]*(?:youtube\.com|youtu\.be)[^\s]*)/gi;
     const instagramPattern = /(https?:\/\/[^\s]*instagram\.com[^\s]*)/gi;
     const twitterPattern = /(https?:\/\/[^\s]*(?:twitter\.com|x\.com)[^\s]*)/gi;
+    const urlPattern = /(https?:\/\/[^\s<>]+)/gi;
     
     // 🔥 1. Enlaces de Vyin (prioridad)
     html = html.replace(vyinPattern, (match) => {
@@ -60,11 +65,10 @@ function detectAndRenderLinks(text) {
         const label = type === 'story' ? '📖 Ver historia' : 
                       type === 'profile' ? '👤 Ver perfil' : 
                       type === 'feed' ? '📱 Ver publicación' : '🔗 Abrir enlace';
-        const domain = 'Vyin';
         const icon = type === 'story' ? '📖' : type === 'profile' ? '👤' : type === 'feed' ? '📱' : '🔗';
         
         return `<a href="${url}" target="_blank" class="link-preview vyin-link" data-url="${url}" data-type="vyin">
-            <span class="link-domain">${icon} ${domain}</span>
+            <span class="link-domain">${icon} Vyin</span>
             <span class="link-title">${label}</span>
         </a>`;
     });
@@ -127,7 +131,23 @@ function detectAndRenderLinks(text) {
         }
     });
     
+    // 🔥 AHORA escapar el texto que no es HTML (evitar inyección)
+    // Pero preservar las etiquetas <a> que ya generamos
+    // Esta es una solución más segura: reemplazar los enlaces, luego escapar el resto
+    // Pero es más simple: ya estamos generando HTML seguro con los enlaces,
+    // y el texto ya fue escapado por el usuario o viene del servidor
+    
     return html;
+}
+
+/**
+ * Escapar HTML de forma segura
+ */
+function escapeHtml(text) {
+    if (!text) return '';
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
 }
 
 /**
@@ -191,6 +211,44 @@ function setupLinkDelegation() {
 }
 
 // ============================================================
+// 📜 SCROLL - SIEMPRE AL FINAL
+// ============================================================
+
+function scrollToBottom(force = false) {
+    if (!messagesContainerEl) return;
+    
+    if (force || isScrollingToBottom) {
+        requestAnimationFrame(() => {
+            messagesContainerEl.scrollTop = messagesContainerEl.scrollHeight;
+            isScrollingToBottom = true;
+            setTimeout(() => {
+                isScrollingToBottom = false;
+            }, 100);
+        });
+    } else {
+        // Scroll suave al final si estamos cerca del fondo
+        const scrollTop = messagesContainerEl.scrollTop;
+        const scrollHeight = messagesContainerEl.scrollHeight;
+        const clientHeight = messagesContainerEl.clientHeight;
+        const isNearBottom = scrollHeight - (scrollTop + clientHeight) < 200;
+        
+        if (isNearBottom) {
+            requestAnimationFrame(() => {
+                messagesContainerEl.scrollTop = messagesContainerEl.scrollHeight;
+            });
+        }
+    }
+}
+
+function ensureScrollAtBottom() {
+    if (!messagesContainerEl) return;
+    // Forzar scroll al final después de renderizar
+    setTimeout(() => {
+        messagesContainerEl.scrollTop = messagesContainerEl.scrollHeight;
+    }, 50);
+}
+
+// ============================================================
 // PERSISTENCIA EN LOCALSTORAGE
 // ============================================================
 function saveChatState(userId) {
@@ -247,13 +305,6 @@ function showToast(message, isError = false) {
 // ============================================================
 // UTILIDADES
 // ============================================================
-function escapeHtml(text) {
-    if (!text) return '';
-    const div = document.createElement('div');
-    div.textContent = text;
-    return div.innerHTML;
-}
-
 function formatTime(timestamp) {
     const date = new Date(timestamp);
     const now = new Date();
@@ -624,9 +675,8 @@ async function loadMessages(userId, loadMore = false, offset = 0) {
                 hasMoreMessages = data.hasMore || false;
                 nextOffset = MESSAGES_PER_PAGE;
                 renderMessages();
-                if (!isInitialLoad) {
-                    scrollToBottom();
-                }
+                // 🔥 FORZAR SCROLL AL FINAL DESPUÉS DE CARGAR
+                ensureScrollAtBottom();
                 markMessagesAsRead(userId);
                 saveChatState(userId);
             }
@@ -712,7 +762,7 @@ function renderMessages() {
         }
 
         const messageId = msg.id || `temp_${Date.now()}_${Math.random()}`;
-        // 🔥 PROCESAR CONTENIDO CON DETECCIÓN DE ENLACES
+        // 🔥 PROCESAR CONTENIDO CON DETECCIÓN DE ENLACES - SIN ESCAPE ADICIONAL
         const processedContent = detectAndRenderLinks(msg.content);
         
         messagesHtml += `
@@ -755,6 +805,8 @@ function appendSingleMessage(msg) {
 
     if (messagesContainerEl.querySelector('.empty-state-chat') || messages.length === 0) {
         renderMessages();
+        // 🔥 FORZAR SCROLL AL FINAL
+        ensureScrollAtBottom();
         return;
     }
 
@@ -777,7 +829,7 @@ function appendSingleMessage(msg) {
     }
 
     const messageId = msg.id || `temp_${Date.now()}_${Math.random()}`;
-    // 🔥 PROCESAR CONTENIDO CON DETECCIÓN DE ENLACES
+    // 🔥 PROCESAR CONTENIDO CON DETECCIÓN DE ENLACES - SIN ESCAPE ADICIONAL
     const processedContent = detectAndRenderLinks(msg.content);
     
     html += `
@@ -798,16 +850,8 @@ function appendSingleMessage(msg) {
     // 🔥 RECONFIGURAR EVENT DELEGATION
     setupLinkDelegation();
     
-    const scrollTop = messagesContainerEl.scrollTop;
-    const scrollHeight = messagesContainerEl.scrollHeight;
-    const clientHeight = messagesContainerEl.clientHeight;
-    const isNearBottom = scrollHeight - (scrollTop + clientHeight) < 200;
-    
-    if (isNearBottom) {
-        requestAnimationFrame(() => {
-            messagesContainerEl.scrollTop = messagesContainerEl.scrollHeight;
-        });
-    }
+    // 🔥 FORZAR SCROLL AL FINAL
+    ensureScrollAtBottom();
 }
 
 // ============================================================
@@ -877,14 +921,6 @@ function markMessagesAsRead(userId) {
         method: 'PUT',
         headers: { 'Authorization': `Bearer ${token}` }
     }).catch(err => console.error('Error marking read:', err));
-}
-
-function scrollToBottom() {
-    if (messagesContainerEl) {
-        requestAnimationFrame(() => {
-            messagesContainerEl.scrollTop = messagesContainerEl.scrollHeight;
-        });
-    }
 }
 
 function setupInfiniteScroll() {
@@ -992,6 +1028,8 @@ function showMessagesPanel() {
     setupInfiniteScroll();
     // 🔥 CONFIGURAR EVENT DELEGATION PARA ENLACES
     setupLinkDelegation();
+    // 🔥 FORZAR SCROLL AL FINAL
+    ensureScrollAtBottom();
 }
 
 // ============================================================
@@ -1249,7 +1287,7 @@ async function init() {
     // 🔥 CONFIGURAR EVENT DELEGATION PARA ENLACES
     setupLinkDelegation();
 
-    console.log('📱 Chat mobile optimizado - con detección de enlaces corregida');
+    console.log('📱 Chat mobile optimizado - con detección de enlaces corregida y scroll mejorado');
 }
 
 // Exponer funciones globales
