@@ -1,4 +1,6 @@
+// ============================================================
 // activity-modal.js - VERSIÓN COMPLETA CON SUPERPOSICIÓN Y FILTRADO DE COMENTARIOS
+// ============================================================
 
 import { getToken, getCurrentUser, showToast, getAvatar } from './auth.js';
 import { formatNumber } from './utils.js';
@@ -323,11 +325,27 @@ function renderActivity(container) {
             `;
         }
         
+        // 🔥 CORREGIDO: Obtener el ID correcto para el highlight
+        let highlightId = '';
+        let storyId = notif.storyId || '';
+        
+        // Para notificaciones de respuesta, usar el ID de la respuesta (replyId)
+        // Para comentarios, usar commentId
+        if (notif.type === 'reply' || notif.type === 'reply_to_reply') {
+            // Usar replyId si existe, si no usar commentId
+            highlightId = notif.replyId || notif.commentId || '';
+        } else if (notif.type === 'comment' || notif.type === 'mention') {
+            highlightId = notif.commentId || '';
+        } else if (notif.type === 'like') {
+            // Para likes no hay comentario que resaltar
+            highlightId = '';
+        }
+        
         let storyLink = '';
-        if (notif.storyId) {
+        if (storyId) {
             storyLink = `
-                <span class="story-link" data-story-id="${notif.storyId}" 
-                      data-comment-id="${notif.commentId || ''}"
+                <span class="story-link" data-story-id="${storyId}" 
+                      data-highlight-id="${highlightId}"
                       data-notification-id="${notif.id}"
                       style="font-size:9px;color:rgba(192,132,252,0.3);cursor:pointer;margin-top:2px;display:inline-block;">
                     <i class="fas fa-book-open"></i> Ver historia
@@ -393,7 +411,7 @@ function renderActivity(container) {
         el.addEventListener('click', async (e) => {
             e.stopPropagation();
             const storyId = el.dataset.storyId;
-            const commentId = el.dataset.commentId || '';
+            const highlightId = el.dataset.highlightId || '';
             const notificationId = el.dataset.notificationId || '';
             
             if (storyId) {
@@ -403,7 +421,7 @@ function renderActivity(container) {
                 }
                 
                 // 🔥 ABRIR HISTORIA CON COMENTARIO DESTACADO
-                window.openStoryFromActivityOverlay(storyId, commentId, notificationId);
+                window.openStoryFromActivityOverlay(storyId, highlightId, notificationId);
             }
         });
     });
@@ -416,14 +434,14 @@ function renderActivity(container) {
             
             if (storyLink) {
                 const storyId = storyLink.dataset.storyId;
-                const commentId = storyLink.dataset.commentId || '';
+                const highlightId = storyLink.dataset.highlightId || '';
                 const notifId = storyLink.dataset.notificationId || '';
                 
                 if (storyId) {
                     if (notifId) {
                         await markNotificationRead(notifId);
                     }
-                    window.openStoryFromActivityOverlay(storyId, commentId, notifId);
+                    window.openStoryFromActivityOverlay(storyId, highlightId, notifId);
                 }
             }
         });
@@ -434,43 +452,58 @@ function renderActivity(container) {
 // 🔥 ABRIR HISTORIA SUPERPUESTA DESDE ACTIVIDAD (CORREGIDO)
 // ============================================================
 
-window.openStoryFromActivityOverlay = function(storyId, commentId = '', notificationId = '') {
+window.openStoryFromActivityOverlay = function(storyId, highlightId = '', notificationId = '') {
     if (!storyId) return;
     
-    console.log('📱 Abriendo historia desde actividad:', storyId, 'comentario:', commentId);
+    console.log('📱 Abriendo historia desde actividad:', storyId, 'highlight:', highlightId);
     
     // 🔥 MARCAR QUE VIENE DE ACTIVIDAD
     window._fromActivityModal = true;
-    window._activityCommentId = commentId;
+    window._activityCommentId = highlightId;
     window._activityNotificationId = notificationId;
     
     // 🔥 ABRIR HISTORIA SUPERPUESTA
     openStoryModal(storyId, null, false, null);
     
-    // Si hay commentId, esperar a que cargue y hacer scroll
-    if (commentId) {
+    // Si hay highlightId, esperar a que cargue y hacer scroll
+    if (highlightId) {
         setTimeout(() => {
-            // Buscar en el modal de historia
-            const commentElement = document.querySelector(`.comment-item[data-comment-id="${commentId}"]`);
-            if (commentElement) {
-                commentElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                commentElement.style.background = 'rgba(192,132,252,0.1)';
-                commentElement.style.borderLeft = '3px solid #c084fc';
-                setTimeout(() => {
-                    commentElement.style.background = '';
-                    commentElement.style.borderLeft = '';
-                }, 3000);
-            } else {
-                const replyElement = document.querySelector(`.comment-item[data-reply-id="${commentId}"]`);
-                if (replyElement) {
-                    replyElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                    replyElement.style.background = 'rgba(192,132,252,0.1)';
-                    replyElement.style.borderLeft = '3px solid #c084fc';
-                    setTimeout(() => {
-                        replyElement.style.background = '';
-                        replyElement.style.borderLeft = '';
-                    }, 3000);
+            // Primero buscar como comentario principal
+            let targetElement = document.querySelector(`.comment-item[data-comment-id="${highlightId}"]`);
+            // Si no, buscar como respuesta
+            if (!targetElement) {
+                targetElement = document.querySelector(`.comment-item[data-reply-id="${highlightId}"]`);
+            }
+            
+            if (targetElement) {
+                targetElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                targetElement.style.background = 'rgba(192,132,252,0.15)';
+                targetElement.style.borderLeft = '3px solid #c084fc';
+                targetElement.style.transition = 'all 0.3s ease';
+                
+                // Si es una respuesta, asegurarse de que el padre esté expandido
+                const parentReplyContainer = targetElement.closest('.replies');
+                if (parentReplyContainer) {
+                    // Buscar el comentario padre
+                    const parentCommentItem = parentReplyContainer.closest('.comment-item');
+                    if (parentCommentItem) {
+                        const parentId = parentCommentItem.dataset.commentId;
+                        if (parentId) {
+                            // Expandir el padre si está colapsado
+                            const visibilityState = window.repliesVisibility?.get(parentId);
+                            if (visibilityState === false) {
+                                window.toggleRepliesVisibility(parentId);
+                            }
+                        }
+                    }
                 }
+                
+                setTimeout(() => {
+                    targetElement.style.background = '';
+                    targetElement.style.borderLeft = '';
+                }, 4000);
+            } else {
+                console.log('⚠️ No se encontró el elemento con ID:', highlightId);
             }
         }, 800);
     }
