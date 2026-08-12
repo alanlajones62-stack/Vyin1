@@ -1,6 +1,6 @@
 // ============================================================
 // story-modal.js - Modal para ver historias con navegación 
-// (VERSIÓN CORREGIDA - SIN DUPLICADOS)
+// (VERSIÓN CORREGIDA - SIN DUPLICADOS Y CON CONTEO RECURSIVO)
 // ============================================================
 
 import {
@@ -841,7 +841,7 @@ function updateTextContentOnly(updatedData) {
 }
 
 // ============================================================
-// CARGAR DATOS DE LA HISTORIA
+// CARGAR DATOS DE LA HISTORIA - VERSIÓN CORREGIDA
 // ============================================================
 
 async function loadStoryData(storyId, isNavigation = false) {
@@ -927,9 +927,7 @@ async function loadStoryData(storyId, isNavigation = false) {
         
         const highlightCommentId = window._activityCommentId || null;
         // 🔥 FORZAR RECARGA DE COMENTARIOS SIEMPRE QUE SE ABRE EL MODAL
-        // (excepto cuando es navegación entre historias del carrusel)
-        const forceReload = !isNavigation || true; // Siempre forzar recarga para mostrar nuevos comentarios
-        await initComments(storyId, 'commentsList', highlightCommentId, forceReload);
+        await initComments(storyId, 'commentsList', highlightCommentId, true);
         
         await registerView(storyId);
 

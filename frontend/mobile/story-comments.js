@@ -2,7 +2,7 @@
 // story-comments.js - Sistema de comentarios para historias
 // CON ESTADO CORRECTO DE OCULTAR/MOSTRAR RESPUESTAS
 // Y FUNCIONES DE CACHÉ PARA EVITAR DUPLICADOS
-// VERSIÓN CORREGIDA - SIN DUPLICADOS EN UI
+// VERSIÓN CORREGIDA - CON CONTEO RECURSIVO DE RESPUESTAS
 // ============================================================
 
 import { getToken, getCurrentUser, showToast, getAvatar, formatDate, escapeHtml } from './auth.js';
@@ -35,6 +35,21 @@ function findCommentById(comments, commentId) {
         }
     }
     return null;
+}
+
+// ============================================================
+// FUNCIÓN PARA CONTAR TODAS LAS RESPUESTAS RECURSIVAMENTE
+// ============================================================
+
+function countAllReplies(comment) {
+    if (!comment) return 0;
+    if (!comment.replies || comment.replies.length === 0) return 0;
+    
+    let count = comment.replies.length;
+    for (const reply of comment.replies) {
+        count += countAllReplies(reply);
+    }
+    return count;
 }
 
 // ============================================================
@@ -559,7 +574,8 @@ export function renderComments(comments, storyId, currentUserId, container, high
         const likesCount = cachedLikes ? cachedLikes.size : (comment.likes?.length || 0);
         const isOwn = comment.userId === currentUserId;
         const hasReplies = comment.replies && comment.replies.length > 0;
-        const replyCount = comment.replies?.length || 0;
+        // 🔥 CONTAR TODAS LAS RESPUESTAS RECURSIVAMENTE
+        const totalReplyCount = countAllReplies(comment);
         const isExpanded = repliesVisibility.get(comment.id) || false;
         
         const isHighlighted = highlightCommentId && comment.id === highlightCommentId;
@@ -605,7 +621,7 @@ export function renderComments(comments, storyId, currentUserId, container, high
                     ${hasReplies ? `
                         <div class="show-replies-btn" onclick="window.toggleRepliesVisibility('${comment.id}')" style="font-size:12px; color:rgba(192,132,252,0.4); cursor:pointer; margin-top:4px;">
                             <i class="fas fa-chevron-${isExpanded ? 'up' : 'down'}"></i> 
-                            ${isExpanded ? `Ocultar ${replyCount} respuestas` : `Ver ${replyCount} respuestas`}
+                            ${isExpanded ? `Ocultar ${totalReplyCount} respuestas` : `Ver ${totalReplyCount} respuestas`}
                         </div>
                     ` : ''}
                 </div>
