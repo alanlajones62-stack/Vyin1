@@ -1,4 +1,4 @@
-// backend/ads.js - Sistema de publicidad para cuentas de empresa
+// backend/ads.js - Sistema de publicidad para cuentas de empresa (SOLO VISTAS Y LIKES)
 
 const auth = require('./middleware/auth');
 
@@ -26,7 +26,7 @@ module.exports = function(read, write, io, logger) {
     };
 
     // ============================================================
-    // CREAR ANUNCIO (SOLO CUENTAS DE EMPRESA - SIN VERIFICACIÓN REQUERIDA)
+    // CREAR ANUNCIO (SOLO CUENTAS DE EMPRESA)
     // ============================================================
     router.post('/create', auth, async (req, res) => {
         try {
@@ -37,14 +37,12 @@ module.exports = function(read, write, io, logger) {
                 imageUrl, 
                 linkUrl, 
                 targetAudience,
-                budget,
                 durationDays,
                 adType,
                 mediaType,
                 mediaUrl
             } = req.body;
 
-            // Validar campos requeridos
             if (!title || !description) {
                 return res.status(400).json({ error: 'Título y descripción son requeridos' });
             }
@@ -64,7 +62,6 @@ module.exports = function(read, write, io, logger) {
                 return res.status(404).json({ error: 'Usuario no encontrado' });
             }
 
-            // ✅ SOLO VERIFICAR QUE SEA CUENTA DE EMPRESA
             if (user.accountType !== 'business' && user.accountType !== 'business_verified') {
                 return res.status(403).json({ 
                     error: 'Solo las cuentas de empresa pueden crear anuncios',
@@ -72,7 +69,6 @@ module.exports = function(read, write, io, logger) {
                 });
             }
 
-            // Verificar límite de anuncios activos
             const ads = read('ads.json');
             const activeAds = ads.filter(a => a.userId === userId && a.status === AD_STATUS.ACTIVE);
             if (activeAds.length >= 5) {
@@ -83,7 +79,6 @@ module.exports = function(read, write, io, logger) {
                 });
             }
 
-            // Crear el anuncio
             const ad = {
                 id: Date.now().toString() + '_' + Math.random().toString(36).substr(2, 6),
                 userId: userId,
@@ -96,12 +91,12 @@ module.exports = function(read, write, io, logger) {
                 mediaUrl: mediaUrl || imageUrl || null,
                 linkUrl: linkUrl || null,
                 targetAudience: targetAudience || 'all',
-                budget: budget || 0,
                 durationDays: durationDays || 7,
                 adType: adType || AD_TYPES.TRENDING,
                 status: AD_STATUS.PENDING,
                 views: 0,
                 clicks: 0,
+                likes: [],
                 engagement: 0,
                 createdAt: new Date().toISOString(),
                 expiresAt: new Date(Date.now() + (durationDays || 7) * 24 * 60 * 60 * 1000).toISOString(),
@@ -110,19 +105,17 @@ module.exports = function(read, write, io, logger) {
                 rejectedAt: null,
                 rejectedReason: null,
                 isActive: false,
+                viewedBy: [],
                 stats: {
                     dailyViews: [],
-                    dailyClicks: [],
-                    dailyEngagement: []
+                    dailyClicks: []
                 }
             };
 
-            // Guardar anuncio
             let allAds = read('ads.json');
             allAds.push(ad);
             write('ads.json', allAds);
 
-            // Notificar a los admins
             const admins = users.filter(u => u.role === 'admin');
             admins.forEach(admin => {
                 io.to(`user_${admin.id}`).emit('new_ad_pending', {
@@ -153,25 +146,89 @@ module.exports = function(read, write, io, logger) {
     });
 
     // ============================================================
-    // OBTENER ANUNCIOS DEL USUARIO (CUENTA DE EMPRESA)
+    // DAR LIKE A ANUNCIO
     // ============================================================
-    router.get('/my-ads', auth, (req, res) => {
+    router.post('/:adId/like', auth, (req, res) => {
         try {
+            const adId = req.params.adId;
             const userId = req.userId;
-            const ads = read('ads.json');
-            
-            const userAds = ads
-                .filter(a => a.userId === userId)
-                .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+
+            let ads = read('ads.json');
+            const adIndex = ads.findIndex(a => a.id === adId);
+
+            if (adIndex === -1) {
+                return res.status(404).json({ error: 'Anuncio no encontrado' });
+            }
+
+            const ad = ads[adIndex];
+
+            if (!ad.likes) ad.likes = [];
+
+            let liked = false;
+
+            if (ad.likes.includes(userId)) {
+                ad.likes = ad.likes.filter(id => id !== userId);
+                liked = false;
+            } else {
+                ad.likes.push(userId);
+                liked = true;
+            }
+
+            write('ads.json', ads);
+
+            io.emit('ad_liked', {
+                adId: ad.id,
+                userId: userId,
+                liked: liked,
+                likesCount: ad.likes.length,
+                likes: ad.likes
+            });
 
             res.json({
                 success: true,
-                ads: userAds,
-                count: userAds.length
+                liked: liked,
+                likesCount: ad.likes.length,
+                likes: ad.likes
             });
 
         } catch (error) {
-            logger.error('Error obteniendo anuncios del usuario:', { error: error.message });
+            logger.error('Error dando like a anuncio:', { error: error.message });
+            res.status(500).json({ error: 'Error interno' });
+        }
+    });
+
+    // ============================================================
+    // QUITAR LIKE DE ANUNCIO
+    // ============================================================
+    router.delete('/:adId/like', auth, (req, res) => {
+        try {
+            const adId = req.params.adId;
+            const userId = req.userId;
+
+            let ads = read('ads.json');
+            const adIndex = ads.findIndex(a => a.id === adId);
+
+            if (adIndex === -1) {
+                return res.status(404).json({ error: 'Anuncio no encontrado' });
+            }
+
+            const ad = ads[adIndex];
+
+            if (!ad.likes) ad.likes = [];
+
+            ad.likes = ad.likes.filter(id => id !== userId);
+
+            write('ads.json', ads);
+
+            res.json({
+                success: true,
+                liked: false,
+                likesCount: ad.likes.length,
+                likes: ad.likes
+            });
+
+        } catch (error) {
+            logger.error('Error quitando like de anuncio:', { error: error.message });
             res.status(500).json({ error: 'Error interno' });
         }
     });
@@ -186,7 +243,6 @@ module.exports = function(read, write, io, logger) {
             const ads = read('ads.json');
             const now = new Date();
 
-            // Obtener anuncios activos
             const activeAds = ads
                 .filter(a => {
                     if (a.status !== AD_STATUS.ACTIVE) return false;
@@ -195,12 +251,10 @@ module.exports = function(read, write, io, logger) {
                     return true;
                 })
                 .sort((a, b) => {
-                    // Priorizar anuncios con mayor presupuesto
-                    return (b.budget || 0) - (a.budget || 0);
+                    return (b.durationDays || 0) - (a.durationDays || 0);
                 })
                 .slice(0, limit)
                 .map(a => {
-                    // Ocultar información sensible
                     const { budget, ...ad } = a;
                     return ad;
                 });
@@ -218,7 +272,7 @@ module.exports = function(read, write, io, logger) {
     });
 
     // ============================================================
-    // REGISTRAR VISTA DE ANUNCIO
+    // REGISTRAR VISTA DE ANUNCIO (SOLO UNA VEZ POR USUARIO)
     // ============================================================
     router.post('/:adId/view', auth, (req, res) => {
         try {
@@ -233,9 +287,21 @@ module.exports = function(read, write, io, logger) {
             }
 
             const ad = ads[adIndex];
-            ad.views = (ad.views || 0) + 1;
 
-            // Registrar vista diaria
+            // 🔥 VERIFICAR SI EL USUARIO YA VIO ESTE ANUNCIO
+            if (!ad.viewedBy) ad.viewedBy = [];
+            if (ad.viewedBy.includes(userId)) {
+                return res.json({
+                    success: true,
+                    views: ad.views,
+                    alreadyViewed: true
+                });
+            }
+
+            // Registrar vista
+            ad.views = (ad.views || 0) + 1;
+            ad.viewedBy.push(userId);
+
             const today = new Date().toISOString().split('T')[0];
             const dailyView = ad.stats.dailyViews.find(d => d.date === today);
             if (dailyView) {
@@ -275,7 +341,6 @@ module.exports = function(read, write, io, logger) {
             const ad = ads[adIndex];
             ad.clicks = (ad.clicks || 0) + 1;
 
-            // Registrar click diario
             const today = new Date().toISOString().split('T')[0];
             const dailyClick = ad.stats.dailyClicks.find(d => d.date === today);
             if (dailyClick) {
@@ -451,7 +516,6 @@ module.exports = function(read, write, io, logger) {
             const sevenDaysAgo = new Date(now);
             sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
 
-            // Calcular estadísticas de los últimos 7 días
             const dailyViews = ad.stats.dailyViews
                 .filter(d => new Date(d.date) >= sevenDaysAgo)
                 .sort((a, b) => new Date(a.date) - new Date(b.date));
@@ -472,13 +536,13 @@ module.exports = function(read, write, io, logger) {
                     clickThroughRate: Math.round(clickThroughRate * 100) / 100,
                     dailyViews,
                     dailyClicks,
+                    likes: ad.likes?.length || 0,
                     engagement: ad.engagement || 0,
                     status: ad.status,
                     isActive: ad.isActive,
                     createdAt: ad.createdAt,
                     expiresAt: ad.expiresAt,
-                    durationDays: ad.durationDays || 7,
-                    budget: ad.budget || 0
+                    durationDays: ad.durationDays || 7
                 }
             });
 
@@ -555,19 +619,16 @@ module.exports = function(read, write, io, logger) {
                 return res.status(400).json({ error: 'Este anuncio ya ha sido procesado' });
             }
 
-            // Aprobar anuncio
             ad.status = AD_STATUS.ACTIVE;
             ad.isActive = true;
             ad.approvedAt = new Date().toISOString();
             ad.approvedBy = req.userId;
 
-            // Calcular fecha de expiración
             const durationMs = (ad.durationDays || 7) * 24 * 60 * 60 * 1000;
             ad.expiresAt = new Date(Date.now() + durationMs).toISOString();
 
             write('ads.json', ads);
 
-            // Notificar al creador
             io.to(`user_${ad.userId}`).emit('ad_approved', {
                 adId: ad.id,
                 title: ad.title,
@@ -616,7 +677,6 @@ module.exports = function(read, write, io, logger) {
                 return res.status(400).json({ error: 'Este anuncio ya ha sido procesado' });
             }
 
-            // Rechazar anuncio
             ad.status = AD_STATUS.REJECTED;
             ad.isActive = false;
             ad.rejectedAt = new Date().toISOString();
@@ -624,7 +684,6 @@ module.exports = function(read, write, io, logger) {
 
             write('ads.json', ads);
 
-            // Notificar al creador
             io.to(`user_${ad.userId}`).emit('ad_rejected', {
                 adId: ad.id,
                 title: ad.title,
@@ -647,7 +706,7 @@ module.exports = function(read, write, io, logger) {
     });
 
     // ============================================================
-    // LIMPIAR ANUNCIOS EXPIRADOS (TAREA PROGRAMADA)
+    // LIMPIAR ANUNCIOS EXPIRADOS
     // ============================================================
     function cleanupExpiredAds() {
         try {
@@ -661,7 +720,6 @@ module.exports = function(read, write, io, logger) {
                     ad.isActive = false;
                     updated = true;
                     
-                    // Notificar al creador
                     io.to(`user_${ad.userId}`).emit('ad_expired', {
                         adId: ad.id,
                         title: ad.title,
@@ -683,7 +741,6 @@ module.exports = function(read, write, io, logger) {
         }
     }
 
-    // Ejecutar limpieza cada hora
     setInterval(() => {
         cleanupExpiredAds();
     }, 60 * 60 * 1000);

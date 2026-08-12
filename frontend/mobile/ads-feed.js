@@ -48,21 +48,35 @@ export async function loadActiveAds() {
 }
 
 // ============================================================
-// REGISTRAR VISTA DE PUBLICIDAD
+// REGISTRAR VISTA DE PUBLICIDAD (SOLO UNA VEZ POR USUARIO)
 // ============================================================
+
+const viewedAds = new Set();
 
 export async function registerAdView(adId) {
     const token = getToken();
     if (!token) return;
 
+    // 🔥 PREVENIR VISTAS MÚLTIPLES DEL MISMO USUARIO
+    const key = `${adId}_${token}`;
+    if (viewedAds.has(key)) {
+        console.log(`👁️ Vista de publicidad ${adId} ya registrada para este usuario`);
+        return;
+    }
+
     try {
-        await fetch(`${API_URL}/api/ads/${adId}/view`, {
+        const res = await fetch(`${API_URL}/api/ads/${adId}/view`, {
             method: 'POST',
             headers: {
                 'Authorization': `Bearer ${token}`,
                 'Content-Type': 'application/json'
             }
         });
+
+        if (res.ok) {
+            viewedAds.add(key);
+            console.log(`✅ Vista registrada para publicidad ${adId}`);
+        }
     } catch (error) {
         console.error('Error registrando vista de publicidad:', error);
     }
@@ -117,7 +131,6 @@ export function renderAds(ads, container) {
         const isLiked = ad.likes?.includes(userId) || false;
         const likesCount = ad.likes?.length || 0;
         const viewsCount = ad.views || 0;
-        const commentsCount = ad.comments?.length || 0;
 
         html += `
             <div class="story-card ad-card" data-ad-id="${ad.id}" data-index="ad-${index}">
@@ -149,7 +162,6 @@ export function renderAds(ads, container) {
                             <div class="stats">
                                 <span><i class="fas fa-eye"></i> ${formatNumber(viewsCount)}</span>
                                 <span><i class="fas fa-heart" style="color:${isLiked ? '#ff6b6b' : 'inherit'}"></i> ${formatNumber(likesCount)}</span>
-                                <span><i class="fas fa-comment"></i> ${formatNumber(commentsCount)}</span>
                             </div>
                             <div class="btns">
                                 <button class="btn-like ad-like-btn ${isLiked ? 'liked' : ''}" data-ad-id="${ad.id}">
@@ -195,7 +207,6 @@ window.handleAdLike = async function(adId, btn) {
     const method = isLiked ? 'DELETE' : 'POST';
 
     try {
-        // Nota: Este endpoint debería existir en el backend
         const res = await fetch(`${API_URL}/api/ads/${adId}/like`, {
             method: method,
             headers: {
@@ -208,6 +219,16 @@ window.handleAdLike = async function(adId, btn) {
             const data = await res.json();
             btn.classList.toggle('liked');
             btn.innerHTML = data.liked ? '<i class="fas fa-heart"></i> Quitar' : '<i class="fas fa-heart"></i> Like';
+            
+            // Actualizar contador de likes
+            const statsSpan = btn.closest('.actions').querySelector('.stats');
+            if (statsSpan) {
+                const likeSpan = statsSpan.querySelector('span:nth-child(2)');
+                if (likeSpan) {
+                    likeSpan.innerHTML = `<i class="fas fa-heart" style="color:${data.liked ? '#ff6b6b' : 'inherit'}"></i> ${formatNumber(data.likesCount || 0)}`;
+                }
+            }
+            
             showToast(data.liked ? '❤️ Like guardado' : '💔 Like eliminado');
         }
     } catch (error) {
