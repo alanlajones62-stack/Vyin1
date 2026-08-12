@@ -1,6 +1,6 @@
 // ============================================================
 // story-modal.js - Modal para ver historias con navegación 
-// (VERSIÓN CORREGIDA - CON BOTÓN ELIMINAR Y LIMPIEZA)
+// (VERSIÓN CORREGIDA - CON BOTÓN ELIMINAR Y LIMPIEZA SEGURA)
 // ============================================================
 
 import {
@@ -95,7 +95,7 @@ export async function openStoryModal(storyId, storiesList = null, fromProfile = 
 }
 
 // ============================================================
-// CERRAR MODAL - CON LIMPIEZA DE CONTENIDO
+// CERRAR MODAL - CON LIMPIEZA DE CONTENIDO Y VERIFICACIONES
 // ============================================================
 
 export function closeStoryModal() {
@@ -127,7 +127,7 @@ export function closeStoryModal() {
         overlay.style.zIndex = '';
     }
     
-    // 🔥 LIMPIAR CONTENIDO DEL MODAL PARA EVITAR FLICKERING
+    // 🔥 LIMPIAR CONTENIDO DEL MODAL CON VERIFICACIONES DE SEGURIDAD
     const mediaContainer = document.getElementById('modalMedia');
     if (mediaContainer) {
         mediaContainer.innerHTML = `
@@ -149,11 +149,18 @@ export function closeStoryModal() {
         `;
     }
     
-    // Limpiar estadísticas
-    document.getElementById('modalViews').textContent = '0';
-    document.getElementById('modalLikes').textContent = '0';
-    document.getElementById('modalComments').textContent = '0';
-    document.getElementById('commentsCount').textContent = '0';
+    // 🔥 Limpiar estadísticas - CON VERIFICACIONES
+    const viewsEl = document.getElementById('modalViews');
+    if (viewsEl) viewsEl.textContent = '0';
+    
+    const likesEl = document.getElementById('modalLikes');
+    if (likesEl) likesEl.textContent = '0';
+    
+    const commentsEl = document.getElementById('modalComments');
+    if (commentsEl) commentsEl.textContent = '0';
+    
+    const commentsCountEl = document.getElementById('commentsCount');
+    if (commentsCountEl) commentsCountEl.textContent = '0';
     
     // Limpiar caption
     const caption = document.getElementById('modalCaption');
@@ -162,12 +169,22 @@ export function closeStoryModal() {
         caption.style.display = 'none';
     }
     
-    // Limpiar info de usuario
-    document.getElementById('modalUserName').textContent = 'Cargando...';
-    document.getElementById('modalUserHandle').textContent = '@usuario';
-    document.getElementById('modalAvatar').src = '';
+    // 🔥 Limpiar info de usuario - CON VERIFICACIONES
+    const userNameEl = document.getElementById('modalUserName');
+    if (userNameEl) {
+        userNameEl.textContent = 'Cargando...';
+        // Limpiar badge de traducción
+        const badge = userNameEl.querySelector('.translation-badge-modal');
+        if (badge) badge.remove();
+    }
     
-    // Limpiar botones
+    const userHandleEl = document.getElementById('modalUserHandle');
+    if (userHandleEl) userHandleEl.textContent = '@usuario';
+    
+    const avatarEl = document.getElementById('modalAvatar');
+    if (avatarEl) avatarEl.src = '';
+    
+    // 🔥 Limpiar botones - CON VERIFICACIONES
     const likeBtn = document.getElementById('modalLikeBtn');
     if (likeBtn) {
         likeBtn.classList.remove('liked');
@@ -211,11 +228,10 @@ export function closeStoryModal() {
     if (prevArrow) prevArrow.style.display = 'none';
     if (nextArrow) nextArrow.style.display = 'none';
     
-    // Limpiar badge de traducción
-    const userNameEl = document.getElementById('modalUserName');
-    if (userNameEl) {
-        const badge = userNameEl.querySelector('.translation-badge-modal');
-        if (badge) badge.remove();
+    // 🔥 Limpiar subtitles indicator
+    const subtitlesIndicator = document.getElementById('subtitlesIndicator');
+    if (subtitlesIndicator) {
+        subtitlesIndicator.style.display = 'none';
     }
     
     // Limpiar variables globales
@@ -1109,8 +1125,12 @@ function updateModalUI(story) {
         };
     }
 
-    document.getElementById('modalUserName').textContent = user.fullName || 'Usuario';
-    document.getElementById('modalUserHandle').textContent = `@${user.username || 'usuario'}`;
+    const userNameEl = document.getElementById('modalUserName');
+    if (userNameEl) userNameEl.textContent = user.fullName || 'Usuario';
+    
+    const userHandleEl = document.getElementById('modalUserHandle');
+    if (userHandleEl) userHandleEl.textContent = `@${user.username || 'usuario'}`;
+    
     window._modalUserId = user.id;
 
     // 🔥 MOSTRAR/OCULTAR BOTÓN ELIMINAR SEGÚN PROPIETARIO
@@ -1249,10 +1269,17 @@ function updateModalUI(story) {
     const likes = story.likes?.length || 0;
     const comments = story.comments?.length || 0;
 
-    document.getElementById('modalViews').textContent = formatNumber(views);
-    document.getElementById('modalLikes').textContent = formatNumber(likes);
-    document.getElementById('modalComments').textContent = formatNumber(comments);
-    document.getElementById('commentsCount').textContent = formatNumber(comments);
+    const viewsEl = document.getElementById('modalViews');
+    if (viewsEl) viewsEl.textContent = formatNumber(views);
+    
+    const likesEl = document.getElementById('modalLikes');
+    if (likesEl) likesEl.textContent = formatNumber(likes);
+    
+    const commentsEl = document.getElementById('modalComments');
+    if (commentsEl) commentsEl.textContent = formatNumber(comments);
+    
+    const commentsCountEl = document.getElementById('commentsCount');
+    if (commentsCountEl) commentsCountEl.textContent = formatNumber(comments);
 
     const isLiked = story.likes?.includes(currentUser?.id) || false;
     const likeBtn = document.getElementById('modalLikeBtn');
@@ -1314,7 +1341,10 @@ async function handleModalLike() {
     const method = isLiked ? 'DELETE' : 'POST';
 
     const likesEl = document.getElementById('modalLikes');
-    let currentLikes = parseInt(likesEl?.textContent.replace(/[^0-9]/g, '')) || 0;
+    let currentLikes = 0;
+    if (likesEl) {
+        currentLikes = parseInt(likesEl.textContent.replace(/[^0-9]/g, '')) || 0;
+    }
     
     if (isLiked) {
         currentLikes = Math.max(0, currentLikes - 1);
