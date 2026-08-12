@@ -1,5 +1,5 @@
 // ============================================================
-// edit-profile-modal.js - Modal para editar perfil (CON AUTO-GUARDADO, LOGOUT Y REGLAS)
+// edit-profile-modal.js - Modal para editar perfil CON TABS
 // ============================================================
 
 import {
@@ -14,6 +14,7 @@ let originalUsername = '';
 let isBusinessRequestSent = false;
 let saveTimeout = null;
 let isSaving = false;
+let currentTab = 'profile';
 
 // ============================================================
 // INYECTAR ESTILOS
@@ -111,11 +112,68 @@ function injectStyles() {
         }
         .edit-profile-header .save-status i { font-size: 12px; }
         
+        /* ===== TABS ===== */
+        .edit-profile-tabs {
+            display: flex;
+            background: rgba(255, 255, 255, 0.03);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+            flex-shrink: 0;
+            overflow-x: auto;
+            -webkit-overflow-scrolling: touch;
+            padding: 0 4px;
+            gap: 2px;
+        }
+        .edit-profile-tabs::-webkit-scrollbar { height: 0; }
+        
+        .edit-tab-btn {
+            padding: 12px 16px;
+            background: transparent;
+            border: none;
+            color: rgba(255, 255, 255, 0.4);
+            font-size: 12px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+            font-family: inherit;
+            white-space: nowrap;
+            position: relative;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            border-bottom: 2px solid transparent;
+        }
+        .edit-tab-btn i { font-size: 14px; }
+        .edit-tab-btn:hover { color: rgba(255, 255, 255, 0.7); }
+        .edit-tab-btn.active {
+            color: #c084fc;
+            border-bottom-color: #c084fc;
+        }
+        .edit-tab-btn .tab-badge {
+            background: rgba(239, 68, 68, 0.15);
+            color: #ff6b6b;
+            font-size: 10px;
+            padding: 1px 6px;
+            border-radius: 10px;
+            font-weight: 700;
+        }
+        
         .edit-profile-body {
             flex: 1;
             overflow-y: auto;
             padding: 16px 20px 30px;
             -webkit-overflow-scrolling: touch;
+        }
+        
+        /* ===== TAB CONTENT ===== */
+        .tab-content {
+            display: none;
+            animation: tabFadeIn 0.3s ease;
+        }
+        .tab-content.active { display: block; }
+        
+        @keyframes tabFadeIn {
+            0% { opacity: 0; transform: translateY(8px); }
+            100% { opacity: 1; transform: translateY(0); }
         }
         
         .edit-loading {
@@ -128,6 +186,7 @@ function injectStyles() {
         }
         .edit-loading i { font-size: 32px; margin-bottom: 12px; }
         
+        /* ===== AVATAR SECTION ===== */
         .edit-avatar-section {
             display: flex;
             align-items: center;
@@ -260,6 +319,7 @@ function injectStyles() {
         .edit-helper.error { color: #ff6b6b; }
         .edit-helper.success { color: #4ade80; }
         
+        /* ===== PRIVACY OPTIONS ===== */
         .privacy-options {
             display: flex;
             flex-direction: column;
@@ -312,6 +372,7 @@ function injectStyles() {
         }
         .privacy-option.active .privacy-check i { color: #fff; font-size: 11px; }
         
+        /* ===== BUSINESS REQUEST ===== */
         .business-request-btn {
             width: 100%;
             padding: 12px;
@@ -371,21 +432,18 @@ function injectStyles() {
         /* ============================================================
            🆕 COMMUNITY RULES SECTION
            ============================================================ */
-        
         .community-rules-section {
             background: rgba(255, 255, 255, 0.02);
             border-radius: 16px;
             padding: 16px;
             border: 1px solid rgba(255, 255, 255, 0.04);
         }
-        
         .rules-grid {
             display: flex;
             flex-direction: column;
             gap: 12px;
             margin-bottom: 16px;
         }
-        
         .rule-item {
             display: flex;
             align-items: flex-start;
@@ -396,38 +454,24 @@ function injectStyles() {
             transition: all 0.2s ease;
             border: 1px solid transparent;
         }
-        
         .rule-item:hover {
             background: rgba(255, 255, 255, 0.06);
             border-color: rgba(192, 132, 252, 0.1);
             transform: translateX(4px);
         }
-        
-        .rule-icon {
-            font-size: 22px;
-            line-height: 1;
-            flex-shrink: 0;
-            margin-top: 2px;
-        }
-        
-        .rule-content {
-            flex: 1;
-            min-width: 0;
-        }
-        
+        .rule-icon { font-size: 22px; line-height: 1; flex-shrink: 0; margin-top: 2px; }
+        .rule-content { flex: 1; min-width: 0; }
         .rule-title {
             font-weight: 600;
             font-size: 14px;
             color: rgba(255, 255, 255, 0.9);
             margin-bottom: 2px;
         }
-        
         .rule-desc {
             font-size: 13px;
             color: rgba(255, 255, 255, 0.5);
             line-height: 1.4;
         }
-        
         .rules-footer {
             display: flex;
             align-items: center;
@@ -440,12 +484,118 @@ function injectStyles() {
             color: rgba(255, 255, 255, 0.5);
             margin-top: 4px;
         }
+        .rules-footer i { color: #fbbf24; font-size: 16px; flex-shrink: 0; }
         
-        .rules-footer i {
-            color: #fbbf24;
-            font-size: 16px;
-            flex-shrink: 0;
+        /* ============================================================
+           🆕 BLOCKED LIST SECTION
+           ============================================================ */
+        .blocked-list-container {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
         }
+        .blocked-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 12px 16px;
+            background: rgba(255, 255, 255, 0.03);
+            border-radius: 12px;
+            transition: all 0.25s;
+            border: 1px solid rgba(255, 255, 255, 0.04);
+        }
+        .blocked-item:hover {
+            background: rgba(255, 255, 255, 0.06);
+        }
+        .blocked-item .user-info {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            flex: 1;
+            min-width: 0;
+        }
+        .blocked-item .user-avatar {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            object-fit: cover;
+            background: #1a1a2e;
+            flex-shrink: 0;
+            border: 2px solid rgba(255, 255, 255, 0.06);
+        }
+        .blocked-item .user-name {
+            font-weight: 600;
+            color: rgba(255, 255, 255, 0.9);
+            font-size: 14px;
+        }
+        .blocked-item .user-username {
+            font-size: 12px;
+            color: rgba(255, 255, 255, 0.3);
+        }
+        .btn-unblock {
+            padding: 6px 16px;
+            background: rgba(239, 68, 68, 0.1);
+            border: 1px solid rgba(239, 68, 68, 0.2);
+            border-radius: 20px;
+            color: #ff6b6b;
+            font-size: 12px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+            font-family: inherit;
+        }
+        .btn-unblock:hover {
+            background: rgba(239, 68, 68, 0.2);
+            transform: scale(1.02);
+        }
+        .btn-unblock:active { transform: scale(0.95); }
+        .btn-unblock i { font-size: 11px; margin-right: 4px; }
+        
+        .blocked-empty {
+            text-align: center;
+            padding: 40px 20px;
+            color: rgba(255, 255, 255, 0.2);
+        }
+        .blocked-empty i { font-size: 40px; margin-bottom: 12px; display: block; }
+        .blocked-empty span { font-size: 14px; }
+        
+        .blocked-loading {
+            text-align: center;
+            padding: 20px;
+            color: rgba(255, 255, 255, 0.2);
+        }
+        .blocked-loading i { font-size: 24px; margin-bottom: 8px; display: block; }
+        
+        /* ===== LOGOUT SECTION ===== */
+        .edit-logout-section {
+            margin-top: 20px;
+            padding-top: 20px;
+            border-top: 1px solid rgba(255, 255, 255, 0.06);
+        }
+        .btn-logout {
+            width: 100%;
+            padding: 14px;
+            background: rgba(239, 68, 68, 0.08);
+            border: 2px solid rgba(239, 68, 68, 0.15);
+            border-radius: 12px;
+            color: #ff6b6b;
+            font-size: 15px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+            font-family: inherit;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+        }
+        .btn-logout:hover {
+            background: rgba(239, 68, 68, 0.15);
+            border-color: #ff6b6b;
+            transform: translateY(-2px);
+        }
+        .btn-logout:active { transform: scale(0.97); }
+        .btn-logout i { font-size: 16px; }
         
         /* Business Request Modal */
         .business-request-overlay {
@@ -570,37 +720,6 @@ function injectStyles() {
             border: 1px solid rgba(192, 132, 252, 0.1);
         }
         
-        /* Logout button */
-        .edit-logout-section {
-            margin-top: 20px;
-            padding-top: 20px;
-            border-top: 1px solid rgba(255, 255, 255, 0.06);
-        }
-        .btn-logout {
-            width: 100%;
-            padding: 14px;
-            background: rgba(239, 68, 68, 0.08);
-            border: 2px solid rgba(239, 68, 68, 0.15);
-            border-radius: 12px;
-            color: #ff6b6b;
-            font-size: 15px;
-            font-weight: 600;
-            cursor: pointer;
-            transition: all 0.3s;
-            font-family: inherit;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 10px;
-        }
-        .btn-logout:hover {
-            background: rgba(239, 68, 68, 0.15);
-            border-color: #ff6b6b;
-            transform: translateY(-2px);
-        }
-        .btn-logout:active { transform: scale(0.97); }
-        .btn-logout i { font-size: 16px; }
-        
         /* Scrollbar */
         .edit-profile-body::-webkit-scrollbar,
         .business-request-body::-webkit-scrollbar {
@@ -637,6 +756,8 @@ function injectStyles() {
             .privacy-option .privacy-info .title { font-size: 12px; }
             .privacy-option .privacy-info .desc { font-size: 10px; }
             .btn-logout { font-size: 14px; padding: 12px; }
+            .edit-tab-btn { font-size: 11px; padding: 10px 12px; }
+            .edit-tab-btn i { font-size: 12px; }
             .community-rules-section { padding: 12px; }
             .rule-item { padding: 10px 12px; gap: 10px; }
             .rule-icon { font-size: 18px; }
@@ -644,6 +765,9 @@ function injectStyles() {
             .rule-desc { font-size: 12px; }
             .rules-footer { font-size: 12px; padding: 10px 12px; }
             .rules-footer i { font-size: 14px; }
+            .blocked-item { padding: 10px 12px; }
+            .blocked-item .user-avatar { width: 32px; height: 32px; }
+            .btn-unblock { font-size: 11px; padding: 4px 12px; }
         }
         @media (max-height: 600px) {
             .edit-profile-header { padding: 10px 16px 8px; }
@@ -655,12 +779,15 @@ function injectStyles() {
             .edit-group { margin-bottom: 10px; }
             .edit-group input, .edit-group textarea, .edit-group select { font-size: 12px; padding: 8px 12px; }
             .business-request-body { padding: 14px; }
+            .edit-tab-btn { font-size: 10px; padding: 8px 10px; }
             .rules-grid { gap: 8px; }
             .rule-item { padding: 8px 10px; }
             .rule-icon { font-size: 16px; }
             .rule-title { font-size: 12px; }
             .rule-desc { font-size: 11px; }
             .rules-footer { font-size: 11px; padding: 8px 12px; }
+            .blocked-item .user-avatar { width: 28px; height: 28px; }
+            .btn-unblock { font-size: 10px; padding: 3px 10px; }
         }
     `;
     document.head.appendChild(styles);
@@ -691,6 +818,7 @@ export function openEditProfileModal(userData) {
     currentUserData = userData;
     originalUsername = userData.username || '';
     isBusinessRequestSent = false;
+    currentTab = 'profile';
     
     if (userData.businessInfo && (userData.accountType === 'business' || userData.accountType === 'business_verified')) {
         isBusinessRequestSent = true;
@@ -754,11 +882,29 @@ function createEditProfileHTML() {
                     <button class="back-btn" id="editProfileBackBtn">
                         <i class="fas fa-arrow-left"></i>
                     </button>
-                    <span class="title">Editar perfil</span>
+                    <span class="title">Configuración</span>
                     <span class="save-status" id="saveStatus">
                         <i class="fas fa-check"></i> Guardado
                     </span>
                 </div>
+                
+                <!-- TABS -->
+                <div class="edit-profile-tabs" id="editProfileTabs">
+                    <button class="edit-tab-btn active" data-tab="profile" onclick="window.switchEditTab('profile')">
+                        <i class="fas fa-user"></i> Perfil
+                    </button>
+                    <button class="edit-tab-btn" data-tab="privacy" onclick="window.switchEditTab('privacy')">
+                        <i class="fas fa-lock"></i> Privacidad
+                    </button>
+                    <button class="edit-tab-btn" data-tab="rules" onclick="window.switchEditTab('rules')">
+                        <i class="fas fa-gavel"></i> Reglas
+                    </button>
+                    <button class="edit-tab-btn" data-tab="blocked" onclick="window.switchEditTab('blocked')">
+                        <i class="fas fa-ban"></i> Bloqueados
+                        <span class="tab-badge" id="blockedBadge">0</span>
+                    </button>
+                </div>
+                
                 <div class="edit-profile-body" id="editProfileBody">
                     <div class="edit-loading">
                         <i class="fas fa-spinner fa-pulse"></i>
@@ -799,6 +945,32 @@ function createEditProfileHTML() {
     window.closeBusinessRequestModal = closeBusinessRequestModal;
     window.submitBusinessRequest = submitBusinessRequest;
     window.handleLogout = handleLogout;
+    window.switchEditTab = switchEditTab;
+    window.unblockUser = unblockUser;
+    window.loadBlockedList = loadBlockedList;
+}
+
+// ============================================================
+// CAMBIAR TAB
+// ============================================================
+
+function switchEditTab(tab) {
+    currentTab = tab;
+    
+    // Actualizar botones
+    document.querySelectorAll('.edit-tab-btn').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.tab === tab);
+    });
+    
+    // Actualizar contenido
+    document.querySelectorAll('.tab-content').forEach(content => {
+        content.classList.toggle('active', content.dataset.tab === tab);
+    });
+    
+    // Cargar lista de bloqueados si es la tab
+    if (tab === 'blocked') {
+        loadBlockedList();
+    }
 }
 
 // ============================================================
@@ -1048,178 +1220,204 @@ function loadEditProfileData(user) {
     }
 
     // ============================================================
-    // 🆕 SECCIÓN DE REGLAS Y NORMAS DE LA COMUNIDAD
+    // HTML DE LAS TABS
     // ============================================================
-    const communityRulesHtml = `
-        <div class="edit-section community-rules-section">
-            <div class="edit-section-title">
-                <i class="fas fa-gavel" style="color: #fbbf24;"></i> 
-                Reglas y normas de la comunidad
-            </div>
-
-            <div class="rules-grid">
-                <div class="rule-item">
-                    <div class="rule-icon">🤝</div>
-                    <div class="rule-content">
-                        <div class="rule-title">Respeta a los demás</div>
-                        <div class="rule-desc">Trata a todos con respeto. No se tolerará el acoso, el odio o la discriminación.</div>
-                    </div>
-                </div>
-
-                <div class="rule-item">
-                    <div class="rule-icon">🚫</div>
-                    <div class="rule-content">
-                        <div class="rule-title">Sin NSFW ni contenido sensible</div>
-                        <div class="rule-desc">No se permite contenido explícito, violento, o que pueda ser considerado sensible o perturbador.</div>
-                    </div>
-                </div>
-
-                <div class="rule-item">
-                    <div class="rule-icon">⏳</div>
-                    <div class="rule-content">
-                        <div class="rule-title">Contenido efímero</div>
-                        <div class="rule-desc">Todo lo que compartes aquí es temporal. Las historias desaparecen después de 24 horas. ¡Disfruta el momento!</div>
-                    </div>
-                </div>
-
-                <div class="rule-item">
-                    <div class="rule-icon">🔞</div>
-                    <div class="rule-content">
-                        <div class="rule-title">Contenido para mayores de 16 años</div>
-                        <div class="rule-desc">Esta plataforma está diseñada para usuarios mayores de 16 años. La supervisión parental es recomendada para menores.</div>
-                    </div>
-                </div>
-
-                <div class="rule-item">
-                    <div class="rule-icon">💬</div>
-                    <div class="rule-content">
-                        <div class="rule-title">Idioma y comunicación</div>
-                        <div class="rule-desc">Fomenta un ambiente positivo. El lenguaje ofensivo o las discusiones tóxicas no son bienvenidas.</div>
-                    </div>
-                </div>
-
-                <div class="rule-item">
-                    <div class="rule-icon">⚖️</div>
-                    <div class="rule-content">
-                        <div class="rule-title">Cumple con las leyes locales</div>
-                        <div class="rule-desc">Asegúrate de que tu contenido cumpla con todas las leyes y regulaciones aplicables en tu país.</div>
-                    </div>
-                </div>
-            </div>
-
-            <div class="rules-footer">
-                <i class="fas fa-info-circle"></i>
-                <span>Estas reglas aplican para todos los usuarios. El incumplimiento puede resultar en la suspensión de tu cuenta.</span>
-            </div>
-        </div>
-    `;
+    
+    const blockedCount = (user.blocked || []).length;
+    const badgeEl = document.getElementById('blockedBadge');
+    if (badgeEl) badgeEl.textContent = blockedCount;
 
     container.innerHTML = `
-        <div class="edit-avatar-section">
-            <div class="edit-avatar-wrapper">
-                <img class="edit-avatar" src="${avatarUrl}" alt="${fullName}" 
-                     onerror="this.src='${getAvatar(fullName || 'U')}'" />
-                <button class="change-avatar-btn" id="changeAvatarBtn" title="Cambiar avatar">
-                    <i class="fas fa-camera"></i>
-                </button>
-            </div>
-            <div class="edit-avatar-info">
-                <div class="edit-name">${fullName} ${verifiedBadge}</div>
-                <div class="edit-username">@${username}</div>
-                ${isAdmin ? '<div class="edit-role admin">👑 Administrador</div>' : ''}
-            </div>
-        </div>
-
-        <div class="edit-section">
-            <div class="edit-section-title"><i class="fas fa-user-circle"></i> Información personal</div>
-            
-            <div class="edit-group">
-                <label>Nombre completo</label>
-                <input type="text" id="editFullName" value="${fullName}" placeholder="Tu nombre completo" maxlength="50">
-                <div class="edit-helper">Máximo 50 caracteres</div>
-            </div>
-
-            <div class="edit-group">
-                <label>Nombre de usuario</label>
-                <input type="text" id="editUsername" value="${username}" placeholder="Nombre de usuario" 
-                       maxlength="20" ${usernameDisabled ? 'disabled' : ''}>
-                <div class="edit-helper ${usernameDisabled ? 'warning' : ''}">
-                    ${usernameDisabled 
-                        ? `<i class="fas fa-clock"></i> Podrás cambiar en ${daysRemaining} día${daysRemaining > 1 ? 's' : ''}`
-                        : '<i class="fas fa-info-circle"></i> Solo letras, números y _ (3-20 caracteres)'
-                    }
+        <!-- TAB 1: PERFIL -->
+        <div class="tab-content active" data-tab="profile">
+            <div class="edit-avatar-section">
+                <div class="edit-avatar-wrapper">
+                    <img class="edit-avatar" src="${avatarUrl}" alt="${fullName}" 
+                         onerror="this.src='${getAvatar(fullName || 'U')}'" />
+                    <button class="change-avatar-btn" id="changeAvatarBtn" title="Cambiar avatar">
+                        <i class="fas fa-camera"></i>
+                    </button>
                 </div>
-                <div id="usernameStatus" class="edit-helper" style="display:none;"></div>
+                <div class="edit-avatar-info">
+                    <div class="edit-name">${fullName} ${verifiedBadge}</div>
+                    <div class="edit-username">@${username}</div>
+                    ${isAdmin ? '<div class="edit-role admin">👑 Administrador</div>' : ''}
+                </div>
             </div>
 
-            <div class="edit-group">
-                <label>Biografía</label>
-                <textarea id="editBio" rows="3" placeholder="Cuéntanos sobre ti..." maxlength="200">${bio}</textarea>
-                <div class="edit-helper"><span id="bioCount">${bio.length}</span>/200 caracteres</div>
+            <div class="edit-section">
+                <div class="edit-section-title"><i class="fas fa-user-circle"></i> Información personal</div>
+                
+                <div class="edit-group">
+                    <label>Nombre completo</label>
+                    <input type="text" id="editFullName" value="${fullName}" placeholder="Tu nombre completo" maxlength="50">
+                    <div class="edit-helper">Máximo 50 caracteres</div>
+                </div>
+
+                <div class="edit-group">
+                    <label>Nombre de usuario</label>
+                    <input type="text" id="editUsername" value="${username}" placeholder="Nombre de usuario" 
+                           maxlength="20" ${usernameDisabled ? 'disabled' : ''}>
+                    <div class="edit-helper ${usernameDisabled ? 'warning' : ''}">
+                        ${usernameDisabled 
+                            ? `<i class="fas fa-clock"></i> Podrás cambiar en ${daysRemaining} día${daysRemaining > 1 ? 's' : ''}`
+                            : '<i class="fas fa-info-circle"></i> Solo letras, números y _ (3-20 caracteres)'
+                        }
+                    </div>
+                    <div id="usernameStatus" class="edit-helper" style="display:none;"></div>
+                </div>
+
+                <div class="edit-group">
+                    <label>Biografía</label>
+                    <textarea id="editBio" rows="3" placeholder="Cuéntanos sobre ti..." maxlength="200">${bio}</textarea>
+                    <div class="edit-helper"><span id="bioCount">${bio.length}</span>/200 caracteres</div>
+                </div>
             </div>
+
+            ${businessSectionHtml}
         </div>
 
-        <div class="edit-section">
-            <div class="edit-section-title"><i class="fas fa-globe"></i> Preferencias</div>
+        <!-- TAB 2: PRIVACIDAD Y PREFERENCIAS -->
+        <div class="tab-content" data-tab="privacy">
+            <div class="edit-section">
+                <div class="edit-section-title"><i class="fas fa-globe"></i> Preferencias</div>
 
-            <div class="edit-group">
-                <label>Idioma</label>
-                <select id="editLanguage">
-                    ${languageOptions}
-                </select>
-            </div>
-
-            <div class="edit-group">
-                <label>Tipo de cuenta</label>
-                ${isSpecialAccount ? accountTypeDisplay : `
-                    <select id="editAccountType">
-                        ${accountTypeOptions}
+                <div class="edit-group">
+                    <label>Idioma</label>
+                    <select id="editLanguage">
+                        ${languageOptions}
                     </select>
-                `}
-                ${isSpecialAccount ? '' : '<div class="edit-helper"><i class="fas fa-info-circle"></i> Solo puedes cambiar entre Personal y Empresa</div>'}
-                ${isVerified && !isAdmin && !isSpecialAccount ? '<div class="edit-helper success"><i class="fas fa-check-circle"></i> Cuenta verificada</div>' : ''}
+                </div>
+
+                <div class="edit-group">
+                    <label>Tipo de cuenta</label>
+                    ${isSpecialAccount ? accountTypeDisplay : `
+                        <select id="editAccountType">
+                            ${accountTypeOptions}
+                        </select>
+                    `}
+                    ${isSpecialAccount ? '' : '<div class="edit-helper"><i class="fas fa-info-circle"></i> Solo puedes cambiar entre Personal y Empresa</div>'}
+                    ${isVerified && !isAdmin && !isSpecialAccount ? '<div class="edit-helper success"><i class="fas fa-check-circle"></i> Cuenta verificada</div>' : ''}
+                </div>
+            </div>
+
+            <div class="edit-section">
+                <div class="edit-section-title"><i class="fas fa-lock"></i> Privacidad</div>
+
+                <div class="privacy-options">
+                    <div class="privacy-option ${privacy === 'public' ? 'active' : ''}" data-privacy="public" onclick="window.selectEditPrivacy('public')">
+                        <div class="privacy-icon">🌍</div>
+                        <div class="privacy-info">
+                            <div class="title">Público</div>
+                            <div class="desc">Cualquiera puede ver tu perfil y seguirte sin solicitud</div>
+                        </div>
+                        <div class="privacy-check"><i class="fas fa-check"></i></div>
+                    </div>
+                    
+                    <div class="privacy-option ${privacy === 'followers' ? 'active' : ''}" data-privacy="followers" onclick="window.selectEditPrivacy('followers')">
+                        <div class="privacy-icon">👥</div>
+                        <div class="privacy-info">
+                            <div class="title">Solo seguidores</div>
+                            <div class="desc">Solo tus seguidores pueden ver tus historias</div>
+                        </div>
+                        <div class="privacy-check"><i class="fas fa-check"></i></div>
+                    </div>
+                    
+                    <div class="privacy-option ${privacy === 'private' ? 'active' : ''}" data-privacy="private" onclick="window.selectEditPrivacy('private')">
+                        <div class="privacy-icon">🔒</div>
+                        <div class="privacy-info">
+                            <div class="title">Privado</div>
+                            <div class="desc">Solo tú puedes ver tu perfil</div>
+                        </div>
+                        <div class="privacy-check"><i class="fas fa-check"></i></div>
+                    </div>
+                </div>
             </div>
         </div>
 
-        <div class="edit-section">
-            <div class="edit-section-title"><i class="fas fa-lock"></i> Privacidad</div>
+        <!-- TAB 3: REGLAS Y NORMAS -->
+        <div class="tab-content" data-tab="rules">
+            <div class="community-rules-section">
+                <div class="edit-section-title">
+                    <i class="fas fa-gavel" style="color: #fbbf24;"></i> 
+                    Reglas y normas de la comunidad
+                </div>
 
-            <div class="privacy-options">
-                <div class="privacy-option ${privacy === 'public' ? 'active' : ''}" data-privacy="public" onclick="window.selectEditPrivacy('public')">
-                    <div class="privacy-icon">🌍</div>
-                    <div class="privacy-info">
-                        <div class="title">Público</div>
-                        <div class="desc">Cualquiera puede ver tu perfil y seguirte sin solicitud</div>
+                <div class="rules-grid">
+                    <div class="rule-item">
+                        <div class="rule-icon">🤝</div>
+                        <div class="rule-content">
+                            <div class="rule-title">Respeta a los demás</div>
+                            <div class="rule-desc">Trata a todos con respeto. No se tolerará el acoso, el odio o la discriminación.</div>
+                        </div>
                     </div>
-                    <div class="privacy-check"><i class="fas fa-check"></i></div>
+
+                    <div class="rule-item">
+                        <div class="rule-icon">🚫</div>
+                        <div class="rule-content">
+                            <div class="rule-title">Sin NSFW ni contenido sensible</div>
+                            <div class="rule-desc">No se permite contenido explícito, violento, o que pueda ser considerado sensible o perturbador.</div>
+                        </div>
+                    </div>
+
+                    <div class="rule-item">
+                        <div class="rule-icon">⏳</div>
+                        <div class="rule-content">
+                            <div class="rule-title">Contenido efímero</div>
+                            <div class="rule-desc">Todo lo que compartes aquí es temporal. Las historias desaparecen después de 24 horas. ¡Disfruta el momento!</div>
+                        </div>
+                    </div>
+
+                    <div class="rule-item">
+                        <div class="rule-icon">🔞</div>
+                        <div class="rule-content">
+                            <div class="rule-title">Contenido para mayores de 16 años</div>
+                            <div class="rule-desc">Esta plataforma está diseñada para usuarios mayores de 16 años. La supervisión parental es recomendada para menores.</div>
+                        </div>
+                    </div>
+
+                    <div class="rule-item">
+                        <div class="rule-icon">💬</div>
+                        <div class="rule-content">
+                            <div class="rule-title">Idioma y comunicación</div>
+                            <div class="rule-desc">Fomenta un ambiente positivo. El lenguaje ofensivo o las discusiones tóxicas no son bienvenidas.</div>
+                        </div>
+                    </div>
+
+                    <div class="rule-item">
+                        <div class="rule-icon">⚖️</div>
+                        <div class="rule-content">
+                            <div class="rule-title">Cumple con las leyes locales</div>
+                            <div class="rule-desc">Asegúrate de que tu contenido cumpla con todas las leyes y regulaciones aplicables en tu país.</div>
+                        </div>
+                    </div>
                 </div>
-                
-                <div class="privacy-option ${privacy === 'followers' ? 'active' : ''}" data-privacy="followers" onclick="window.selectEditPrivacy('followers')">
-                    <div class="privacy-icon">👥</div>
-                    <div class="privacy-info">
-                        <div class="title">Solo seguidores</div>
-                        <div class="desc">Solo tus seguidores pueden ver tus historias</div>
-                    </div>
-                    <div class="privacy-check"><i class="fas fa-check"></i></div>
-                </div>
-                
-                <div class="privacy-option ${privacy === 'private' ? 'active' : ''}" data-privacy="private" onclick="window.selectEditPrivacy('private')">
-                    <div class="privacy-icon">🔒</div>
-                    <div class="privacy-info">
-                        <div class="title">Privado</div>
-                        <div class="desc">Solo tú puedes ver tu perfil</div>
-                    </div>
-                    <div class="privacy-check"><i class="fas fa-check"></i></div>
+
+                <div class="rules-footer">
+                    <i class="fas fa-info-circle"></i>
+                    <span>Estas reglas aplican para todos los usuarios. El incumplimiento puede resultar en la suspensión de tu cuenta.</span>
                 </div>
             </div>
         </div>
 
-        ${businessSectionHtml}
+        <!-- TAB 4: LISTA DE BLOQUEADOS -->
+        <div class="tab-content" data-tab="blocked">
+            <div class="edit-section">
+                <div class="edit-section-title">
+                    <i class="fas fa-ban" style="color: #ff6b6b;"></i> 
+                    Usuarios bloqueados
+                    <span style="font-size:12px;color:rgba(255,255,255,0.2);margin-left:auto;">${blockedCount} bloqueados</span>
+                </div>
+                <div id="blockedListContainer">
+                    <div class="blocked-loading">
+                        <i class="fas fa-spinner fa-pulse"></i>
+                        <span>Cargando lista de bloqueados...</span>
+                    </div>
+                </div>
+            </div>
+        </div>
 
-        <!-- 🆕 REGLAS Y NORMAS DE LA COMUNIDAD -->
-        ${communityRulesHtml}
-
-        <!-- 🔥 SECCIÓN DE CERRAR SESIÓN -->
+        <!-- LOGOUT (siempre visible al final) -->
         <div class="edit-logout-section">
             <button class="btn-logout" onclick="window.handleLogout()">
                 <i class="fas fa-sign-out-alt"></i>
@@ -1289,9 +1487,165 @@ function loadEditProfileData(user) {
 
     window._selectedPrivacy = privacy;
     
+    // Cargar lista de bloqueados si la tab está activa
+    if (currentTab === 'blocked') {
+        loadBlockedList();
+    }
+    
     setTimeout(() => {
         updateSaveStatus('saved');
     }, 500);
+}
+
+// ============================================================
+// 🔥 CARGAR LISTA DE BLOQUEADOS
+// ============================================================
+
+async function loadBlockedList() {
+    const container = document.getElementById('blockedListContainer');
+    if (!container) return;
+
+    const token = getToken();
+    if (!token) {
+        container.innerHTML = `
+            <div class="blocked-empty">
+                <i class="fas fa-exclamation-circle"></i>
+                <span>Inicia sesión para ver tu lista de bloqueados</span>
+            </div>
+        `;
+        return;
+    }
+
+    container.innerHTML = `
+        <div class="blocked-loading">
+            <i class="fas fa-spinner fa-pulse"></i>
+            <span>Cargando...</span>
+        </div>
+    `;
+
+    try {
+        const response = await fetch(`${API_URL}/api/blocked/blocked`, {
+            headers: {
+                'Authorization': `Bearer ${token}`
+            }
+        });
+
+        if (!response.ok) {
+            throw new Error('Error al cargar la lista de bloqueados');
+        }
+
+        const blockedUsers = await response.json();
+
+        // Actualizar badge
+        const badge = document.getElementById('blockedBadge');
+        if (badge) badge.textContent = blockedUsers.length;
+
+        if (blockedUsers.length === 0) {
+            container.innerHTML = `
+                <div class="blocked-empty">
+                    <i class="fas fa-smile"></i>
+                    <span>No tienes usuarios bloqueados</span>
+                    <div style="font-size:12px;color:rgba(255,255,255,0.15);margin-top:8px;">Los bloqueos son silenciosos, el usuario no se entera</div>
+                </div>
+            `;
+            return;
+        }
+
+        container.innerHTML = `
+            <div class="blocked-list-container">
+                ${blockedUsers.map(user => `
+                    <div class="blocked-item" data-userid="${user.id}">
+                        <div class="user-info">
+                            <img class="user-avatar" src="${user.avatar || getAvatar(user.fullName || user.username)}" 
+                                 alt="${escapeHtml(user.fullName)}"
+                                 onerror="this.src='${getAvatar(user.fullName || 'U')}'" />
+                            <div>
+                                <div class="user-name">${escapeHtml(user.fullName)}</div>
+                                <div class="user-username">@${escapeHtml(user.username)}</div>
+                            </div>
+                        </div>
+                        <button class="btn-unblock" onclick="window.unblockUser('${user.id}')">
+                            <i class="fas fa-user-plus"></i> Desbloquear
+                        </button>
+                    </div>
+                `).join('')}
+            </div>
+        `;
+
+    } catch (error) {
+        console.error('Error loading blocked list:', error);
+        container.innerHTML = `
+            <div class="blocked-empty">
+                <i class="fas fa-exclamation-triangle" style="color:#fbbf24;"></i>
+                <span>Error al cargar la lista</span>
+                <div style="font-size:12px;color:rgba(255,255,255,0.15);margin-top:8px;">${error.message}</div>
+            </div>
+        `;
+    }
+}
+
+// ============================================================
+// 🔥 DESBLOQUEAR USUARIO
+// ============================================================
+
+async function unblockUser(userId) {
+    const token = getToken();
+    if (!token) {
+        showToast('Inicia sesión para desbloquear usuarios', true);
+        return;
+    }
+
+    const user = currentUserData;
+    const blockedUser = document.querySelector(`.blocked-item[data-userid="${userId}"]`);
+    const userName = blockedUser?.querySelector('.user-name')?.textContent || 'Usuario';
+
+    if (!confirm(`¿Estás seguro de que quieres desbloquear a ${userName}?`)) {
+        return;
+    }
+
+    try {
+        const response = await fetch(`${API_URL}/api/blocked/unblock/${userId}`, {
+            method: 'DELETE',
+            headers: {
+                'Authorization': `Bearer ${token}`
+            }
+        });
+
+        if (!response.ok) {
+            const data = await response.json();
+            throw new Error(data.error || 'Error al desbloquear');
+        }
+
+        showToast(`✅ Has desbloqueado a ${userName}`, false);
+        
+        // Actualizar lista local
+        if (blockedUser) {
+            blockedUser.remove();
+        }
+        
+        // Actualizar badge
+        const remaining = document.querySelectorAll('.blocked-item').length;
+        const badge = document.getElementById('blockedBadge');
+        if (badge) badge.textContent = remaining;
+        
+        // Actualizar contador en el título
+        const titleSpan = document.querySelector('.edit-section-title span:last-child');
+        if (titleSpan) titleSpan.textContent = `${remaining} bloqueados`;
+
+        // Actualizar currentUserData
+        if (currentUserData && currentUserData.blocked) {
+            currentUserData.blocked = currentUserData.blocked.filter(id => id !== userId);
+        }
+
+        // Recargar si no quedan
+        if (remaining === 0) {
+            loadBlockedList();
+        }
+
+    } catch (error) {
+        console.error('Error unblocking user:', error);
+        showToast(`❌ ${error.message || 'Error al desbloquear'}`, true);
+    }
 }
 
 // ============================================================
@@ -1568,5 +1922,8 @@ if (typeof window !== 'undefined') {
     window.openEditProfileModal = openEditProfileModal;
     window.closeEditProfileModal = closeEditProfileModal;
     window.handleLogout = handleLogout;
+    window.switchEditTab = switchEditTab;
+    window.unblockUser = unblockUser;
+    window.loadBlockedList = loadBlockedList;
     console.log('✅ edit-profile-modal: Funciones asignadas a window');
 }
