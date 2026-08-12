@@ -38,6 +38,16 @@ export async function openStoryModal(storyId, storiesList = null, fromProfile = 
     const currentUser = getCurrentUser();
     userLanguage = currentUser?.language || 'es';
 
+    // 🔥 AÑADIDO: Si el modal ya está abierto con la misma historia, solo mostrarlo
+    if (isModalOpen && currentStoryId === storyId) {
+        const overlay = document.getElementById('storyModalOverlay');
+        if (overlay) {
+            overlay.style.display = 'flex';
+            overlay.classList.add('active');
+        }
+        return;
+    }
+
     if (isModalOpen) {
         console.log('📱 [STORY-MODAL] Cerrando modal anterior...');
         closeStoryModal();
