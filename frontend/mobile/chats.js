@@ -36,14 +36,13 @@ let isInitialLoad = true;
 
 /**
  * Detecta enlaces en un texto y los convierte en HTML con preview
- * 🔥 CORREGIDO: Reemplaza completamente el enlace por el HTML sin duplicados
  */
 function detectAndRenderLinks(text) {
     if (!text) return text;
     
     let html = text;
     
-    // Patrones de enlaces - ORDENADOS del más específico al más general
+    // Patrones de enlaces
     const vyinPattern = /(https?:\/\/[^\s]*vyin-social\.onrender\.com\/(?:story|feed|profile)\/[a-zA-Z0-9_-]+)/gi;
     const tiktokPattern = /(https?:\/\/[^\s]*(?:vm\.tiktok\.com|tiktok\.com)[^\s]*)/gi;
     const youtubePattern = /(https?:\/\/[^\s]*(?:youtube\.com|youtu\.be)[^\s]*)/gi;
@@ -51,7 +50,6 @@ function detectAndRenderLinks(text) {
     const twitterPattern = /(https?:\/\/[^\s]*(?:twitter\.com|x\.com)[^\s]*)/gi;
     const urlPattern = /(https?:\/\/[^\s<>]+)/gi;
     
-    // 🔥 FUNCIÓN AUXILIAR: Generar HTML de enlace
     function createLinkHtml(url, domain, icon, label, type) {
         return `<a href="${url}" target="_blank" class="link-preview ${type}-link" data-url="${url}" data-type="${type}">
             <span class="link-domain">${icon} ${domain}</span>
@@ -98,7 +96,6 @@ function detectAndRenderLinks(text) {
     
     // 🔥 6. Otros enlaces (genérico)
     html = html.replace(urlPattern, (match) => {
-        // Si ya fue procesado por los patrones anteriores, saltar
         if (match.includes('link-preview')) return match;
         
         const url = match.trim();
@@ -126,7 +123,7 @@ function escapeHtml(text) {
 }
 
 /**
- * Abrir un enlace desde el chat - con event delegation
+ * 🔥 ABRIR ENLACE DESDE EL CHAT - CORREGIDO PARA VYIN
  */
 function openLinkFromChat(event) {
     const link = event.target.closest('a.link-preview');
@@ -140,36 +137,71 @@ function openLinkFromChat(event) {
     
     console.log(`🔗 Abriendo enlace: ${url} (tipo: ${type})`);
     
-    // Si es un enlace de Vyin, intentar abrir dentro de la app
+    // 🔥 Si es un enlace de Vyin, intentar abrir dentro de la app
     if (type === 'vyin' || url.includes('vyin-social.onrender.com')) {
         try {
             const urlObj = new URL(url);
-            const pathParts = urlObj.pathname.split('/').filter(p => p);
+            const pathname = urlObj.pathname;
             
-            if (pathParts.length >= 2) {
-                const pathType = pathParts[0];
-                const id = pathParts[1];
-                
-                if (pathType === 'story') {
-                    if (typeof window.openStoryModal === 'function') {
-                        window.openStoryModal(id);
-                        return;
-                    }
-                } else if (pathType === 'profile') {
-                    if (typeof window.openProfileModal === 'function') {
-                        window.openProfileModal(id);
-                        return;
-                    }
-                } else if (pathType === 'feed') {
-                    if (typeof window.openPostModal === 'function') {
-                        window.openPostModal(id);
-                        return;
-                    }
-                }
+            // 🔥 DETECTAR STORY ID DESDE LA URL
+            // Patrones: /story/123, /feed.html?storyId=123, /story/123?...
+            let storyId = null;
+            
+            // Buscar en el pathname: /story/ID
+            const storyMatch = pathname.match(/\/story\/([a-zA-Z0-9_-]+)/);
+            if (storyMatch) {
+                storyId = storyMatch[1];
             }
+            
+            // Buscar en query params: ?storyId=ID
+            if (!storyId) {
+                const params = new URLSearchParams(urlObj.search);
+                storyId = params.get('storyId');
+            }
+            
+            // Si es feed con storyId
+            if (!storyId && pathname.includes('feed.html')) {
+                const params = new URLSearchParams(urlObj.search);
+                storyId = params.get('storyId');
+            }
+            
+            if (storyId) {
+                console.log(`📖 Abriendo historia: ${storyId}`);
+                
+                // 🔥 IMPORTAR Y ABRIR STORY MODAL
+                import('./story-modal.js').then(({ openStoryModal }) => {
+                    openStoryModal(storyId);
+                }).catch((err) => {
+                    console.error('❌ Error cargando story-modal:', err);
+                    // Fallback: abrir en nueva pestaña
+                    window.open(url, '_blank');
+                });
+                return;
+            }
+            
+            // Detectar perfil
+            const profileMatch = pathname.match(/\/profile\/([a-zA-Z0-9_-]+)/);
+            if (profileMatch) {
+                const userId = profileMatch[1];
+                console.log(`👤 Abriendo perfil: ${userId}`);
+                
+                import('./profile-modal.js').then(({ openProfileModal }) => {
+                    openProfileModal(userId);
+                }).catch((err) => {
+                    console.error('❌ Error cargando profile-modal:', err);
+                    window.open(url, '_blank');
+                });
+                return;
+            }
+            
+            // Si no se detectó nada, abrir en nueva pestaña
+            window.open(url, '_blank');
+            
         } catch (e) {
             console.warn('Error procesando enlace de Vyin:', e);
+            window.open(url, '_blank');
         }
+        return;
     }
     
     // Para enlaces externos, abrir en nueva pestaña
@@ -188,31 +220,6 @@ function setupLinkDelegation() {
 // ============================================================
 // 📜 SCROLL - SIEMPRE AL FINAL
 // ============================================================
-
-function scrollToBottom(force = false) {
-    if (!messagesContainerEl) return;
-    
-    if (force || isScrollingToBottom) {
-        requestAnimationFrame(() => {
-            messagesContainerEl.scrollTop = messagesContainerEl.scrollHeight;
-            isScrollingToBottom = true;
-            setTimeout(() => {
-                isScrollingToBottom = false;
-            }, 100);
-        });
-    } else {
-        const scrollTop = messagesContainerEl.scrollTop;
-        const scrollHeight = messagesContainerEl.scrollHeight;
-        const clientHeight = messagesContainerEl.clientHeight;
-        const isNearBottom = scrollHeight - (scrollTop + clientHeight) < 200;
-        
-        if (isNearBottom) {
-            requestAnimationFrame(() => {
-                messagesContainerEl.scrollTop = messagesContainerEl.scrollHeight;
-            });
-        }
-    }
-}
 
 function ensureScrollAtBottom() {
     if (!messagesContainerEl) return;
@@ -734,7 +741,6 @@ function renderMessages() {
         }
 
         const messageId = msg.id || `temp_${Date.now()}_${Math.random()}`;
-        // 🔥 PROCESAR CONTENIDO CON DETECCIÓN DE ENLACES
         const processedContent = detectAndRenderLinks(msg.content);
         
         messagesHtml += `
@@ -996,7 +1002,7 @@ function showMessagesPanel() {
 }
 
 // ============================================================
-// ENVIAR MENSAJE - CON RENDERIZADO OPTIMIZADO
+// ENVIAR MENSAJE
 // ============================================================
 window.sendMessage = async function() {
     if (!messageInput || !messageInput.value.trim() || !currentConversation) return;
