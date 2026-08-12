@@ -3,6 +3,7 @@
 // 🔥 NAVEGACIÓN: Soporte para followers-modal y explore-modal
 // 🔥 CORREGIDO: Renderizado de historias (petición separada)
 // 🔥 MODIFICADO: Restaura correctamente el estado de explore-modal
+// 🔥 AÑADIDO: Botón para enviar mensaje
 
 import {
     getToken, getCurrentUser, showToast,
@@ -548,6 +549,31 @@ window.handleBlockUser = async function(userId) {
 };
 
 // ============================================================
+// 🔥 FUNCIÓN PARA ABRIR CHAT DESDE EL PERFIL
+// ============================================================
+
+window.openChatFromProfile = function(userId) {
+    if (!userId) {
+        showToast('Usuario no encontrado', true);
+        return;
+    }
+
+    const currentUser = getCurrentUser();
+    if (currentUser?.id === userId) {
+        showToast('No puedes abrir un chat contigo mismo', true);
+        return;
+    }
+
+    // Cerrar el modal de perfil
+    closeProfileModal();
+
+    // Redirigir a la página de chats con el userId
+    setTimeout(() => {
+        window.location.href = `/chat.html?userId=${userId}`;
+    }, 300);
+};
+
+// ============================================================
 // 🔥 ACTUALIZAR UI DEL MODAL DE PERFIL - CORREGIDO
 // ============================================================
 
@@ -679,6 +705,17 @@ function updateProfileModalUI(user, stories) {
     let followIcon = '<i class="fas fa-user-plus"></i>';
     let followOnClick = `window.handleProfileFollow('${user.id}')`;
 
+    // 🔥 BOTÓN DE MENSAJE (SOLO SI NO ES TU PROPIO PERFIL)
+    let messageButton = '';
+    if (!isOwnProfile && !isBlocked && !isBlockedByOwner) {
+        messageButton = `
+            <button class="btn-message" onclick="window.openChatFromProfile('${user.id}')">
+                <i class="fas fa-comment"></i>
+                Mensaje
+            </button>
+        `;
+    }
+
     if (isOwnProfile) {
         followText = 'Editar perfil';
         followClass = 'btn-edit-profile';
@@ -745,6 +782,7 @@ function updateProfileModalUI(user, stories) {
                     ${followIcon}
                     ${followText}
                 </button>
+                ${messageButton}
             </div>
             ${blockButton}
         </div>
@@ -1181,6 +1219,7 @@ function createProfileModalHTML() {
     window.openEditProfileFromModal = openEditProfileFromModal;
     window.handleBlockUser = window.handleBlockUser;
     window.handleFollowPrivate = window.handleFollowPrivate;
+    window.openChatFromProfile = window.openChatFromProfile;
 }
 
 // ============================================================
@@ -1424,6 +1463,7 @@ window.clearProfileCache = clearProfileCache;
 window.handleBlockUser = window.handleBlockUser;
 window.handleFollowPrivate = window.handleFollowPrivate;
 window.preloadCurrentUserProfile = preloadCurrentUserProfile;
+window.openChatFromProfile = window.openChatFromProfile;
 
 // ============================================================
 // EXPORTAR
