@@ -31,22 +31,17 @@ let scrollTimeout = null;
 let isInitialLoad = true;
 
 // ============================================================
-// 🔗 DETECCIÓN Y APERTURA DE ENLACES (CORREGIDO)
+// 🔗 DETECCIÓN Y APERTURA DE ENLACES (CORREGIDO - SIN DUPLICADOS)
 // ============================================================
 
 /**
  * Detecta enlaces en un texto y los convierte en HTML con preview
- * 🔥 CORREGIDO: No usa escapeHtml antes de procesar enlaces
+ * 🔥 CORREGIDO: Reemplaza completamente el enlace por el HTML sin duplicados
  */
 function detectAndRenderLinks(text) {
     if (!text) return text;
     
-    // 🔥 PRIMERO: Escapar solo el texto que no es HTML, pero preservar URLs
-    // Usamos un enfoque diferente: reemplazar enlaces sin escapar todo el texto
     let html = text;
-    
-    // Escapar caracteres especiales solo para el texto que no es enlace
-    // Pero primero, vamos a procesar los enlaces
     
     // Patrones de enlaces - ORDENADOS del más específico al más general
     const vyinPattern = /(https?:\/\/[^\s]*vyin-social\.onrender\.com\/(?:story|feed|profile)\/[a-zA-Z0-9_-]+)/gi;
@@ -55,6 +50,14 @@ function detectAndRenderLinks(text) {
     const instagramPattern = /(https?:\/\/[^\s]*instagram\.com[^\s]*)/gi;
     const twitterPattern = /(https?:\/\/[^\s]*(?:twitter\.com|x\.com)[^\s]*)/gi;
     const urlPattern = /(https?:\/\/[^\s<>]+)/gi;
+    
+    // 🔥 FUNCIÓN AUXILIAR: Generar HTML de enlace
+    function createLinkHtml(url, domain, icon, label, type) {
+        return `<a href="${url}" target="_blank" class="link-preview ${type}-link" data-url="${url}" data-type="${type}">
+            <span class="link-domain">${icon} ${domain}</span>
+            <span class="link-title">${label}</span>
+        </a>`;
+    }
     
     // 🔥 1. Enlaces de Vyin (prioridad)
     html = html.replace(vyinPattern, (match) => {
@@ -66,47 +69,31 @@ function detectAndRenderLinks(text) {
                       type === 'profile' ? '👤 Ver perfil' : 
                       type === 'feed' ? '📱 Ver publicación' : '🔗 Abrir enlace';
         const icon = type === 'story' ? '📖' : type === 'profile' ? '👤' : type === 'feed' ? '📱' : '🔗';
-        
-        return `<a href="${url}" target="_blank" class="link-preview vyin-link" data-url="${url}" data-type="vyin">
-            <span class="link-domain">${icon} Vyin</span>
-            <span class="link-title">${label}</span>
-        </a>`;
+        return createLinkHtml(url, 'Vyin', icon, label, 'vyin');
     });
     
     // 🔥 2. TikTok
     html = html.replace(tiktokPattern, (match) => {
         const url = match.trim();
-        return `<a href="${url}" target="_blank" class="link-preview tiktok-link" data-url="${url}" data-type="tiktok">
-            <span class="link-domain">🎵 TikTok</span>
-            <span class="link-title">Ver video en TikTok</span>
-        </a>`;
+        return createLinkHtml(url, 'TikTok', '🎵', 'Ver video en TikTok', 'tiktok');
     });
     
     // 🔥 3. YouTube
     html = html.replace(youtubePattern, (match) => {
         const url = match.trim();
-        return `<a href="${url}" target="_blank" class="link-preview youtube-link" data-url="${url}" data-type="youtube">
-            <span class="link-domain">▶️ YouTube</span>
-            <span class="link-title">Ver video en YouTube</span>
-        </a>`;
+        return createLinkHtml(url, 'YouTube', '▶️', 'Ver video en YouTube', 'youtube');
     });
     
     // 🔥 4. Instagram
     html = html.replace(instagramPattern, (match) => {
         const url = match.trim();
-        return `<a href="${url}" target="_blank" class="link-preview instagram-link" data-url="${url}" data-type="instagram">
-            <span class="link-domain">📸 Instagram</span>
-            <span class="link-title">Ver en Instagram</span>
-        </a>`;
+        return createLinkHtml(url, 'Instagram', '📸', 'Ver en Instagram', 'instagram');
     });
     
     // 🔥 5. Twitter/X
     html = html.replace(twitterPattern, (match) => {
         const url = match.trim();
-        return `<a href="${url}" target="_blank" class="link-preview twitter-link" data-url="${url}" data-type="twitter">
-            <span class="link-domain">🐦 Twitter/X</span>
-            <span class="link-title">Ver en Twitter/X</span>
-        </a>`;
+        return createLinkHtml(url, 'Twitter/X', '🐦', 'Ver en Twitter/X', 'twitter');
     });
     
     // 🔥 6. Otros enlaces (genérico)
@@ -119,23 +106,11 @@ function detectAndRenderLinks(text) {
             const urlObj = new URL(url);
             const domain = urlObj.hostname.replace('www.', '');
             const displayUrl = url.length > 40 ? url.substring(0, 40) + '...' : url;
-            return `<a href="${url}" target="_blank" class="link-preview" data-url="${url}" data-type="other">
-                <span class="link-domain">🔗 ${domain}</span>
-                <span class="link-title">${displayUrl}</span>
-            </a>`;
+            return createLinkHtml(url, domain, '🔗', displayUrl, 'other');
         } catch (e) {
-            return `<a href="${url}" target="_blank" class="link-preview" data-url="${url}" data-type="other">
-                <span class="link-domain">🔗 Enlace</span>
-                <span class="link-title">${url.length > 40 ? url.substring(0, 40) + '...' : url}</span>
-            </a>`;
+            return createLinkHtml(url, 'Enlace', '🔗', url.length > 40 ? url.substring(0, 40) + '...' : url, 'other');
         }
     });
-    
-    // 🔥 AHORA escapar el texto que no es HTML (evitar inyección)
-    // Pero preservar las etiquetas <a> que ya generamos
-    // Esta es una solución más segura: reemplazar los enlaces, luego escapar el resto
-    // Pero es más simple: ya estamos generando HTML seguro con los enlaces,
-    // y el texto ya fue escapado por el usuario o viene del servidor
     
     return html;
 }
@@ -151,7 +126,7 @@ function escapeHtml(text) {
 }
 
 /**
- * Abrir un enlace desde el chat - 🔥 CORREGIDO con event delegation
+ * Abrir un enlace desde el chat - con event delegation
  */
 function openLinkFromChat(event) {
     const link = event.target.closest('a.link-preview');
@@ -226,7 +201,6 @@ function scrollToBottom(force = false) {
             }, 100);
         });
     } else {
-        // Scroll suave al final si estamos cerca del fondo
         const scrollTop = messagesContainerEl.scrollTop;
         const scrollHeight = messagesContainerEl.scrollHeight;
         const clientHeight = messagesContainerEl.clientHeight;
@@ -242,7 +216,6 @@ function scrollToBottom(force = false) {
 
 function ensureScrollAtBottom() {
     if (!messagesContainerEl) return;
-    // Forzar scroll al final después de renderizar
     setTimeout(() => {
         messagesContainerEl.scrollTop = messagesContainerEl.scrollHeight;
     }, 50);
@@ -675,7 +648,6 @@ async function loadMessages(userId, loadMore = false, offset = 0) {
                 hasMoreMessages = data.hasMore || false;
                 nextOffset = MESSAGES_PER_PAGE;
                 renderMessages();
-                // 🔥 FORZAR SCROLL AL FINAL DESPUÉS DE CARGAR
                 ensureScrollAtBottom();
                 markMessagesAsRead(userId);
                 saveChatState(userId);
@@ -762,7 +734,7 @@ function renderMessages() {
         }
 
         const messageId = msg.id || `temp_${Date.now()}_${Math.random()}`;
-        // 🔥 PROCESAR CONTENIDO CON DETECCIÓN DE ENLACES - SIN ESCAPE ADICIONAL
+        // 🔥 PROCESAR CONTENIDO CON DETECCIÓN DE ENLACES
         const processedContent = detectAndRenderLinks(msg.content);
         
         messagesHtml += `
@@ -781,7 +753,6 @@ function renderMessages() {
 
     requestAnimationFrame(() => {
         messagesContainerEl.innerHTML = messagesHtml;
-        // 🔥 CONFIGURAR EVENT DELEGATION PARA ENLACES
         setupLinkDelegation();
         
         if (wasNearBottom) {
@@ -805,7 +776,6 @@ function appendSingleMessage(msg) {
 
     if (messagesContainerEl.querySelector('.empty-state-chat') || messages.length === 0) {
         renderMessages();
-        // 🔥 FORZAR SCROLL AL FINAL
         ensureScrollAtBottom();
         return;
     }
@@ -829,7 +799,6 @@ function appendSingleMessage(msg) {
     }
 
     const messageId = msg.id || `temp_${Date.now()}_${Math.random()}`;
-    // 🔥 PROCESAR CONTENIDO CON DETECCIÓN DE ENLACES - SIN ESCAPE ADICIONAL
     const processedContent = detectAndRenderLinks(msg.content);
     
     html += `
@@ -846,11 +815,7 @@ function appendSingleMessage(msg) {
     `;
 
     messagesContainerEl.insertAdjacentHTML('beforeend', html);
-    
-    // 🔥 RECONFIGURAR EVENT DELEGATION
     setupLinkDelegation();
-    
-    // 🔥 FORZAR SCROLL AL FINAL
     ensureScrollAtBottom();
 }
 
@@ -1026,9 +991,7 @@ function showMessagesPanel() {
     }
 
     setupInfiniteScroll();
-    // 🔥 CONFIGURAR EVENT DELEGATION PARA ENLACES
     setupLinkDelegation();
-    // 🔥 FORZAR SCROLL AL FINAL
     ensureScrollAtBottom();
 }
 
@@ -1284,10 +1247,8 @@ async function init() {
         }, 500);
     }
 
-    // 🔥 CONFIGURAR EVENT DELEGATION PARA ENLACES
     setupLinkDelegation();
-
-    console.log('📱 Chat mobile optimizado - con detección de enlaces corregida y scroll mejorado');
+    console.log('📱 Chat mobile optimizado - con detección de enlaces corregida');
 }
 
 // Exponer funciones globales
