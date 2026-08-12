@@ -1,0 +1,1221 @@
+// ============================================================
+// CHAT MOBILE - RENDERIZADO OPTIMIZADO SIN PARPADEOS
+// CON SOPORTE PARA ENLACES (TikTok, YouTube, Vyin, etc.)
+// ============================================================
+
+import { getToken, getCurrentUser, showToast as authShowToast } from './auth.js';
+
+const API_URL = window.location.origin;
+
+let currentUser = null;
+let currentConversation = null;
+let conversations = { active: [], pending: [], archived: [] };
+let messages = [];
+let socket = null;
+let messageInput = null;
+let isLoadingMore = false;
+let hasMoreMessages = true;
+let nextOffset = 0;
+const MESSAGES_PER_PAGE = 30;
+let currentTab = 'active';
+let isRendering = false;
+
+let conversationsListEl = document.getElementById('conversationsList');
+let messagesContainerEl = document.getElementById('messagesContainer');
+let messagesPanelEl = document.getElementById('messagesPanel');
+let typingTimeout = null;
+let isTyping = false;
+let userStatuses = new Map();
+let scrollTimeout = null;
+let isInitialLoad = true;
+
+// ============================================================
+// 🔗 DETECCIÓN Y APERTURA DE ENLACES
+// ============================================================
+
+/**
+ * Detecta enlaces en un texto y los convierte en HTML con preview
+ */
+function detectAndRenderLinks(text) {
+    if (!text) return text;
+    
+    // Patrones de enlaces
+    const urlPattern = /(https?:\/\/[^\s]+)/gi;
+    const vyinPattern = /(?:https?:\/\/)?(?:www\.)?vyin-social\.onrender\.com\/(story|feed|profile)\/([a-zA-Z0-9_-]+)/i;
+    const tiktokPattern = /(?:https?:\/\/)?(?:www\.)?(?:vm\.tiktok\.com|tiktok\.com)\/[^\s]+/gi;
+    const youtubePattern = /(?:https?:\/\/)?(?:www\.)?(?:youtube\.com|youtu\.be)\/[^\s]+/gi;
+    const instagramPattern = /(?:https?:\/\/)?(?:www\.)?instagram\.com\/[^\s]+/gi;
+    const twitterPattern = /(?:https?:\/\/)?(?:www\.)?(?:twitter\.com|x\.com)\/[^\s]+/gi;
+    
+    // Reemplazar enlaces por HTML
+    let html = text;
+    
+    // 1. Enlaces de Vyin (prioridad)
+    html = html.replace(vyinPattern, (match, type, id) => {
+        const url = match.startsWith('http') ? match : `https://${match}`;
+        const label = type === 'story' ? '📖 Ver historia' : 
+                      type === 'feed' ? '📱 Ver publicación' : 
+                      '👤 Ver perfil';
+        return `<a href="${url}" target="_blank" class="link-preview vyin-link" onclick="event.stopPropagation(); window.openLink('${url}', 'vyin')">
+            <span class="link-domain">${type === 'story' ? '📖 Historia' : type === 'feed' ? '📱 Publicación' : '👤 Perfil'} · Vyin</span>
+            <span class="link-title">${label}</span>
+        </a>`;
+    });
+    
+    // 2. TikTok
+    html = html.replace(tiktokPattern, (match) => {
+        const url = match.startsWith('http') ? match : `https://${match}`;
+        return `<a href="${url}" target="_blank" class="link-preview tiktok-link" onclick="event.stopPropagation(); window.openLink('${url}', 'tiktok')">
+            <span class="link-domain">🎵 TikTok</span>
+            <span class="link-title">Ver video en TikTok</span>
+        </a>`;
+    });
+    
+    // 3. YouTube
+    html = html.replace(youtubePattern, (match) => {
+        const url = match.startsWith('http') ? match : `https://${match}`;
+        return `<a href="${url}" target="_blank" class="link-preview youtube-link" onclick="event.stopPropagation(); window.openLink('${url}', 'youtube')">
+            <span class="link-domain">▶️ YouTube</span>
+            <span class="link-title">Ver video en YouTube</span>
+        </a>`;
+    });
+    
+    // 4. Instagram
+    html = html.replace(instagramPattern, (match) => {
+        const url = match.startsWith('http') ? match : `https://${match}`;
+        return `<a href="${url}" target="_blank" class="link-preview instagram-link" onclick="event.stopPropagation(); window.openLink('${url}', 'instagram')">
+            <span class="link-domain">📸 Instagram</span>
+            <span class="link-title">Ver en Instagram</span>
+        </a>`;
+    });
+    
+    // 5. Twitter/X
+    html = html.replace(twitterPattern, (match) => {
+        const url = match.startsWith('http') ? match : `https://${match}`;
+        return `<a href="${url}" target="_blank" class="link-preview twitter-link" onclick="event.stopPropagation(); window.openLink('${url}', 'twitter')">
+            <span class="link-domain">🐦 Twitter/X</span>
+            <span class="link-title">Ver en Twitter/X</span>
+        </a>`;
+    });
+    
+    // 6. Otros enlaces (genérico)
+    html = html.replace(urlPattern, (match) => {
+        // Si ya fue procesado por los patrones anteriores, saltar
+        if (html.includes(`href="${match}"`)) return match;
+        
+        const url = match.startsWith('http') ? match : `https://${match}`;
+        const domain = new URL(url).hostname.replace('www.', '');
+        return `<a href="${url}" target="_blank" class="link-preview" onclick="event.stopPropagation(); window.openLink('${url}', 'other')">
+            <span class="link-domain">🔗 ${domain}</span>
+            <span class="link-title">${url.length > 40 ? url.substring(0, 40) + '...' : url}</span>
+        </a>`;
+    });
+    
+    return html;
+}
+
+/**
+ * Abrir un enlace desde el chat
+ */
+window.openLink = function(url, type) {
+    console.log(`🔗 Abriendo enlace: ${url} (tipo: ${type})`);
+    
+    // Si es un enlace de Vyin, intentar abrir dentro de la app
+    if (type === 'vyin' || url.includes('vyin-social.onrender.com')) {
+        try {
+            const urlObj = new URL(url);
+            const pathParts = urlObj.pathname.split('/').filter(p => p);
+            
+            if (pathParts.length >= 2) {
+                const type = pathParts[0];
+                const id = pathParts[1];
+                
+                if (type === 'story') {
+                    // Abrir historia con el modal de historias
+                    if (typeof window.openStoryModal === 'function') {
+                        window.openStoryModal(id);
+                        return;
+                    }
+                } else if (type === 'profile') {
+                    // Abrir perfil con el modal de perfil
+                    if (typeof window.openProfileModal === 'function') {
+                        window.openProfileModal(id);
+                        return;
+                    }
+                } else if (type === 'feed') {
+                    // Abrir feed/post
+                    if (typeof window.openPostModal === 'function') {
+                        window.openPostModal(id);
+                        return;
+                    }
+                }
+            }
+        } catch (e) {
+            console.warn('Error procesando enlace de Vyin:', e);
+        }
+    }
+    
+    // Para enlaces externos, abrir en nueva pestaña
+    window.open(url, '_blank');
+};
+
+// ============================================================
+// PERSISTENCIA EN LOCALSTORAGE
+// ============================================================
+function saveChatState(userId) {
+    if (!userId || messages.length === 0) return;
+    try {
+        const state = {
+            messages: messages,
+            scrollPosition: messagesContainerEl?.scrollTop || 0,
+            timestamp: Date.now(),
+            conversationStatus: currentConversation?.status || 'active'
+        };
+        localStorage.setItem(`chat_state_${userId}`, JSON.stringify(state));
+    } catch (error) {
+        console.error('Error guardando estado del chat:', error);
+    }
+}
+
+function loadChatState(userId) {
+    try {
+        const data = localStorage.getItem(`chat_state_${userId}`);
+        if (!data) return null;
+        const state = JSON.parse(data);
+        if (state && Date.now() - state.timestamp < 300000) {
+            return state;
+        }
+        return null;
+    } catch (error) {
+        console.error('Error cargando estado del chat:', error);
+        return null;
+    }
+}
+
+// ============================================================
+// SHOW TOAST
+// ============================================================
+function showToast(message, isError = false) {
+    if (typeof authShowToast === 'function') {
+        authShowToast(message, isError);
+        return;
+    }
+    const existing = document.querySelector('.toast');
+    if (existing) existing.remove();
+
+    const toast = document.createElement('div');
+    toast.className = `toast ${isError ? 'error' : 'success'}`;
+    toast.innerHTML = `<i class="fas fa-${isError ? 'exclamation-triangle' : 'info-circle'}"></i> ${message}`;
+    document.body.appendChild(toast);
+
+    setTimeout(() => {
+        if (toast.parentNode) toast.remove();
+    }, 2800);
+}
+
+// ============================================================
+// UTILIDADES
+// ============================================================
+function escapeHtml(text) {
+    if (!text) return '';
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+function formatTime(timestamp) {
+    const date = new Date(timestamp);
+    const now = new Date();
+    const diffHours = Math.floor((now - date) / 3600000);
+    if (diffHours < 24) return date.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
+    if (diffHours < 48) return 'Ayer';
+    return date.toLocaleDateString('es-ES', { day: 'numeric', month: 'short' });
+}
+
+function formatTimeAgo(timestamp) {
+    const date = new Date(timestamp);
+    const now = new Date();
+    const diffMins = Math.floor((now - date) / 60000);
+    const diffHours = Math.floor((now - date) / 3600000);
+    const diffDays = Math.floor((now - date) / 86400000);
+    if (diffMins < 1) return 'Ahora';
+    if (diffMins < 60) return `Hace ${diffMins} min`;
+    if (diffHours < 24) return `Hace ${diffHours} h`;
+    if (diffDays === 1) return 'Ayer';
+    return date.toLocaleDateString('es-ES', { day: 'numeric', month: 'short' });
+}
+
+function formatLastSeen(timestamp) {
+    if (!timestamp) return 'recientemente';
+    const date = new Date(timestamp);
+    const now = new Date();
+    const diffMins = Math.floor((now - date) / 60000);
+    const diffHours = Math.floor((now - date) / 3600000);
+    const diffDays = Math.floor((now - date) / 86400000);
+    if (diffMins < 1) return 'ahora mismo';
+    if (diffMins < 60) return `hace ${diffMins} min`;
+    if (diffHours < 24) return `hace ${diffHours} h`;
+    if (diffDays === 1) return 'ayer';
+    return date.toLocaleDateString('es-ES', { day: 'numeric', month: 'short' });
+}
+
+function getDateDivider(timestamp) {
+    const date = new Date(timestamp);
+    const today = new Date();
+    const yesterday = new Date(today);
+    yesterday.setDate(yesterday.getDate() - 1);
+
+    if (date.toDateString() === today.toDateString()) return 'Hoy';
+    if (date.toDateString() === yesterday.toDateString()) return 'Ayer';
+    return date.toLocaleDateString('es-ES', { day: 'numeric', month: 'long', year: 'numeric' });
+}
+
+function showLoading(show) {
+    const overlay = document.getElementById('loadingOverlay');
+    if (overlay) {
+        overlay.classList.toggle('active', show);
+    }
+}
+
+// ============================================================
+// FUNCIONES PRINCIPALES
+// ============================================================
+async function fetchUserInfo(userId) {
+    const token = getToken();
+    if (!token) return null;
+    try {
+        const res = await fetch(`${API_URL}/api/users/profile/${userId}`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (res.ok) return await res.json();
+    } catch (error) { console.error('Error fetching user:', error); }
+    return null;
+}
+
+async function fetchUserStatus(userId) {
+    const token = getToken();
+    if (!token) return { status: 'offline', lastSeen: null };
+    try {
+        const res = await fetch(`${API_URL}/api/users/status/${userId}`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (res.ok) {
+            const data = await res.json();
+            userStatuses.set(userId, { status: data.status, lastSeen: data.lastSeen });
+            return data;
+        }
+    } catch (error) { console.error('Error fetching user status:', error); }
+    return { status: 'offline', lastSeen: null };
+}
+
+function updateChatHeaderStatus(userId) {
+    const statusEl = document.getElementById('chatStatus');
+    const dot = statusEl?.querySelector('.status-dot-small');
+    const text = statusEl?.querySelector('span:last-child');
+    if (!statusEl || !dot || !text) return;
+
+    const status = userStatuses.get(userId);
+    if (status && status.status === 'online') {
+        dot.className = 'status-dot-small status-online';
+        text.textContent = 'En línea';
+    } else {
+        dot.className = 'status-dot-small status-offline';
+        text.textContent = status?.lastSeen ? `Último visto ${formatLastSeen(status.lastSeen)}` : 'Desconectado';
+    }
+}
+
+// ============================================================
+// CAMBIAR TAB
+// ============================================================
+window.switchChatTab = function(tab) {
+    currentTab = tab;
+    document.querySelectorAll('.chat-tab').forEach(el => el.classList.remove('active'));
+    document.querySelector(`.chat-tab[data-tab="${tab}"]`)?.classList.add('active');
+    renderConversations();
+};
+
+// ============================================================
+// CARGAR CONVERSACIONES
+// ============================================================
+async function loadConversations() {
+    const token = getToken();
+    if (!token) {
+        window.location.href = '/login.html';
+        return;
+    }
+
+    try {
+        const res = await fetch(`${API_URL}/api/chats/conversations`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (res.ok) {
+            const data = await res.json();
+            
+            conversations = {
+                active: data.active || [],
+                pending: data.pending || [],
+                archived: data.archived || []
+            };
+
+            const pendingCount = document.getElementById('pendingCount');
+            if (pendingCount) {
+                pendingCount.textContent = conversations.pending.length || '0';
+            }
+
+            const allUserIds = [
+                ...conversations.active.map(c => c.user.id),
+                ...conversations.pending.map(c => c.user.id),
+                ...conversations.archived.map(c => c.user.id)
+            ];
+            
+            if (allUserIds.length > 0) {
+                const statusRes = await fetch(`${API_URL}/api/users/status/batch`, {
+                    method: 'POST',
+                    headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ userIds: allUserIds })
+                });
+                if (statusRes.ok) {
+                    const statuses = await statusRes.json();
+                    statuses.forEach(s => {
+                        userStatuses.set(s.userId, { status: s.status, lastSeen: s.lastSeen });
+                    });
+                }
+            }
+
+            renderConversations();
+        } else if (res.status === 401) {
+            localStorage.removeItem('token');
+            window.location.href = '/login.html';
+        }
+    } catch (error) { 
+        console.error('Error cargando conversaciones:', error);
+        showToast('❌ Error cargando conversaciones', true);
+    }
+}
+
+function renderConversations() {
+    if (!conversationsListEl) return;
+    
+    const searchTerm = document.getElementById('searchConversations')?.value.toLowerCase() || '';
+    
+    let allConversations = [];
+    if (currentTab === 'active') allConversations = conversations.active || [];
+    else if (currentTab === 'pending') allConversations = conversations.pending || [];
+    else if (currentTab === 'archived') allConversations = conversations.archived || [];
+    
+    if (searchTerm) {
+        allConversations = allConversations.filter(c =>
+            c.user.fullName?.toLowerCase().includes(searchTerm) ||
+            c.user.username?.toLowerCase().includes(searchTerm)
+        );
+    }
+    
+    if (allConversations.length === 0) {
+        const emptyMessages = {
+            active: 'No hay conversaciones activas',
+            pending: 'No hay solicitudes de chat pendientes',
+            archived: 'No hay conversaciones archivadas'
+        };
+        conversationsListEl.innerHTML = `
+            <div style="text-align:center;padding:60px 20px;color:rgba(255,255,255,0.08);">
+                <i class="fas fa-comments" style="font-size:36px;display:block;margin-bottom:12px;opacity:0.3;"></i>
+                <span style="font-size:14px;">${emptyMessages[currentTab] || 'No hay conversaciones'}</span>
+            </div>
+        `;
+        return;
+    }
+    
+    conversationsListEl.innerHTML = allConversations.map(conv => {
+        const userStatus = userStatuses.get(conv.user.id) || { status: 'offline', lastSeen: null };
+        const statusClass = userStatus.status === 'online' ? 'status-online' : 'status-offline';
+        const isActive = currentConversation?.id === conv.user.id;
+        
+        let pendingBadge = '';
+        let pendingActions = '';
+        
+        if (conv.isPending && currentTab === 'pending') {
+            pendingBadge = `<span class="pending-badge">Solicitud</span>`;
+            pendingActions = `
+                <div class="pending-actions">
+                    <button class="btn-accept" onclick="event.stopPropagation(); window.acceptChatRequest('${conv.user.id}')">
+                        <i class="fas fa-check"></i>
+                    </button>
+                    <button class="btn-reject" onclick="event.stopPropagation(); window.rejectChatRequest('${conv.user.id}')">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+            `;
+        }
+        
+        return `
+        <div class="conversation-item ${isActive ? 'active' : ''}" onclick="window.selectConversation('${conv.user.id}')">
+            <div class="conversation-avatar-wrapper">
+                <img class="conversation-avatar" src="${conv.user.avatar || 'https://ui-avatars.com/api/?name=' + encodeURIComponent(conv.user.fullName || 'U') + '&background=7c3aed&color=fff'}"
+                     onerror="this.src='https://ui-avatars.com/api/?name=' + encodeURIComponent('${conv.user.fullName || 'U'}') + '&background=7c3aed&color=fff'" loading="lazy" />
+                <span class="status-dot ${statusClass}"></span>
+            </div>
+            <div class="conversation-info">
+                <div class="conversation-name">
+                    <div class="name-text">
+                        <span>${escapeHtml(conv.user.fullName || conv.user.username)}</span>
+                        ${conv.user.isVerified ? '<i class="fas fa-check-circle verified-icon"></i>' : ''}
+                        ${pendingBadge}
+                    </div>
+                    <span class="conversation-time">${formatTimeAgo(conv.lastMessage.timestamp)}</span>
+                </div>
+                <div class="conversation-last-message">
+                    ${conv.lastMessage.fromMe ? '<span class="is-own">Tú:</span>' : ''}
+                    ${escapeHtml(conv.lastMessage.content?.substring(0, 50) || '')}${(conv.lastMessage.content?.length || 0) > 50 ? '...' : ''}
+                    ${conv.isPending ? ' <span style="color:#c084fc;font-size:10px;">· Solicitud de chat</span>' : ''}
+                    ${conv.status === 'archived' ? ' <span style="color:rgba(255,255,255,0.15);font-size:10px;">· Archivado</span>' : ''}
+                </div>
+            </div>
+            ${conv.unreadCount > 0 ? `<div class="unread-badge">${conv.unreadCount > 9 ? '9+' : conv.unreadCount}</div>` : ''}
+            ${pendingActions}
+        </div>
+    `}).join('');
+}
+
+// ============================================================
+// ACEPTAR/RECHAZAR SOLICITUD
+// ============================================================
+window.acceptChatRequest = async function(userId) {
+    const token = getToken();
+    if (!token) return;
+
+    try {
+        const res = await fetch(`${API_URL}/api/chats/conversations/${userId}/accept`, {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+
+        if (res.ok) {
+            showToast('✅ Solicitud de chat aceptada');
+            loadConversations();
+            setTimeout(() => window.selectConversation(userId), 500);
+        } else {
+            const data = await res.json();
+            showToast(data.error || 'Error al aceptar solicitud', true);
+        }
+    } catch (error) {
+        console.error('Error aceptando solicitud:', error);
+        showToast('❌ Error al aceptar solicitud', true);
+    }
+};
+
+window.rejectChatRequest = async function(userId) {
+    const token = getToken();
+    if (!token) return;
+
+    try {
+        const res = await fetch(`${API_URL}/api/chats/conversations/${userId}/reject`, {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+
+        if (res.ok) {
+            showToast('❌ Solicitud de chat rechazada');
+            loadConversations();
+        } else {
+            const data = await res.json();
+            showToast(data.error || 'Error al rechazar solicitud', true);
+        }
+    } catch (error) {
+        console.error('Error rechazando solicitud:', error);
+        showToast('❌ Error al rechazar solicitud', true);
+    }
+};
+
+// ============================================================
+// CARGAR MENSAJES - CON CACHÉ LOCAL
+// ============================================================
+async function loadMessages(userId, loadMore = false, offset = 0) {
+    const token = getToken();
+    if (!token) return;
+
+    if (!loadMore && !isInitialLoad) {
+        const cached = loadChatState(userId);
+        if (cached && cached.messages && cached.messages.length > 0) {
+            console.log(`📦 Cargando ${cached.messages.length} mensajes desde caché local`);
+            messages = cached.messages;
+            renderMessages();
+            if (cached.scrollPosition) {
+                setTimeout(() => {
+                    messagesContainerEl.scrollTop = cached.scrollPosition;
+                }, 50);
+            }
+            if (currentConversation) {
+                currentConversation.status = cached.conversationStatus || 'active';
+            }
+            refreshMessagesInBackground(userId);
+            return;
+        }
+    }
+
+    if (!loadMore) {
+        messages = [];
+        hasMoreMessages = true;
+        nextOffset = 0;
+        showLoading(true);
+    }
+
+    try {
+        const url = `${API_URL}/api/chats/messages/${userId}?limit=${MESSAGES_PER_PAGE}&offset=${offset}`;
+        const res = await fetch(url, { headers: { 'Authorization': `Bearer ${token}` } });
+        if (res.ok) {
+            const data = await res.json();
+            const newMessages = data.messages || [];
+            
+            if (currentConversation) {
+                currentConversation.status = data.conversationStatus || 'active';
+                currentConversation.mutualFollow = data.mutualFollow || false;
+            }
+            
+            if (loadMore) {
+                const existingIds = new Set(messages.map(m => m.id));
+                const uniqueNew = newMessages.filter(m => !existingIds.has(m.id));
+                const oldScrollHeight = messagesContainerEl?.scrollHeight || 0;
+                const oldScrollTop = messagesContainerEl?.scrollTop || 0;
+                
+                messages = [...uniqueNew.reverse(), ...messages];
+                hasMoreMessages = data.hasMore || false;
+                nextOffset = offset + MESSAGES_PER_PAGE;
+                
+                renderMessages();
+                if (messagesContainerEl) {
+                    requestAnimationFrame(() => {
+                        const newScrollHeight = messagesContainerEl.scrollHeight;
+                        messagesContainerEl.scrollTop = oldScrollTop + (newScrollHeight - oldScrollHeight);
+                    });
+                }
+            } else {
+                messages = newMessages;
+                hasMoreMessages = data.hasMore || false;
+                nextOffset = MESSAGES_PER_PAGE;
+                renderMessages();
+                if (!isInitialLoad) {
+                    scrollToBottom();
+                }
+                markMessagesAsRead(userId);
+                saveChatState(userId);
+            }
+        }
+    } catch (error) {
+        console.error('Error cargando mensajes:', error);
+        if (!loadMore) showToast('❌ Error cargando mensajes', true);
+    }
+    if (!loadMore) {
+        showLoading(false);
+        isInitialLoad = false;
+    }
+}
+
+async function refreshMessagesInBackground(userId) {
+    try {
+        const token = getToken();
+        if (!token) return;
+        const url = `${API_URL}/api/chats/messages/${userId}?limit=${MESSAGES_PER_PAGE}&offset=0`;
+        const res = await fetch(url, { headers: { 'Authorization': `Bearer ${token}` } });
+        if (res.ok) {
+            const data = await res.json();
+            const newMessages = data.messages || [];
+            if (newMessages.length > messages.length) {
+                messages = newMessages;
+                renderMessages();
+                saveChatState(userId);
+            }
+        }
+    } catch (error) {}
+}
+
+// ============================================================
+// 📝 RENDERIZAR MENSAJES - CON DETECCIÓN DE ENLACES
+// ============================================================
+function renderMessages() {
+    if (isRendering) return;
+    isRendering = true;
+    
+    if (!messagesContainerEl) {
+        isRendering = false;
+        return;
+    }
+    
+    const scrollTop = messagesContainerEl.scrollTop;
+    const scrollHeight = messagesContainerEl.scrollHeight;
+    const clientHeight = messagesContainerEl.clientHeight;
+    const wasNearBottom = scrollHeight - (scrollTop + clientHeight) < 100;
+
+    if (messages.length === 0) {
+        let emptyMessage = 'No hay mensajes';
+        let emptySubMessage = 'Envía el primer mensaje';
+        
+        if (currentConversation?.status === 'pending') {
+            emptyMessage = '💬 Solicitud de chat pendiente';
+            emptySubMessage = 'Espera a que el usuario acepte tu solicitud';
+        } else if (currentConversation?.status === 'archived') {
+            emptyMessage = '📦 Conversación archivada';
+            emptySubMessage = 'Sigue al usuario para reactivar el chat';
+        }
+        
+        messagesContainerEl.innerHTML = `
+            <div class="empty-state-chat">
+                <i class="fas fa-comment-dots"></i>
+                <h3>${emptyMessage}</h3>
+                <p>${emptySubMessage}</p>
+            </div>
+        `;
+        isRendering = false;
+        return;
+    }
+
+    let messagesHtml = '';
+    let lastDate = '';
+
+    for (const msg of messages) {
+        const msgDate = getDateDivider(msg.timestamp);
+        if (msgDate !== lastDate) {
+            messagesHtml += `
+                <div class="date-divider"><span>${msgDate}</span></div>
+            `;
+            lastDate = msgDate;
+        }
+
+        const messageId = msg.id || `temp_${Date.now()}_${Math.random()}`;
+        // 🔥 PROCESAR CONTENIDO CON DETECCIÓN DE ENLACES
+        const processedContent = detectAndRenderLinks(escapeHtml(msg.content));
+        
+        messagesHtml += `
+            <div class="message ${msg.isOwn ? 'message-own' : 'message-other'}" data-message-id="${messageId}">
+                <div class="message-bubble">
+                    <div class="message-content">${processedContent}</div>
+                    <div class="message-time">
+                        ${formatTime(msg.timestamp)}
+                        ${msg.isOwn ? `<span class="message-read">${msg.read ? '✓✓' : '✓'}</span>` : ''}
+                        ${msg.isOwn ? `<i class="fas fa-trash-alt delete-message" onclick="event.stopPropagation(); window.deleteMessage('${messageId}')"></i>` : ''}
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+
+    requestAnimationFrame(() => {
+        messagesContainerEl.innerHTML = messagesHtml;
+        
+        if (wasNearBottom) {
+            requestAnimationFrame(() => {
+                messagesContainerEl.scrollTop = messagesContainerEl.scrollHeight;
+            });
+        } else {
+            const newScrollHeight = messagesContainerEl.scrollHeight;
+            const ratio = scrollTop / (scrollHeight || 1);
+            messagesContainerEl.scrollTop = ratio * newScrollHeight;
+        }
+        isRendering = false;
+    });
+}
+
+// ============================================================
+// ➕ AÑADIR UN SOLO MENSAJE CON DETECCIÓN DE ENLACES
+// ============================================================
+function appendSingleMessage(msg) {
+    if (!messagesContainerEl || isRendering) return;
+
+    if (messagesContainerEl.querySelector('.empty-state-chat') || messages.length === 0) {
+        renderMessages();
+        return;
+    }
+
+    let lastDate = '';
+    const existingDateDividers = messagesContainerEl.querySelectorAll('.date-divider');
+    if (existingDateDividers.length > 0) {
+        const lastDivider = existingDateDividers[existingDateDividers.length - 1];
+        if (lastDivider) {
+            lastDate = lastDivider.textContent.trim();
+        }
+    }
+
+    const msgDate = getDateDivider(msg.timestamp);
+    let html = '';
+    
+    if (msgDate !== lastDate) {
+        html += `
+            <div class="date-divider"><span>${msgDate}</span></div>
+        `;
+    }
+
+    const messageId = msg.id || `temp_${Date.now()}_${Math.random()}`;
+    const processedContent = detectAndRenderLinks(escapeHtml(msg.content));
+    
+    html += `
+        <div class="message ${msg.isOwn ? 'message-own' : 'message-other'}" data-message-id="${messageId}" style="animation: messageIn 0.3s ease;">
+            <div class="message-bubble">
+                <div class="message-content">${processedContent}</div>
+                <div class="message-time">
+                    ${formatTime(msg.timestamp)}
+                    ${msg.isOwn ? `<span class="message-read">${msg.read ? '✓✓' : '✓'}</span>` : ''}
+                    ${msg.isOwn ? `<i class="fas fa-trash-alt delete-message" onclick="event.stopPropagation(); window.deleteMessage('${messageId}')"></i>` : ''}
+                </div>
+            </div>
+        </div>
+    `;
+
+    messagesContainerEl.insertAdjacentHTML('beforeend', html);
+    
+    const scrollTop = messagesContainerEl.scrollTop;
+    const scrollHeight = messagesContainerEl.scrollHeight;
+    const clientHeight = messagesContainerEl.clientHeight;
+    const isNearBottom = scrollHeight - (scrollTop + clientHeight) < 200;
+    
+    if (isNearBottom) {
+        requestAnimationFrame(() => {
+            messagesContainerEl.scrollTop = messagesContainerEl.scrollHeight;
+        });
+    }
+}
+
+// ============================================================
+// 🔄 ACTUALIZAR UN SOLO MENSAJE
+// ============================================================
+function updateSingleMessage(tempId, realMessage) {
+    const msgEl = document.querySelector(`.message[data-message-id="${tempId}"]`);
+    if (msgEl) {
+        const contentEl = msgEl.querySelector('.message-content');
+        const timeEl = msgEl.querySelector('.message-time');
+        if (contentEl) {
+            const processedContent = detectAndRenderLinks(escapeHtml(realMessage.content));
+            contentEl.innerHTML = processedContent;
+        }
+        if (timeEl) {
+            timeEl.innerHTML = `
+                ${formatTime(realMessage.timestamp)}
+                <span class="message-read">${realMessage.read ? '✓✓' : '✓'}</span>
+                <i class="fas fa-trash-alt delete-message" onclick="event.stopPropagation(); window.deleteMessage('${realMessage.id}')"></i>
+            `;
+        }
+        msgEl.dataset.messageId = realMessage.id;
+    }
+}
+
+// ============================================================
+// 🗑️ ELIMINAR UN SOLO MENSAJE
+// ============================================================
+function removeSingleMessage(messageId) {
+    const msgEl = document.querySelector(`.message[data-message-id="${messageId}"]`);
+    if (msgEl) {
+        msgEl.remove();
+        if (messagesContainerEl.querySelectorAll('.message').length === 0) {
+            messagesContainerEl.innerHTML = `
+                <div class="empty-state-chat">
+                    <i class="fas fa-comment-dots"></i>
+                    <h3>No hay mensajes</h3>
+                    <p>Envía el primer mensaje</p>
+                </div>
+            `;
+        }
+    }
+}
+
+function markMessagesAsRead(userId) {
+    const token = getToken();
+    if (!token) return;
+
+    let updated = false;
+    messages.forEach(msg => {
+        if (!msg.isOwn && !msg.read) {
+            msg.read = true;
+            updated = true;
+        }
+    });
+    if (updated) {
+        document.querySelectorAll('.message-other .message-read').forEach(el => {
+            el.textContent = '✓✓';
+        });
+    }
+
+    if (socket && socket.connected) {
+        socket.emit('mark_messages_read', { withUserId: userId });
+    }
+
+    fetch(`${API_URL}/api/chats/conversations/${userId}/read`, {
+        method: 'PUT',
+        headers: { 'Authorization': `Bearer ${token}` }
+    }).catch(err => console.error('Error marking read:', err));
+}
+
+function scrollToBottom() {
+    if (messagesContainerEl) {
+        requestAnimationFrame(() => {
+            messagesContainerEl.scrollTop = messagesContainerEl.scrollHeight;
+        });
+    }
+}
+
+function setupInfiniteScroll() {
+    if (!messagesContainerEl) return;
+    messagesContainerEl.removeEventListener('scroll', handleScroll);
+    messagesContainerEl.addEventListener('scroll', handleScroll, { passive: true });
+}
+
+function handleScroll() {
+    if (!messagesContainerEl) return;
+    if (scrollTimeout) clearTimeout(scrollTimeout);
+
+    scrollTimeout = setTimeout(() => {
+        if (messagesContainerEl.scrollTop === 0 && hasMoreMessages && !isLoadingMore && currentConversation) {
+            isLoadingMore = true;
+            loadMessages(currentConversation.id, true, nextOffset).then(() => {
+                isLoadingMore = false;
+            });
+        }
+        if (currentConversation) {
+            saveChatState(currentConversation.id);
+        }
+    }, 200);
+}
+
+// ============================================================
+// SELECCIONAR CONVERSACIÓN
+// ============================================================
+window.selectConversation = async function(userIdOrObject) {
+    let userId, userData;
+    if (typeof userIdOrObject === 'string') {
+        userId = userIdOrObject;
+        const allConvs = [...conversations.active, ...conversations.pending, ...conversations.archived];
+        const existingConv = allConvs.find(c => c.user.id === userId);
+        if (existingConv) userData = existingConv.user;
+        else userData = await fetchUserInfo(userId);
+        if (!userData) { showToast('❌ No se pudo cargar el usuario', true); return; }
+    } else {
+        userData = userIdOrObject;
+        userId = userData.id;
+    }
+
+    if (currentConversation && messages.length > 0) {
+        saveChatState(currentConversation.id);
+    }
+
+    currentConversation = {
+        id: userData.id,
+        fullName: userData.fullName,
+        username: userData.username,
+        avatar: userData.avatar,
+        status: 'active'
+    };
+
+    await fetchUserStatus(userId);
+
+    renderConversations();
+    isInitialLoad = true;
+    await loadMessages(userId, false, 0);
+    showMessagesPanel();
+    updateChatHeaderStatus(userId);
+};
+
+function showMessagesPanel() {
+    if (!messagesPanelEl) return;
+    messagesPanelEl.classList.add('active');
+
+    const avatar = document.getElementById('chatAvatar');
+    const name = document.getElementById('chatName');
+    const backBtn = document.getElementById('backChatBtn');
+
+    if (avatar) {
+        avatar.src = currentConversation?.avatar || 'https://ui-avatars.com/api/?name=' + encodeURIComponent(currentConversation?.fullName || 'U') + '&background=7c3aed&color=fff';
+        avatar.onerror = function() {
+            this.src = 'https://ui-avatars.com/api/?name=' + encodeURIComponent(currentConversation?.fullName || 'U') + '&background=7c3aed&color=fff';
+        };
+    }
+    if (name) name.textContent = currentConversation?.fullName || currentConversation?.username || 'Usuario';
+    if (backBtn) {
+        backBtn.onclick = function() {
+            if (currentConversation) {
+                saveChatState(currentConversation.id);
+            }
+            messagesPanelEl.classList.remove('active');
+            loadConversations();
+        };
+    }
+
+    messageInput = document.getElementById('messageInput');
+    if (messageInput) {
+        const newInput = messageInput.cloneNode(true);
+        messageInput.parentNode.replaceChild(newInput, messageInput);
+        messageInput = newInput;
+
+        messageInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                window.sendMessage();
+            }
+        });
+        messageInput.addEventListener('input', handleTyping);
+        setTimeout(() => messageInput.focus(), 300);
+    }
+
+    setupInfiniteScroll();
+}
+
+// ============================================================
+// ENVIAR MENSAJE - CON RENDERIZADO OPTIMIZADO
+// ============================================================
+window.sendMessage = async function() {
+    if (!messageInput || !messageInput.value.trim() || !currentConversation) return;
+    const content = messageInput.value.trim();
+    messageInput.value = '';
+    const sendBtn = document.getElementById('sendBtn');
+    if (sendBtn) sendBtn.disabled = true;
+
+    const token = getToken();
+    if (!token) { showToast('❌ Sesión expirada', true); return; }
+
+    const tempId = 'temp_' + Date.now();
+    const newMsg = {
+        id: tempId,
+        content,
+        timestamp: new Date().toISOString(),
+        isOwn: true,
+        read: false
+    };
+    messages.push(newMsg);
+    
+    appendSingleMessage(newMsg);
+
+    try {
+        const res = await fetch(`${API_URL}/api/chats/messages/${currentConversation.id}`, {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ content })
+        });
+        if (res.ok) {
+            const realMessage = await res.json();
+            const index = messages.findIndex(m => m.id === tempId);
+            if (index !== -1) {
+                messages[index] = realMessage;
+                updateSingleMessage(tempId, realMessage);
+                saveChatState(currentConversation.id);
+            }
+            loadConversations();
+        } else {
+            messages = messages.filter(m => m.id !== tempId);
+            removeSingleMessage(tempId);
+            showToast('❌ Error al enviar mensaje', true);
+        }
+    } catch (error) {
+        messages = messages.filter(m => m.id !== tempId);
+        removeSingleMessage(tempId);
+        showToast('❌ Error de conexión', true);
+    }
+    if (sendBtn) sendBtn.disabled = false;
+};
+
+// ============================================================
+// ELIMINAR MENSAJE
+// ============================================================
+window.deleteMessage = async function(messageId) {
+    const token = getToken();
+    if (!token) return;
+    try {
+        const res = await fetch(`${API_URL}/api/chats/messages/${messageId}`, {
+            method: 'DELETE',
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (res.ok) {
+            messages = messages.filter(m => m.id !== messageId);
+            removeSingleMessage(messageId);
+            loadConversations();
+            if (currentConversation) {
+                saveChatState(currentConversation.id);
+            }
+            showToast('✅ Mensaje eliminado');
+        }
+    } catch (error) {
+        console.error('Error eliminando mensaje:', error);
+        showToast('❌ Error al eliminar', true);
+    }
+};
+
+// ============================================================
+// TYPING
+// ============================================================
+function handleTyping() {
+    if (!socket || !socket.connected || !currentConversation) return;
+    if (typingTimeout) clearTimeout(typingTimeout);
+    if (!isTyping && messageInput && messageInput.value.trim().length > 0) {
+        isTyping = true;
+        socket.emit('typing', { to: currentConversation.id, isTyping: true });
+    }
+    typingTimeout = setTimeout(() => {
+        if (isTyping) {
+            isTyping = false;
+            socket.emit('typing', { to: currentConversation.id, isTyping: false });
+        }
+    }, 1000);
+}
+
+// ============================================================
+// SOCKET
+// ============================================================
+function initSocket() {
+    const token = getToken();
+    if (!token) return;
+
+    if (socket) {
+        socket.disconnect();
+        socket = null;
+    }
+
+    socket = io(API_URL, {
+        auth: { token },
+        transports: ['websocket', 'polling'],
+        reconnection: true,
+        reconnectionAttempts: 5,
+        reconnectionDelay: 1000
+    });
+    window.socket = socket;
+
+    socket.on('connect', () => {
+        console.log('🔌 Socket conectado en chat');
+        if (currentUser) {
+            socket.emit('user_online', { page: 'chat' });
+        }
+    });
+
+    socket.on('receive_message', (message) => {
+        if (currentConversation && message.from === currentConversation.id) {
+            const newMsg = { ...message, isOwn: false };
+            messages.push(newMsg);
+            appendSingleMessage(newMsg);
+            markMessagesAsRead(currentConversation.id);
+            saveChatState(currentConversation.id);
+        }
+        loadConversations();
+        if (message.from !== currentConversation?.id) {
+            showToast(`📩 Nuevo mensaje de ${message.fromName || 'alguien'}`);
+        }
+    });
+
+    socket.on('chat_request_received', (data) => {
+        showToast(`📨 ${data.fromUser?.fullName || 'Alguien'} quiere chatear contigo`);
+        loadConversations();
+    });
+
+    socket.on('chat_request_accepted', (data) => {
+        showToast(`✅ ${data.fromUser?.fullName || 'Alguien'} aceptó tu solicitud de chat`);
+        loadConversations();
+        if (currentConversation && currentConversation.id === data.fromUserId) {
+            loadMessages(currentConversation.id, false, 0);
+        }
+    });
+
+    socket.on('message_sent', (message) => {
+        const index = messages.findIndex(m => m.id === message.id);
+        if (index !== -1) {
+            messages[index] = message;
+            updateSingleMessage(message.id, message);
+            saveChatState(currentConversation?.id);
+        }
+    });
+
+    socket.on('user_typing', (data) => {
+        const indicator = document.getElementById('typingIndicator');
+        if (indicator && currentConversation && data.from === currentConversation.id) {
+            indicator.style.display = data.isTyping ? 'block' : 'none';
+            if (data.isTyping) {
+                setTimeout(() => {
+                    if (indicator && indicator.style.display === 'block') {
+                        indicator.style.display = 'none';
+                    }
+                }, 3000);
+            }
+        }
+    });
+
+    socket.on('messages_read', (data) => {
+        if (currentConversation && data.byUserId === currentConversation.id) {
+            let updated = false;
+            messages.forEach(msg => {
+                if (msg.isOwn && !msg.read) {
+                    msg.read = true;
+                    updated = true;
+                }
+            });
+            if (updated) {
+                document.querySelectorAll('.message-own .message-read').forEach(el => {
+                    el.textContent = '✓✓';
+                });
+                saveChatState(currentConversation.id);
+            }
+        }
+        loadConversations();
+    });
+
+    socket.on('message_deleted', (data) => {
+        messages = messages.filter(m => m.id !== data.messageId);
+        removeSingleMessage(data.messageId);
+        saveChatState(currentConversation?.id);
+    });
+
+    socket.on('conversations_update', () => {
+        loadConversations();
+    });
+
+    socket.on('user_status_changed', (data) => {
+        userStatuses.set(data.userId, { status: data.status, lastSeen: data.lastSeen });
+        if (currentConversation && currentConversation.id === data.userId) {
+            updateChatHeaderStatus(data.userId);
+        }
+        renderConversations();
+    });
+
+    socket.on('disconnect', () => {
+        console.log('🔌 Socket desconectado');
+    });
+}
+
+// ============================================================
+// INICIALIZAR
+// ============================================================
+async function init() {
+    currentUser = getCurrentUser();
+    if (!currentUser) {
+        const token = getToken();
+        if (!token) {
+            window.location.href = '/login.html';
+            return;
+        }
+        try {
+            const res = await fetch(`${API_URL}/api/users/profile`, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            if (res.ok) currentUser = await res.json();
+        } catch (error) { console.error('Error cargando usuario:', error); }
+    }
+
+    const searchInput = document.getElementById('searchConversations');
+    if (searchInput) {
+        searchInput.addEventListener('input', () => renderConversations());
+    }
+
+    await loadConversations();
+    initSocket();
+
+    const urlParams = new URLSearchParams(window.location.search);
+    const userId = urlParams.get('userId');
+    if (userId) {
+        setTimeout(async () => {
+            await window.selectConversation(userId);
+        }, 500);
+    }
+
+    console.log('📱 Chat mobile optimizado - con detección de enlaces');
+}
+
+window.selectConversation = window.selectConversation;
+window.sendMessage = window.sendMessage;
+window.deleteMessage = window.deleteMessage;
+window.switchChatTab = window.switchChatTab;
+window.acceptChatRequest = window.acceptChatRequest;
+window.rejectChatRequest = window.rejectChatRequest;
+window.openLink = window.openLink;
+
+document.addEventListener('DOMContentLoaded', init);
