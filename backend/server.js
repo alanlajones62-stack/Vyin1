@@ -1,4 +1,4 @@
-// backend/server.js - COMPLETO CON TODOS LOS MÓDULOS (VERIFICACIÓN, VYIN PAY, ASIGNACIÓN, MODERACIÓN, VYIN IA, BLOQUEOS)
+// backend/server.js - COMPLETO CON TODOS LOS MÓDULOS (VERIFICACIÓN, VYIN PAY, ASIGNACIÓN, MODERACIÓN, VYIN IA, BLOQUEOS, PUBLICIDAD)
 
 const express = require('express');
 const cors = require('cors');
@@ -363,6 +363,10 @@ const write = (file, data) => {
         }
         if (file === 'moderation-log.json') {
             cache.invalidatePattern('moderation_');
+        }
+        if (file === 'ads.json') {
+            cache.invalidatePattern('ads_');
+            cache.invalidatePattern('active_ads');
         }
     } catch (error) {
         logger.error(`Error escribiendo ${file}:`, { error: error.message });
@@ -744,7 +748,8 @@ function migrateAllData() {
     const initFiles = [
         'users.json', 'stories.json', 'messages.json', 'hashtags.json', 
         'notifications.json', 'reports.json', 'wallets.json', 'transactions.json', 
-        'business-requests.json', 'report-assignments.json', 'moderation-log.json'
+        'business-requests.json', 'report-assignments.json', 'moderation-log.json',
+        'ads.json' // 🔥 NUEVO: Archivo para anuncios
     ];
     initFiles.forEach(f => {
         const filePath = path.join(DATA_DIR, f);
@@ -1049,6 +1054,25 @@ try {
 }
 
 // ============================================================
+// 🔥 15. 📢 SISTEMA DE PUBLICIDAD/ANUNCIOS
+// ============================================================
+try {
+    const adsModule = require('./ads')(read, write, io, logger);
+    app.use('/api/ads', adsModule.router);
+    logger.info('✅ Ads routes cargadas en /api/ads');
+    console.log('📢 SISTEMA DE PUBLICIDAD ACTIVADO:');
+    console.log('   ✅ Creación de anuncios para cuentas de empresa');
+    console.log('   ✅ NO requiere verificación, solo ser cuenta de empresa');
+    console.log('   ✅ Aprobación/Rechazo por administradores');
+    console.log('   ✅ Estadísticas de anuncios');
+    console.log('   ✅ Anuncios en el feed');
+    console.log('   ✅ Límite de 5 anuncios activos');
+} catch (error) {
+    logger.error('❌ Error cargando ads:', { error: error.message });
+    console.error('❌ Error cargando sistema de publicidad:', error.message);
+}
+
+// ============================================================
 // 🔥 RUTA PARA ANALIZAR IMAGEN CON IA
 // ============================================================
 
@@ -1192,6 +1216,18 @@ app.get('/health', (req, res) => {
                 silent: true,
                 filterFeeds: true,
                 filterChats: true
+            }
+        },
+        ads: {
+            enabled: true,
+            features: {
+                create: true,
+                approve: true,
+                reject: true,
+                stats: true,
+                pause: true,
+                resume: true,
+                limit: 5
             }
         }
     };
@@ -1675,6 +1711,13 @@ server.listen(PORT, HOST, () => {
        ✅ El bloqueado no se entera
        ✅ El bloqueador ve al bloqueado normalmente
     
+    📢 SISTEMA DE PUBLICIDAD: ACTIVADO
+       ✅ Creación de anuncios para cuentas de empresa
+       ✅ NO requiere verificación, solo ser cuenta de empresa
+       ✅ Aprobación/Rechazo por administradores
+       ✅ Estadísticas de anuncios
+       ✅ Límite de 5 anuncios activos
+    
     🔥 ========================================
     
     🔄 TAREAS EN SEGUNDO PLANO:
@@ -1682,6 +1725,7 @@ server.listen(PORT, HOST, () => {
        ✅ Limpieza de asignaciones expiradas (cada 30 min)
        ✅ Reasignación de denuncias (cada hora)
        ✅ Limpieza de suspensiones (cada hora)
+       ✅ Limpieza de anuncios expirados (cada hora)
     `);
 });
 

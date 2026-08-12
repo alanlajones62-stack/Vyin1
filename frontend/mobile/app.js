@@ -20,6 +20,9 @@ import { openCreator, closeCreator } from './story-creator-modal.js';
 import { openExploreModal, closeExploreModal } from './explore-modal.js';
 import { openActivityModal, closeActivityModal, updateBadge } from './activity-modal.js';
 
+// 🔥 IMPORTAR CREADOR DE PUBLICIDAD (NUEVO)
+import { openAdCreator, closeAdCreator } from './ad-creator-modal.js';
+
 // 🔥 IMPORTAR PERFIL NATIVO (SOLO PARA NAVEGACIÓN INFERIOR Y HEADER)
 import { showProfileNative, hideProfileNative } from './profile-native.js';
 
@@ -1758,6 +1761,10 @@ window.closeExploreModal = closeExploreModal;
 window.openActivityModal = openActivityModal;
 window.closeActivityModal = closeActivityModal;
 
+// 🔥 EXPORTAR CREADOR DE PUBLICIDAD
+window.openAdCreator = openAdCreator;
+window.closeAdCreator = closeAdCreator;
+
 // 🔥 PERFIL NATIVO (SOLO PARA NAVEGACIÓN INFERIOR Y HEADER)
 window.showProfileNative = showProfileNative;
 window.hideProfileNative = hideProfileNative;
@@ -1786,6 +1793,7 @@ window.goToProfileUser = (userId) => {
     closeStoryModal();
     closeCreator();
     closeEditProfileModal();
+    closeAdCreator(); // 🔥 CERRAR CREADOR DE PUBLICIDAD
     
     // 🔥 SIEMPRE ABRIR CON openProfileModal
     // 🔥 El perfil propio se muestra en el modal como cualquier otro
@@ -1843,6 +1851,7 @@ function setupEvents() {
             closeCreator();
             closeEditProfileModal();
             closeProfileModal();
+            closeAdCreator(); // 🔥 CERRAR CREADOR DE PUBLICIDAD
             
             // 🔥 Este SÍ usa profile-native (es el acceso directo desde el header)
             showProfileNative(user.id);
@@ -1867,6 +1876,7 @@ function setupEvents() {
             closeCreator();
             closeEditProfileModal();
             closeProfileModal();
+            closeAdCreator(); // 🔥 CERRAR CREADOR DE PUBLICIDAD
             
             document.querySelectorAll('.bottom-nav button').forEach(b => b.classList.remove('active'));
             document.getElementById('navProfile').classList.add('active');
@@ -1886,16 +1896,27 @@ function setupEvents() {
         refreshFeed();
     });
 
+    // 🔥 BOTÓN CREAR - DETECTA CUENTA DE EMPRESA
     document.getElementById('createBtn')?.addEventListener('click', () => {
         const token = getToken();
         if (!token) {
-            showToast('Inicia sesión para crear historias', true);
+            showToast('Inicia sesión para crear contenido', true);
             setTimeout(() => {
                 window.location.href = '/login.html';
             }, 500);
             return;
         }
-        openCreator();
+        
+        const user = getCurrentUser();
+        const isBusiness = user?.accountType === 'business' || user?.accountType === 'business_verified';
+        
+        if (isBusiness) {
+            // 🏢 ABRIR CREADOR DE PUBLICIDAD
+            openAdCreator();
+        } else {
+            // 📸 ABRIR CREADOR DE HISTORIA NORMAL
+            openCreator();
+        }
     });
 
     document.getElementById('filterRanked')?.addEventListener('click', () => {
@@ -1952,6 +1973,7 @@ function setupEvents() {
         closeCreator();
         closeEditProfileModal();
         closeProfileModal();
+        closeAdCreator(); // 🔥 CERRAR CREADOR DE PUBLICIDAD
         
         const section = document.getElementById('sectionProfile');
         if (section && !section.classList.contains('hidden')) {
@@ -1979,6 +2001,7 @@ function setupEvents() {
         closeCreator();
         closeEditProfileModal();
         closeProfileModal();
+        closeAdCreator(); // 🔥 CERRAR CREADOR DE PUBLICIDAD
         
         const section = document.getElementById('sectionProfile');
         if (section && !section.classList.contains('hidden')) {
@@ -2008,6 +2031,7 @@ function setupEvents() {
         closeCreator();
         closeEditProfileModal();
         closeProfileModal();
+        closeAdCreator(); // 🔥 CERRAR CREADOR DE PUBLICIDAD
         
         const section = document.getElementById('sectionProfile');
         if (section && !section.classList.contains('hidden')) {
@@ -2076,6 +2100,7 @@ function setupEvents() {
             closeCreator();
             closeExploreModal();
             closeActivityModal();
+            closeAdCreator(); // 🔥 CERRAR CREADOR DE PUBLICIDAD
         }
     });
 
