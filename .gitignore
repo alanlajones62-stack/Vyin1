@@ -253,7 +253,6 @@ backend/data/*.corrupt.*
 # CARPETAS DE FRONTEND QUE NO SE UTILIZAN
 # ============================================================
 
-frontend/admin/
 frontend/feed/
 frontend/pay/
 frontend/profile/
@@ -265,7 +264,6 @@ frontend/js/
 # ============================================================
 
 frontend/a.html
-frontend/admin.html
 frontend/chat.html
 frontend/emoji.html
 frontend/feed.html
