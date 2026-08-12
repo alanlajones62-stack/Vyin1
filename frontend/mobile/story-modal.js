@@ -1,5 +1,6 @@
 // ============================================================
-// story-modal.js - Modal para ver historias (VERSIÓN COMPLETA CORREGIDA)
+// story-modal.js - Modal para ver historias con navegación 
+// (VERSIÓN CORREGIDA - SIN DUPLICADOS)
 // ============================================================
 
 import {
@@ -8,20 +9,7 @@ import {
 } from './auth.js';
 
 import { formatNumber } from './utils.js';
-import { 
-    loadComments, 
-    initComments, 
-    getTotalCommentsCount, 
-    addCommentToCache, 
-    getCachedComments, 
-    addCommentToUI,
-    addReplyToUI,
-    replaceTempComment,
-    replaceTempReply,
-    updateCommentCounter,
-    renderComments,
-    repliesVisibility
-} from './story-comments.js';
+import { loadComments, initComments } from './story-comments.js';
 
 const API_URL = window.location.origin;
 let currentStoryId = null;
@@ -31,8 +19,6 @@ let currentStoriesList = [];
 let currentStoryIndex = 0;
 let isNavigating = false;
 let userLanguage = 'es';
-let isFirstLoad = true;
-let isCommenting = false;
 
 // Caché de traducciones
 let translationCache = {};
@@ -54,8 +40,8 @@ export async function openStoryModal(storyId, storiesList = null, fromProfile = 
 
     if (isModalOpen) {
         console.log('📱 [STORY-MODAL] Cerrando modal anterior...');
-        await closeStoryModal(true);
-        await new Promise(resolve => setTimeout(resolve, 200));
+        closeStoryModal();
+        await new Promise(resolve => setTimeout(resolve, 100));
     }
 
     if (fromProfile && profileUserId) {
@@ -83,8 +69,6 @@ export async function openStoryModal(storyId, storiesList = null, fromProfile = 
 
     currentStoryId = storyId;
     isModalOpen = true;
-    isFirstLoad = true;
-    isCommenting = false;
 
     const overlay = document.getElementById('storyModalOverlay');
     if (!overlay) {
@@ -111,15 +95,19 @@ export async function openStoryModal(storyId, storiesList = null, fromProfile = 
 }
 
 // ============================================================
-// CERRAR MODAL - CON LIMPIEZA COMPLETA
+// CERRAR MODAL
 // ============================================================
 
-export function closeStoryModal(skipCleanup = false) {
+export function closeStoryModal() {
     console.log('📱 [STORY-MODAL] Cerrando modal...');
     
     isModalOpen = false;
-    isCommenting = false;
-    
+    currentStoryId = null;
+    currentStoryData = null;
+    currentStoriesList = [];
+    currentStoryIndex = 0;
+    isNavigating = false;
+
     const video = document.getElementById('storyVideo');
     if (video) {
         video.pause();
@@ -131,46 +119,6 @@ export function closeStoryModal(skipCleanup = false) {
         URL.revokeObjectURL(window._vttUrl);
         window._vttUrl = null;
     }
-
-    const commentInput = document.getElementById('commentInput');
-    if (commentInput) {
-        commentInput.value = '';
-        commentInput.disabled = false;
-        commentInput.blur();
-    }
-
-    const sendBtn = document.getElementById('sendCommentBtn');
-    if (sendBtn) {
-        sendBtn.disabled = false;
-        sendBtn.textContent = 'Enviar';
-    }
-
-    const commentsList = document.getElementById('commentsList');
-    if (commentsList) {
-        commentsList.innerHTML = `
-            <div class="no-comments">
-                <i class="fas fa-spinner fa-pulse"></i>
-                <span>Cargando comentarios...</span>
-            </div>
-        `;
-        commentsList.dataset.storyId = '';
-    }
-
-    const commentsCountEl = document.getElementById('commentsCount');
-    if (commentsCountEl) commentsCountEl.textContent = '0';
-    const modalCommentsEl = document.getElementById('modalComments');
-    if (modalCommentsEl) modalCommentsEl.textContent = '0';
-
-    const likesEl = document.getElementById('modalLikes');
-    if (likesEl) likesEl.textContent = '0';
-    const viewsEl = document.getElementById('modalViews');
-    if (viewsEl) viewsEl.textContent = '0';
-
-    document.querySelectorAll('.reply-input-container').forEach(el => {
-        el.style.display = 'none';
-        const input = el.querySelector('input');
-        if (input) input.value = '';
-    });
 
     const overlay = document.getElementById('storyModalOverlay');
     if (overlay) {
@@ -184,20 +132,12 @@ export function closeStoryModal(skipCleanup = false) {
     }
 
     setTimeout(() => {
-        if (!isModalOpen) {
-            currentStoryId = null;
-            currentStoryData = null;
-            currentStoriesList = [];
-            currentStoryIndex = 0;
-            isNavigating = false;
-            isFirstLoad = true;
-        }
         window._fromProfileModal = false;
         window._fromExploreModal = false;
         window._fromActivityModal = false;
         window._activityCommentId = null;
         window._profileContextUserId = null;
-    }, 300);
+    }, 100);
 }
 
 // ============================================================
@@ -223,7 +163,6 @@ export async function navigateStory(direction) {
     
     if (newStory) {
         console.log(`🔄 Navegando a historia ${newIndex + 1}/${currentStoriesList.length}: ${newStory.id}`);
-        isFirstLoad = true;
         await loadStoryData(newStory.id, true);
     }
     
@@ -237,10 +176,9 @@ export async function navigateStory(direction) {
 function createModalHTML() {
     console.log('📱 [STORY-MODAL] createModalHTML() ejecutado');
     
-    const existingOverlay = document.getElementById('storyModalOverlay');
-    if (existingOverlay) {
-        existingOverlay.remove();
-        console.log('📱 [STORY-MODAL] Modal existente eliminado');
+    if (document.getElementById('storyModalOverlay')) {
+        console.log('📱 [STORY-MODAL] El overlay ya existe');
+        return;
     }
 
     const html = `
@@ -296,6 +234,9 @@ function createModalHTML() {
                             </button>
                             <button class="btn-share-modal" id="modalShareBtn">
                                 <i class="fas fa-share-alt"></i>
+                            </button>
+                            <button class="btn-profile-modal" id="modalProfileBtn">
+                                <i class="fas fa-user"></i> Perfil
                             </button>
                             <button class="btn-translate-modal" id="modalTranslateBtn" style="display:none;">
                                 <i class="fas fa-language"></i> Traducir
@@ -364,10 +305,6 @@ function setupModalEvents() {
         const input = document.getElementById('commentInput');
         if (input) {
             input.focus();
-            if ('ontouchstart' in window) {
-                input.click();
-                setTimeout(() => input.focus(), 100);
-            }
             input.scrollIntoView({ behavior: 'smooth', block: 'center' });
         }
     });
@@ -384,13 +321,35 @@ function setupModalEvents() {
         }
     });
 
+    document.getElementById('modalProfileBtn')?.addEventListener('click', () => {
+        const userId = window._modalUserId;
+        if (userId) {
+            closeStoryModal();
+            window._fromProfileModal = false;
+            window._profileContextUserId = null;
+            
+            setTimeout(() => {
+                import('./profile-modal.js').then(({ openProfileModal }) => {
+                    openProfileModal(userId);
+                }).catch(() => {
+                    if (typeof window.openProfileModal === 'function') {
+                        window.openProfileModal(userId);
+                    } else {
+                        showToast('Error al abrir perfil', true);
+                    }
+                });
+            }, 50);
+        }
+    });
+
+    // 🔥 BOTÓN DE TRADUCCIÓN
     document.getElementById('modalTranslateBtn')?.addEventListener('click', async () => {
         if (!currentStoryId) return;
         await toggleTranslation();
     });
 
-    document.getElementById('sendCommentBtn')?.addEventListener('click', async (e) => {
-        e.preventDefault();
+    // 🔥 ENVÍO DE COMENTARIO
+    document.getElementById('sendCommentBtn')?.addEventListener('click', async () => {
         await handleSendComment();
     });
 
@@ -398,30 +357,6 @@ function setupModalEvents() {
         if (e.key === 'Enter' && !e.shiftKey) {
             e.preventDefault();
             handleSendComment();
-        }
-    });
-
-    document.getElementById('commentsList')?.addEventListener('click', async (e) => {
-        const likeBtn = e.target.closest('.btn-like-comment');
-        if (likeBtn) {
-            e.preventDefault();
-            e.stopPropagation();
-            const commentId = likeBtn.dataset.commentId;
-            if (commentId && currentStoryId) {
-                await window.handleCommentLike(currentStoryId, commentId);
-            }
-        }
-    });
-
-    document.getElementById('commentsList')?.addEventListener('click', (e) => {
-        const replyBtn = e.target.closest('.btn-reply-comment');
-        if (replyBtn) {
-            e.preventDefault();
-            e.stopPropagation();
-            const commentId = replyBtn.dataset.commentId;
-            if (commentId && currentStoryId) {
-                window.toggleReplyInput(currentStoryId, commentId);
-            }
         }
     });
 
@@ -452,15 +387,10 @@ function setupModalEvents() {
 }
 
 // ============================================================
-// 🔥 ENVIAR COMENTARIO - VERSIÓN COMPLETA CORREGIDA
+// 🔥 ENVIAR COMENTARIO - CORREGIDO (SIN DUPLICADOS)
 // ============================================================
 
 async function handleSendComment() {
-    if (isCommenting) {
-        console.log('⚠️ Ya hay un comentario en proceso, ignorando...');
-        return;
-    }
-
     const input = document.getElementById('commentInput');
     if (!input) return;
     
@@ -481,7 +411,6 @@ async function handleSendComment() {
         return;
     }
 
-    isCommenting = true;
     input.disabled = true;
     const sendBtn = document.getElementById('sendCommentBtn');
     if (sendBtn) {
@@ -489,93 +418,7 @@ async function handleSendComment() {
         sendBtn.textContent = 'Enviando...';
     }
 
-    const currentUser = getCurrentUser();
-    const userAvatar = currentUser?.avatar || getAvatar(currentUser?.fullName || 'U');
-    
-    const tempComment = {
-        id: `temp_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`,
-        userId: currentUser?.id || 'temp',
-        username: currentUser?.username || 'usuario',
-        fullName: currentUser?.fullName || 'Usuario',
-        avatar: userAvatar,
-        content: content.trim(),
-        createdAt: new Date().toISOString(),
-        replies: [],
-        likes: [],
-        _isTemp: true
-    };
-
-    input.value = '';
-    console.log('📝 Añadiendo comentario temporal al DOM:', tempComment);
-    
-    // 🔥 1. AGREGAR LOCALMENTE (INSERCIÓN DIRECTA)
-    const added = addCommentToUI(tempComment);
-    if (!added) {
-        console.warn('⚠️ Falló addCommentToUI, intentando directamente...');
-        const commentsList = document.getElementById('commentsList');
-        if (commentsList) {
-            const noComments = commentsList.querySelector('.no-comments');
-            if (noComments) noComments.remove();
-            
-            const div = document.createElement('div');
-            div.className = 'comment-item';
-            div.setAttribute('data-comment-id', tempComment.id);
-            div.setAttribute('data-temp-id', tempComment.id);
-            div.style.opacity = '0.6';
-            div.style.borderLeft = '2px solid rgba(192,132,252,0.3)';
-            div.innerHTML = `
-                <img class="avatar" src="${tempComment.avatar}" alt="${tempComment.fullName}" onclick="window.goToProfileUser('${tempComment.userId}')" />
-                <div class="comment-body">
-                    <div class="comment-user" onclick="window.goToProfileUser('${tempComment.userId}')">
-                        ${escapeHtml(tempComment.fullName)}
-                        <span class="handle">@${tempComment.username || 'usuario'}</span>
-                        <span class="time">${formatDate(tempComment.createdAt)}</span>
-                        <span style="font-size:10px;color:rgba(192,132,252,0.5);margin-left:8px;">⏳ Enviando...</span>
-                    </div>
-                    <div class="comment-text">${escapeHtml(tempComment.content)}</div>
-                    <div class="comment-meta">
-                        <button class="btn-like-comment" data-comment-id="${tempComment.id}">
-                            <i class="fas fa-heart"></i> <span class="like-count">0</span>
-                        </button>
-                        <button class="btn-reply-comment" data-comment-id="${tempComment.id}">
-                            <i class="fas fa-reply"></i> Responder
-                        </button>
-                    </div>
-                    <div class="replies" id="replies-${tempComment.id}"></div>
-                    <div class="reply-input-container" id="reply-input-${tempComment.id}" style="display:none;">
-                        <input type="text" class="reply-input" id="replyInput-${tempComment.id}" placeholder="Escribe una respuesta..." maxlength="500" />
-                        <button class="reply-send-btn" data-comment-id="${tempComment.id}">Enviar</button>
-                    </div>
-                </div>
-            `;
-            commentsList.insertBefore(div, commentsList.firstChild);
-            console.log('✅ Comentario temporal añadido manualmente');
-        }
-    }
-    
-    // 🔥 2. ACTUALIZAR CONTADOR LOCAL
-    const currentTotal = getTotalCommentsCount(currentStoryId);
-    updateCommentCount(currentTotal + 1);
-    
-    // 🔥 3. ACTUALIZAR CACHÉ LOCAL
-    addCommentToCache(currentStoryId, tempComment);
-    
-    // 🔥 4. ACTUALIZAR DATOS LOCALES
-    if (currentStoryData) {
-        if (!currentStoryData.comments) currentStoryData.comments = [];
-        currentStoryData.comments.unshift(tempComment);
-    }
-    
-    if (currentStoriesList && currentStoriesList.length > 0) {
-        const idx = currentStoriesList.findIndex(s => s.id === currentStoryId);
-        if (idx !== -1 && currentStoriesList[idx]) {
-            if (!currentStoriesList[idx].comments) currentStoriesList[idx].comments = [];
-            currentStoriesList[idx].comments.unshift(tempComment);
-        }
-    }
-
     try {
-        // 🔥 5. ENVIAR AL SERVIDOR
         const res = await fetch(`${API_URL}/api/stories/${currentStoryId}/comments`, {
             method: 'POST',
             headers: {
@@ -588,105 +431,36 @@ async function handleSendComment() {
         const data = await res.json();
 
         if (res.ok) {
-            // 🔥 6. REEMPLAZAR TEMPORAL POR REAL
-            const replaced = replaceTempComment(currentStoryId, tempComment.id, data);
-            if (!replaced) {
-                const tempElement = document.querySelector(`[data-temp-id="${tempComment.id}"]`);
-                if (tempElement) {
-                    tempElement.remove();
-                    addCommentToUI(data);
-                }
-            }
+            input.value = '';
             
-            // 🔥 7. ACTUALIZAR CACHÉ CON DATOS REALES
-            const cached = getCachedComments(currentStoryId);
-            if (cached) {
-                const idx = cached.findIndex(c => c.id === tempComment.id);
-                if (idx !== -1) {
-                    cached[idx] = data;
-                    commentsCache.set(currentStoryId, {
-                        comments: cached,
-                        timestamp: Date.now()
-                    });
-                }
-            }
+            // Actualizar contador
+            updateCommentCount(1);
             
-            // 🔥 8. ACTUALIZAR DATOS LOCALES CON DATOS REALES
-            if (currentStoryData && currentStoryData.comments) {
-                const idx = currentStoryData.comments.findIndex(c => c.id === tempComment.id);
-                if (idx !== -1) {
-                    currentStoryData.comments[idx] = data;
-                }
+            // Actualizar datos
+            if (currentStoryData) {
+                if (!currentStoryData.comments) currentStoryData.comments = [];
+                currentStoryData.comments.push(data);
             }
             
             if (currentStoriesList && currentStoriesList.length > 0) {
-                const storyIdx = currentStoriesList.findIndex(s => s.id === currentStoryId);
-                if (storyIdx !== -1 && currentStoriesList[storyIdx] && currentStoriesList[storyIdx].comments) {
-                    const idx = currentStoriesList[storyIdx].comments.findIndex(c => c.id === tempComment.id);
-                    if (idx !== -1) {
-                        currentStoriesList[storyIdx].comments[idx] = data;
-                    }
+                const idx = currentStoriesList.findIndex(s => s.id === currentStoryId);
+                if (idx !== -1 && currentStoriesList[idx]) {
+                    if (!currentStoriesList[idx].comments) currentStoriesList[idx].comments = [];
+                    currentStoriesList[idx].comments.push(data);
                 }
             }
+
+            // Añadir a la UI sin duplicar
+            addCommentToUI(data);
             
             showToast('💬 Comentario enviado');
         } else {
-            // 🔥 9. REVERTIR EN CASO DE ERROR DEL SERVIDOR
-            const tempElement = document.querySelector(`[data-temp-id="${tempComment.id}"]`);
-            if (tempElement) tempElement.remove();
-            
-            const cached = getCachedComments(currentStoryId);
-            if (cached) {
-                const idx = cached.findIndex(c => c.id === tempComment.id);
-                if (idx !== -1) cached.splice(idx, 1);
-            }
-            
-            if (currentStoryData && currentStoryData.comments) {
-                currentStoryData.comments = currentStoryData.comments.filter(c => c.id !== tempComment.id);
-            }
-            
-            if (currentStoriesList && currentStoriesList.length > 0) {
-                const storyIdx = currentStoriesList.findIndex(s => s.id === currentStoryId);
-                if (storyIdx !== -1 && currentStoriesList[storyIdx] && currentStoriesList[storyIdx].comments) {
-                    currentStoriesList[storyIdx].comments = currentStoriesList[storyIdx].comments.filter(c => c.id !== tempComment.id);
-                }
-            }
-            
-            const total = getTotalCommentsCount(currentStoryId);
-            updateCommentCount(total);
-            
             showToast(data.error || 'Error al enviar comentario', true);
         }
     } catch (error) {
-        console.error('❌ Error enviando comentario:', error);
-        
-        // 🔥 10. REVERTIR EN CASO DE ERROR DE RED
-        const tempElement = document.querySelector(`[data-temp-id="${tempComment.id}"]`);
-        if (tempElement) tempElement.remove();
-        
-        const cached = getCachedComments(currentStoryId);
-        if (cached) {
-            const idx = cached.findIndex(c => c.id === tempComment.id);
-            if (idx !== -1) cached.splice(idx, 1);
-        }
-        
-        if (currentStoryData && currentStoryData.comments) {
-            currentStoryData.comments = currentStoryData.comments.filter(c => c.id !== tempComment.id);
-        }
-        
-        if (currentStoriesList && currentStoriesList.length > 0) {
-            const storyIdx = currentStoriesList.findIndex(s => s.id === currentStoryId);
-            if (storyIdx !== -1 && currentStoriesList[storyIdx] && currentStoriesList[storyIdx].comments) {
-                currentStoriesList[storyIdx].comments = currentStoriesList[storyIdx].comments.filter(c => c.id !== tempComment.id);
-            }
-        }
-        
-        const total = getTotalCommentsCount(currentStoryId);
-        updateCommentCount(total);
-        
+        console.error('Error enviando comentario:', error);
         showToast('Error al enviar comentario', true);
     } finally {
-        isCommenting = false;
         input.disabled = false;
         if (sendBtn) {
             sendBtn.disabled = false;
@@ -697,18 +471,201 @@ async function handleSendComment() {
 }
 
 // ============================================================
-// ACTUALIZAR CONTADOR DE COMENTARIOS
+// 🔥 ENVIAR RESPUESTA - CORREGIDO (SIN DUPLICADOS)
 // ============================================================
 
-function updateCommentCount(total) {
+async function handleSendReply(storyId, commentId) {
+    const wrapper = document.getElementById(`reply-input-${commentId}`);
+    if (!wrapper) return;
+
+    const input = wrapper.querySelector('.reply-input');
+    if (!input) return;
+
+    const content = input.value.trim();
+    if (!content) {
+        showToast('Escribe una respuesta', true);
+        return;
+    }
+
+    const token = getToken();
+    if (!token) {
+        showToast('Inicia sesión para responder', true);
+        return;
+    }
+
+    input.disabled = true;
+    const sendBtn = wrapper.querySelector('.reply-send-btn');
+    if (sendBtn) {
+        sendBtn.disabled = true;
+        sendBtn.textContent = 'Enviando...';
+    }
+
+    try {
+        const res = await fetch(`${API_URL}/api/stories/${storyId}/comments/${commentId}/replies`, {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ content })
+        });
+
+        const data = await res.json();
+
+        if (res.ok) {
+            input.value = '';
+            wrapper.style.display = 'none';
+
+            // Actualizar contador
+            updateCommentCount(1);
+
+            // Añadir respuesta a la UI sin duplicar
+            addReplyToUI(commentId, data);
+            
+            showToast('💬 Respuesta enviada');
+        } else {
+            showToast(data.error || 'Error al enviar respuesta', true);
+        }
+    } catch (error) {
+        console.error('Error enviando respuesta:', error);
+        showToast('Error al enviar respuesta', true);
+    } finally {
+        input.disabled = false;
+        if (sendBtn) {
+            sendBtn.disabled = false;
+            sendBtn.textContent = 'Enviar';
+        }
+        input.focus();
+    }
+}
+
+// ============================================================
+// 🔥 AÑADIR RESPUESTA A LA UI (SIN DUPLICAR)
+// ============================================================
+
+function addReplyToUI(parentCommentId, reply) {
+    const repliesContainer = document.getElementById(`replies-${parentCommentId}`);
+    if (!repliesContainer) return;
+
+    // Verificar si la respuesta ya existe
+    const existingReply = repliesContainer.querySelector(`[data-comment-id="${reply.id}"]`);
+    if (existingReply) {
+        console.log('⚠️ Respuesta ya existe en la UI, omitiendo duplicado');
+        return;
+    }
+
+    const currentUser = getCurrentUser();
+    const userAvatar = currentUser?.avatar || getAvatar(currentUser?.fullName || 'U');
+
+    const replyHtml = `
+        <div class="comment-item" data-comment-id="${reply.id}">
+            <img class="avatar" src="${reply.avatar || userAvatar}" alt="${reply.fullName}" />
+            <div class="comment-body">
+                <div class="comment-user">
+                    ${escapeHtml(reply.fullName)}
+                    <span class="handle">@${reply.username || 'usuario'}</span>
+                    <span class="time">${formatDate(reply.createdAt)}</span>
+                </div>
+                <div class="comment-text">${escapeHtml(reply.content)}</div>
+                <div class="comment-meta">
+                    <button class="btn-like-comment" data-comment-id="${reply.id}">
+                        <i class="fas fa-heart"></i> <span class="like-count">0</span>
+                    </button>
+                    <button class="btn-reply-comment" data-comment-id="${reply.id}">
+                        <i class="fas fa-reply"></i> Responder
+                    </button>
+                </div>
+                <div class="replies" id="replies-${reply.id}"></div>
+                <div class="reply-input-container" id="reply-input-${reply.id}" style="display:none;">
+                    <input type="text" class="reply-input" placeholder="Escribe una respuesta..." maxlength="500" />
+                    <button class="reply-send-btn" data-comment-id="${reply.id}">Enviar</button>
+                </div>
+            </div>
+        </div>
+    `;
+
+    const tempDiv = document.createElement('div');
+    tempDiv.innerHTML = replyHtml;
+    const replyElement = tempDiv.firstElementChild;
+    
+    repliesContainer.appendChild(replyElement);
+    
+    console.log('✅ Respuesta añadida a la UI');
+}
+
+// ============================================================
+// 🔥 AÑADIR COMENTARIO A LA UI (SIN DUPLICAR)
+// ============================================================
+
+function addCommentToUI(comment) {
+    const commentsList = document.getElementById('commentsList');
+    if (!commentsList) return;
+
+    const existingComment = commentsList.querySelector(`[data-comment-id="${comment.id}"]`);
+    if (existingComment) {
+        console.log('⚠️ Comentario ya existe en la UI, omitiendo duplicado');
+        return;
+    }
+
+    const noComments = commentsList.querySelector('.no-comments');
+    if (noComments) {
+        noComments.remove();
+    }
+
+    const currentUser = getCurrentUser();
+    const userAvatar = currentUser?.avatar || getAvatar(currentUser?.fullName || 'U');
+
+    const commentHtml = `
+        <div class="comment-item" data-comment-id="${comment.id}">
+            <img class="avatar" src="${comment.avatar || userAvatar}" alt="${comment.fullName}" />
+            <div class="comment-body">
+                <div class="comment-user">
+                    ${escapeHtml(comment.fullName)}
+                    <span class="handle">@${comment.username || 'usuario'}</span>
+                    <span class="time">${formatDate(comment.createdAt)}</span>
+                </div>
+                <div class="comment-text">${escapeHtml(comment.content)}</div>
+                <div class="comment-meta">
+                    <button class="btn-like-comment" data-comment-id="${comment.id}">
+                        <i class="fas fa-heart"></i> <span class="like-count">0</span>
+                    </button>
+                    <button class="btn-reply-comment" data-comment-id="${comment.id}">
+                        <i class="fas fa-reply"></i> Responder
+                    </button>
+                </div>
+                <div class="replies" id="replies-${comment.id}"></div>
+                <div class="reply-input-container" id="reply-input-${comment.id}" style="display:none;">
+                    <input type="text" class="reply-input" placeholder="Escribe una respuesta..." maxlength="500" />
+                    <button class="reply-send-btn" data-comment-id="${comment.id}">Enviar</button>
+                </div>
+            </div>
+        </div>
+    `;
+
+    const tempDiv = document.createElement('div');
+    tempDiv.innerHTML = commentHtml;
+    const commentElement = tempDiv.firstElementChild;
+    
+    commentsList.insertBefore(commentElement, commentsList.firstChild);
+    
+    console.log('✅ Comentario añadido a la UI');
+}
+
+// ============================================================
+// 🔥 ACTUALIZAR CONTADOR DE COMENTARIOS
+// ============================================================
+
+function updateCommentCount(increment) {
     const commentsEl = document.getElementById('modalComments');
     if (commentsEl) {
-        commentsEl.textContent = formatNumber(total);
+        const current = parseInt(commentsEl.textContent.replace(/[^0-9]/g, '')) || 0;
+        commentsEl.textContent = formatNumber(current + increment);
     }
     
     const commentsCountEl = document.getElementById('commentsCount');
     if (commentsCountEl) {
-        commentsCountEl.textContent = formatNumber(total);
+        const current = parseInt(commentsCountEl.textContent.replace(/[^0-9]/g, '')) || 0;
+        commentsCountEl.textContent = formatNumber(current + increment);
     }
 }
 
@@ -781,7 +738,7 @@ function formatVTTTime(seconds) {
 }
 
 // ============================================================
-// ALTERNAR TRADUCCIÓN
+// 🔥 ALTERNAR TRADUCCIÓN/ORIGINAL
 // ============================================================
 
 async function toggleTranslation() {
@@ -806,6 +763,7 @@ async function toggleTranslation() {
         return;
     }
     
+    // Si ya está traducida, mostrar original
     if (currentStoryData.translated && currentStoryData._originalTextContent) {
         console.log('📝 Mostrando original');
         
@@ -838,6 +796,7 @@ async function toggleTranslation() {
         return;
     }
 
+    // Verificar caché en memoria
     const cacheKey = `${currentStoryId}_${userLanguage}`;
     if (translationCache[cacheKey] && translationCache[cacheKey].translated) {
         console.log('📦 Usando traducción desde caché');
@@ -881,6 +840,7 @@ async function toggleTranslation() {
         return;
     }
 
+    // Si no está en caché, traducir
     if (translateBtn) {
         translateBtn.innerHTML = '<i class="fas fa-spinner fa-pulse"></i> Traduciendo...';
         translateBtn.disabled = true;
@@ -898,6 +858,8 @@ async function toggleTranslation() {
         }
 
         console.log('🌐 Traduciendo texto:', textToTranslate.substring(0, 50) + '...');
+        console.log(`🌐 Al idioma: ${userLanguage}`);
+        console.log(`📝 Idioma del contenido: ${contentLanguage}`);
 
         const res = await fetch(`${API_URL}/api/vyin/translate`, {
             method: 'POST',
@@ -983,7 +945,7 @@ async function toggleTranslation() {
 }
 
 // ============================================================
-// ACTUALIZAR SOLO textContent
+// 🔥 ACTUALIZAR SOLO textContent
 // ============================================================
 
 function updateTextContentOnly(updatedData) {
@@ -1008,7 +970,7 @@ function updateTextContentOnly(updatedData) {
 }
 
 // ============================================================
-// 🔥 CARGAR DATOS DE LA HISTORIA
+// CARGAR DATOS DE LA HISTORIA
 // ============================================================
 
 async function loadStoryData(storyId, isNavigation = false) {
@@ -1030,10 +992,7 @@ async function loadStoryData(storyId, isNavigation = false) {
                 updateModalUI(currentStoryData);
                 updateProgress();
                 const highlightCommentId = window._activityCommentId || null;
-                await initComments(storyId, 'commentsList', highlightCommentId, true);
-                isFirstLoad = false;
-                const totalComments = getTotalCommentsCount(storyId);
-                updateCommentCount(totalComments);
+                await initComments(storyId, 'commentsList', highlightCommentId);
                 return;
             }
             if (currentStoriesList.length > 0) {
@@ -1043,10 +1002,7 @@ async function loadStoryData(storyId, isNavigation = false) {
                     updateModalUI(currentStoryData);
                     updateProgress();
                     const highlightCommentId = window._activityCommentId || null;
-                    await initComments(storyId, 'commentsList', highlightCommentId, true);
-                    isFirstLoad = false;
-                    const totalComments = getTotalCommentsCount(storyId);
-                    updateCommentCount(totalComments);
+                    await initComments(storyId, 'commentsList', highlightCommentId);
                     return;
                 }
             }
@@ -1071,6 +1027,7 @@ async function loadStoryData(storyId, isNavigation = false) {
         currentStoryData = story;
         currentStoryId = story.id;
 
+        // Verificar si hay traducción en caché
         const cacheKey = `${storyId}_${userLanguage}`;
         if (translationCache[cacheKey] && !story.translated) {
             console.log('📦 Aplicando traducción desde caché');
@@ -1096,12 +1053,7 @@ async function loadStoryData(storyId, isNavigation = false) {
         updateProgress();
         
         const highlightCommentId = window._activityCommentId || null;
-        
-        await initComments(storyId, 'commentsList', highlightCommentId, true);
-        isFirstLoad = false;
-        
-        const totalComments = getTotalCommentsCount(storyId);
-        updateCommentCount(totalComments);
+        await initComments(storyId, 'commentsList', highlightCommentId);
         
         await registerView(storyId);
 
@@ -1131,6 +1083,7 @@ function updateModalUI(story) {
     document.getElementById('modalUserHandle').textContent = `@${user.username || 'usuario'}`;
     window._modalUserId = user.id;
 
+    // Botón de traducción - siempre visible
     const contentLanguage = story.language || story.originalLanguage || 'es';
     const isDifferentLanguage = contentLanguage !== userLanguage;
     const isTranslated = story.translated || false;
@@ -1418,22 +1371,6 @@ window.openProfileFromModal = function() {
             });
         }, 50);
     }
-};
-
-window.goToProfileUser = function(userId) {
-    if (!userId) return;
-    closeStoryModal();
-    setTimeout(() => {
-        import('./profile-modal.js').then(({ openProfileModal }) => {
-            openProfileModal(userId);
-        }).catch(() => {
-            if (typeof window.openProfileModal === 'function') {
-                window.openProfileModal(userId);
-            } else {
-                showToast('Error al abrir perfil', true);
-            }
-        });
-    }, 100);
 };
 
 export { loadStoryData, handleModalLike };
