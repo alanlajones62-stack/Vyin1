@@ -1,6 +1,6 @@
 // ============================================================
 // story-modal.js - Modal para ver historias con navegación 
-// (VERSIÓN CORREGIDA - SIN DUPLICADOS Y CON CONTEO RECURSIVO)
+// (VERSIÓN CORREGIDA - CON BOTÓN ELIMINAR)
 // ============================================================
 
 import {
@@ -235,8 +235,8 @@ function createModalHTML() {
                             <button class="btn-share-modal" id="modalShareBtn">
                                 <i class="fas fa-share-alt"></i>
                             </button>
-                            <button class="btn-profile-modal" id="modalProfileBtn">
-                                <i class="fas fa-user"></i> Perfil
+                            <button class="btn-delete-story-modal" id="modalDeleteBtn" style="display:none;">
+                                <i class="fas fa-trash"></i> Eliminar
                             </button>
                             <button class="btn-translate-modal" id="modalTranslateBtn" style="display:none;">
                                 <i class="fas fa-language"></i> Traducir
@@ -321,25 +321,10 @@ function setupModalEvents() {
         }
     });
 
-    document.getElementById('modalProfileBtn')?.addEventListener('click', () => {
-        const userId = window._modalUserId;
-        if (userId) {
-            closeStoryModal();
-            window._fromProfileModal = false;
-            window._profileContextUserId = null;
-            
-            setTimeout(() => {
-                import('./profile-modal.js').then(({ openProfileModal }) => {
-                    openProfileModal(userId);
-                }).catch(() => {
-                    if (typeof window.openProfileModal === 'function') {
-                        window.openProfileModal(userId);
-                    } else {
-                        showToast('Error al abrir perfil', true);
-                    }
-                });
-            }, 50);
-        }
+    // 🔥 BOTÓN ELIMINAR HISTORIA
+    document.getElementById('modalDeleteBtn')?.addEventListener('click', async () => {
+        if (!currentStoryId) return;
+        await handleDeleteStory();
     });
 
     // BOTÓN DE TRADUCCIÓN
@@ -375,6 +360,72 @@ function setupModalEvents() {
             }
         }
     });
+}
+
+// ============================================================
+// 🔥 ELIMINAR HISTORIA
+// ============================================================
+
+async function handleDeleteStory() {
+    if (!currentStoryId) return;
+
+    const token = getToken();
+    if (!token) {
+        showToast('Inicia sesión para eliminar', true);
+        return;
+    }
+
+    const currentUser = getCurrentUser();
+    if (!currentUser || currentUser.id !== currentStoryData?.userId) {
+        showToast('No tienes permiso para eliminar esta historia', true);
+        return;
+    }
+
+    if (!confirm('¿Estás seguro de que quieres eliminar esta historia? Esta acción no se puede deshacer.')) {
+        return;
+    }
+
+    try {
+        const res = await fetch(`${API_URL}/api/stories/${currentStoryId}`, {
+            method: 'DELETE',
+            headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json'
+            }
+        });
+
+        if (res.ok) {
+            showToast('🗑️ Historia eliminada');
+            
+            // Eliminar la historia de la lista actual
+            if (currentStoriesList && currentStoriesList.length > 0) {
+                const index = currentStoriesList.findIndex(s => s.id === currentStoryId);
+                if (index !== -1) {
+                    currentStoriesList.splice(index, 1);
+                    
+                    // Si hay más historias, navegar a la siguiente
+                    if (currentStoriesList.length > 0) {
+                        const nextIndex = Math.min(index, currentStoriesList.length - 1);
+                        const nextStory = currentStoriesList[nextIndex];
+                        if (nextStory) {
+                            currentStoryIndex = nextIndex;
+                            await loadStoryData(nextStory.id, true);
+                            return;
+                        }
+                    }
+                }
+            }
+            
+            // Si no hay más historias, cerrar el modal
+            closeStoryModal();
+        } else {
+            const data = await res.json();
+            showToast(data.error || 'Error al eliminar historia', true);
+        }
+    } catch (error) {
+        console.error('Error eliminando historia:', error);
+        showToast('Error al eliminar historia', true);
+    }
 }
 
 // ============================================================
@@ -944,6 +995,8 @@ async function loadStoryData(storyId, isNavigation = false) {
 
 function updateModalUI(story) {
     const user = story.userData || {};
+    const currentUser = getCurrentUser();
+    const isOwner = currentUser && currentUser.id === story.userId;
 
     const avatar = document.getElementById('modalAvatar');
     if (avatar) {
@@ -956,6 +1009,16 @@ function updateModalUI(story) {
     document.getElementById('modalUserName').textContent = user.fullName || 'Usuario';
     document.getElementById('modalUserHandle').textContent = `@${user.username || 'usuario'}`;
     window._modalUserId = user.id;
+
+    // 🔥 MOSTRAR/OCULTAR BOTÓN ELIMINAR SEGÚN PROPIETARIO
+    const deleteBtn = document.getElementById('modalDeleteBtn');
+    if (deleteBtn) {
+        if (isOwner) {
+            deleteBtn.style.display = 'inline-flex';
+        } else {
+            deleteBtn.style.display = 'none';
+        }
+    }
 
     // Botón de traducción - siempre visible
     const contentLanguage = story.language || story.originalLanguage || 'es';
@@ -1088,7 +1151,6 @@ function updateModalUI(story) {
     document.getElementById('modalComments').textContent = formatNumber(comments);
     document.getElementById('commentsCount').textContent = formatNumber(comments);
 
-    const currentUser = getCurrentUser();
     const isLiked = story.likes?.includes(currentUser?.id) || false;
     const likeBtn = document.getElementById('modalLikeBtn');
     if (likeBtn) {

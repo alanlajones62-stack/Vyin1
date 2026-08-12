@@ -3,6 +3,7 @@
 // CON ESTADO CORRECTO DE OCULTAR/MOSTRAR RESPUESTAS
 // Y FUNCIONES DE CACHÉ PARA EVITAR DUPLICADOS
 // VERSIÓN CORREGIDA - CON CONTEO RECURSIVO DE RESPUESTAS
+// Y ELIMINACIÓN POR DUEÑO DE HISTORIA
 // ============================================================
 
 import { getToken, getCurrentUser, showToast, getAvatar, formatDate, escapeHtml } from './auth.js';
@@ -567,12 +568,17 @@ export function renderComments(comments, storyId, currentUserId, container, high
         return;
     }
 
+    // 🔥 OBTENER EL DUEÑO DE LA HISTORIA DESDE story-modal
+    const storyOwnerId = window._modalUserId || window._storyOwnerId || null;
+
     let html = '';
     comments.forEach(comment => {
         const cachedLikes = commentLikes.get(comment.id);
         const isLiked = cachedLikes ? cachedLikes.has(currentUserId) : (comment.likes?.includes(currentUserId) || false);
         const likesCount = cachedLikes ? cachedLikes.size : (comment.likes?.length || 0);
         const isOwn = comment.userId === currentUserId;
+        // 🔥 EL DUEÑO DE LA HISTORIA PUEDE ELIMINAR CUALQUIER COMENTARIO
+        const canDelete = isOwn || (storyOwnerId && storyOwnerId === currentUserId);
         const hasReplies = comment.replies && comment.replies.length > 0;
         // 🔥 CONTAR TODAS LAS RESPUESTAS RECURSIVAMENTE
         const totalReplyCount = countAllReplies(comment);
@@ -590,6 +596,8 @@ export function renderComments(comments, storyId, currentUserId, container, high
                         ${escapeHtml(comment.fullName)}
                         <span class="handle">@${escapeHtml(comment.username)}</span>
                         <span class="time">${formatDate(comment.createdAt)}</span>
+                        ${isOwn ? '<span class="badge-owner" style="font-size:9px;color:rgba(52,211,153,0.6);margin-left:6px;">Tuyo</span>' : ''}
+                        ${!isOwn && storyOwnerId && storyOwnerId === currentUserId ? '<span class="badge-owner" style="font-size:9px;color:rgba(192,132,252,0.6);margin-left:6px;">Tu historia</span>' : ''}
                     </div>
                     <div class="comment-text" style="font-size:16px; line-height:1.5; color:rgba(255,255,255,0.85);">${escapeHtml(comment.content)}</div>
                     <div class="comment-meta">
@@ -601,7 +609,7 @@ export function renderComments(comments, storyId, currentUserId, container, high
                         <button class="btn-reply-comment" onclick="window.toggleReplyInput('${storyId}', '${comment.id}')">
                             <i class="fas fa-reply"></i> Responder
                         </button>
-                        ${isOwn ? `
+                        ${canDelete ? `
                             <button class="btn-delete-comment" onclick="window.handleCommentDelete('${storyId}', '${comment.id}')">
                                 <i class="fas fa-trash"></i>
                             </button>
@@ -616,7 +624,7 @@ export function renderComments(comments, storyId, currentUserId, container, high
                         </button>
                     </div>
                     
-                    ${hasReplies ? renderFlatReplies(comment.replies, storyId, currentUserId, comment.id, comments, highlightCommentId, isExpanded) : ''}
+                    ${hasReplies ? renderFlatReplies(comment.replies, storyId, currentUserId, comment.id, comments, highlightCommentId, isExpanded, storyOwnerId) : ''}
                     
                     ${hasReplies ? `
                         <div class="show-replies-btn" onclick="window.toggleRepliesVisibility('${comment.id}')" style="font-size:12px; color:rgba(192,132,252,0.4); cursor:pointer; margin-top:4px;">
@@ -636,7 +644,7 @@ export function renderComments(comments, storyId, currentUserId, container, high
 // RENDER RESPUESTAS - TODAS EN EL MISMO NIVEL (APLANADAS)
 // ============================================================
 
-function renderFlatReplies(replies, storyId, currentUserId, parentCommentId, allComments, highlightCommentId = null, isExpanded = false) {
+function renderFlatReplies(replies, storyId, currentUserId, parentCommentId, allComments, highlightCommentId = null, isExpanded = false, storyOwnerId = null) {
     if (!replies || replies.length === 0) return '';
 
     const flatReplies = flattenReplies(replies, allComments, parentCommentId);
@@ -653,6 +661,8 @@ function renderFlatReplies(replies, storyId, currentUserId, parentCommentId, all
         const isLiked = cachedLikes ? cachedLikes.has(currentUserId) : (reply.likes?.includes(currentUserId) || false);
         const likesCount = cachedLikes ? cachedLikes.size : (reply.likes?.length || 0);
         const isOwn = reply.userId === currentUserId;
+        // 🔥 EL DUEÑO DE LA HISTORIA PUEDE ELIMINAR CUALQUIER RESPUESTA
+        const canDelete = isOwn || (storyOwnerId && storyOwnerId === currentUserId);
         const isHighlighted = highlightCommentId && reply.id === highlightCommentId;
         
         const context = getReplyContext(reply, currentUserId, reply._parentId || parentCommentId, allComments);
@@ -679,6 +689,8 @@ function renderFlatReplies(replies, storyId, currentUserId, parentCommentId, all
                         <span style="font-weight:600;color:#fff;">${escapeHtml(reply.fullName)}</span>
                         <span style="font-size:11px;color:rgba(255,255,255,0.2);">@${escapeHtml(reply.username)}</span>
                         <span style="font-size:10px;color:rgba(255,255,255,0.15);">${formatDate(reply.createdAt)}</span>
+                        ${isOwn ? '<span style="font-size:9px;color:rgba(52,211,153,0.5);margin-left:4px;">Tuyo</span>' : ''}
+                        ${!isOwn && storyOwnerId && storyOwnerId === currentUserId ? '<span style="font-size:9px;color:rgba(192,132,252,0.5);margin-left:4px;">Tu historia</span>' : ''}
                     </div>
                     ${contextHtml}
                     <div class="comment-text" style="font-size:15px; line-height:1.5; color:rgba(255,255,255,0.85);">${escapeHtml(reply.content)}</div>
@@ -693,7 +705,7 @@ function renderFlatReplies(replies, storyId, currentUserId, parentCommentId, all
                                 style="background:transparent;border:none;color:rgba(255,255,255,0.2);font-size:11px;cursor:pointer;display:flex;align-items:center;gap:4px;padding:2px 6px;border-radius:4px;">
                             <i class="fas fa-reply" style="font-size:9px;"></i> Responder
                         </button>
-                        ${isOwn ? `
+                        ${canDelete ? `
                             <button class="btn-delete-comment" onclick="window.handleCommentDelete('${storyId}', '${reply.id}', '${reply._parentId || parentCommentId}')"
                                     style="background:transparent;border:none;color:rgba(255,107,107,0.3);font-size:11px;cursor:pointer;display:flex;align-items:center;gap:4px;padding:2px 6px;border-radius:4px;">
                                 <i class="fas fa-trash" style="font-size:9px;"></i>
