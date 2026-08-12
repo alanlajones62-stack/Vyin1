@@ -8,8 +8,6 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <!-- 🔥 CRYPTOJS PARA CIFRADO LOCAL -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
     <style>
         /* ============================================================
            CHAT MOBILE - OPTIMIZADO (SIN RE-RENDERIZADOS)
@@ -856,7 +854,7 @@
 
     <script type="module">
         // ============================================================
-        // CHAT MOBILE - VERSIÓN SIMPLIFICADA (SIN CIFRADO LOCAL PARA EVITAR ERRORES)
+        // CHAT MOBILE - OPTIMIZADO (SIN PARPADEOS AL ENVIAR MENSAJES)
         // ============================================================
 
         import { getToken, getCurrentUser, showToast as authShowToast } from './auth.js';
@@ -1166,7 +1164,7 @@
         }
 
         // ============================================================
-        // RENDERIZAR MENSAJES
+        // 📝 RENDERIZAR MENSAJES (SOLO PARA CARGA INICIAL)
         // ============================================================
         function renderMessages() {
             if (!messagesContainerEl) return;
@@ -1227,6 +1225,101 @@
                     messagesContainerEl.scrollTop = ratio * newScrollHeight;
                 }
             });
+        }
+
+        // ============================================================
+        // ➕ AÑADIR UN SOLO MENSAJE SIN RE-RENDERIZAR TODO
+        // ============================================================
+        function appendSingleMessage(msg) {
+            if (!messagesContainerEl) return;
+
+            // Si no hay mensajes, renderizar todo
+            if (messagesContainerEl.querySelector('.empty-state-chat')) {
+                renderMessages();
+                return;
+            }
+
+            // Obtener la última fecha actual
+            let lastDate = '';
+            const existingDateDividers = messagesContainerEl.querySelectorAll('.date-divider');
+            if (existingDateDividers.length > 0) {
+                const lastDivider = existingDateDividers[existingDateDividers.length - 1];
+                if (lastDivider) {
+                    lastDate = lastDivider.textContent.trim();
+                }
+            }
+
+            const msgDate = getDateDivider(msg.timestamp);
+            let html = '';
+            
+            // Añadir divisor de fecha si es necesario
+            if (msgDate !== lastDate) {
+                html += `
+                    <div class="date-divider"><span>${msgDate}</span></div>
+                `;
+            }
+
+            const messageId = msg.id || `temp_${Date.now()}_${Math.random()}`;
+            html += `
+                <div class="message ${msg.isOwn ? 'message-own' : 'message-other'}" data-message-id="${messageId}" style="animation: messageIn 0.3s ease;">
+                    <div class="message-bubble">
+                        <div class="message-content">${escapeHtml(msg.content)}</div>
+                        <div class="message-time">
+                            ${formatTime(msg.timestamp)}
+                            ${msg.isOwn ? `<span class="message-read">${msg.read ? '✓✓' : '✓'}</span>` : ''}
+                            ${msg.isOwn ? `<i class="fas fa-trash-alt delete-message" onclick="event.stopPropagation(); window.deleteMessage('${messageId}')"></i>` : ''}
+                        </div>
+                    </div>
+                </div>
+            `;
+
+            // Insertar al final del contenedor
+            messagesContainerEl.insertAdjacentHTML('beforeend', html);
+            
+            // Hacer scroll al final
+            requestAnimationFrame(() => {
+                messagesContainerEl.scrollTop = messagesContainerEl.scrollHeight;
+            });
+        }
+
+        // ============================================================
+        // 🔄 ACTUALIZAR UN SOLO MENSAJE (temp → real)
+        // ============================================================
+        function updateSingleMessage(tempId, realMessage) {
+            const msgEl = document.querySelector(`.message[data-message-id="${tempId}"]`);
+            if (msgEl) {
+                const contentEl = msgEl.querySelector('.message-content');
+                const timeEl = msgEl.querySelector('.message-time');
+                if (contentEl) contentEl.textContent = realMessage.content;
+                if (timeEl) {
+                    timeEl.innerHTML = `
+                        ${formatTime(realMessage.timestamp)}
+                        <span class="message-read">${realMessage.read ? '✓✓' : '✓'}</span>
+                        <i class="fas fa-trash-alt delete-message" onclick="event.stopPropagation(); window.deleteMessage('${realMessage.id}')"></i>
+                    `;
+                }
+                msgEl.dataset.messageId = realMessage.id;
+            }
+        }
+
+        // ============================================================
+        // 🗑️ ELIMINAR UN SOLO MENSAJE
+        // ============================================================
+        function removeSingleMessage(messageId) {
+            const msgEl = document.querySelector(`.message[data-message-id="${messageId}"]`);
+            if (msgEl) {
+                msgEl.remove();
+                // Si no quedan mensajes, mostrar empty state
+                if (messagesContainerEl.querySelectorAll('.message').length === 0) {
+                    messagesContainerEl.innerHTML = `
+                        <div class="empty-state-chat">
+                            <i class="fas fa-comment-dots"></i>
+                            <h3>No hay mensajes</h3>
+                            <p>Envía el primer mensaje</p>
+                        </div>
+                    `;
+                }
+            }
         }
 
         function markMessagesAsRead(userId) {
@@ -1354,7 +1447,7 @@
         }
 
         // ============================================================
-        // ENVIAR MENSAJE
+        // ENVIAR MENSAJE - CON RENDERIZADO OPTIMIZADO (SIN PARPADEOS)
         // ============================================================
         window.sendMessage = async function() {
             if (!messageInput || !messageInput.value.trim() || !currentConversation) return;
@@ -1375,8 +1468,9 @@
                 read: false
             };
             messages.push(newMsg);
-            renderMessages();
-            scrollToBottom();
+            
+            // 🔥 SOLO AÑADIR EL MENSAJE NUEVO (NO RE-RENDERIZAR TODO)
+            appendSingleMessage(newMsg);
 
             try {
                 const res = await fetch(`${API_URL}/api/chats/messages/${currentConversation.id}`, {
@@ -1389,31 +1483,19 @@
                     const index = messages.findIndex(m => m.id === tempId);
                     if (index !== -1) {
                         messages[index] = realMessage;
-                        // Actualizar solo ese mensaje
-                        const msgEl = document.querySelector(`.message[data-message-id="${tempId}"]`);
-                        if (msgEl) {
-                            const contentEl = msgEl.querySelector('.message-content');
-                            const timeEl = msgEl.querySelector('.message-time');
-                            if (contentEl) contentEl.textContent = content;
-                            if (timeEl) {
-                                timeEl.innerHTML = `
-                                    ${formatTime(realMessage.timestamp)}
-                                    <span class="message-read">${realMessage.read ? '✓✓' : '✓'}</span>
-                                    <i class="fas fa-trash-alt delete-message" onclick="event.stopPropagation(); window.deleteMessage('${realMessage.id}')"></i>
-                                `;
-                            }
-                            msgEl.dataset.messageId = realMessage.id;
-                        }
+                        // 🔥 ACTUALIZAR SOLO ESE MENSAJE
+                        updateSingleMessage(tempId, realMessage);
                     }
                     loadConversations();
                 } else {
                     messages = messages.filter(m => m.id !== tempId);
-                    renderMessages();
+                    // 🔥 ELIMINAR SOLO ESE MENSAJE
+                    removeSingleMessage(tempId);
                     showToast('❌ Error al enviar mensaje', true);
                 }
             } catch (error) {
                 messages = messages.filter(m => m.id !== tempId);
-                renderMessages();
+                removeSingleMessage(tempId);
                 showToast('❌ Error de conexión', true);
             }
             if (sendBtn) sendBtn.disabled = false;
@@ -1432,7 +1514,7 @@
                 });
                 if (res.ok) {
                     messages = messages.filter(m => m.id !== messageId);
-                    renderMessages();
+                    removeSingleMessage(messageId);
                     loadConversations();
                     showToast('✅ Mensaje eliminado');
                 }
@@ -1490,9 +1572,10 @@
 
             socket.on('receive_message', (message) => {
                 if (currentConversation && message.from === currentConversation.id) {
-                    messages.push({ ...message, isOwn: false });
-                    renderMessages();
-                    scrollToBottom();
+                    const newMsg = { ...message, isOwn: false };
+                    messages.push(newMsg);
+                    // 🔥 AÑADIR SOLO EL MENSAJE NUEVO
+                    appendSingleMessage(newMsg);
                     markMessagesAsRead(currentConversation.id);
                 }
                 loadConversations();
@@ -1505,7 +1588,8 @@
                 const index = messages.findIndex(m => m.id === message.id);
                 if (index !== -1) {
                     messages[index] = message;
-                    renderMessages();
+                    // 🔥 ACTUALIZAR SOLO ESE MENSAJE
+                    updateSingleMessage(message.id, message);
                 }
             });
 
@@ -1539,7 +1623,7 @@
 
             socket.on('message_deleted', (data) => {
                 messages = messages.filter(m => m.id !== data.messageId);
-                renderMessages();
+                removeSingleMessage(data.messageId);
             });
 
             socket.on('conversations_update', () => {
@@ -1594,7 +1678,7 @@
                 }, 500);
             }
 
-            console.log('📱 Chat mobile inicializado');
+            console.log('📱 Chat mobile optimizado inicializado');
         }
 
         // Exponer funciones globales
