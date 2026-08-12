@@ -7,7 +7,7 @@ import { getToken, getCurrentUser, showToast } from './auth.js';
 const API_URL = window.location.origin;
 
 let isOpen = false;
-let isSubmitting = false; // 🔥 NUEVO: prevenir envíos múltiples
+let isSubmitting = false;
 
 // ============================================================
 // ABRIR CREADOR DE PUBLICIDAD
@@ -180,12 +180,12 @@ function setupEvents() {
         validateForm();
     });
 
-    // Validar formulario - Ahora solo requiere título y descripción
+    // Validar formulario
     function validateForm() {
         const title = titleInput?.value.trim() || '';
         const desc = descInput?.value.trim() || '';
         const isValid = title.length >= 3 && desc.length >= 3;
-        publishBtn.disabled = !isValid || isSubmitting; // 🔥 DESHABILITAR SI ESTÁ ENVIANDO
+        publishBtn.disabled = !isValid || isSubmitting;
         publishBtn.style.opacity = isValid && !isSubmitting ? '1' : '0.5';
     }
 
@@ -276,7 +276,7 @@ function setupEvents() {
 
     // Publicar
     publishBtn?.addEventListener('click', async () => {
-        if (isSubmitting) return; // 🔥 PREVENIR CLICS MÚLTIPLES
+        if (isSubmitting) return;
         await publishAd();
     });
 }
@@ -286,7 +286,7 @@ function setupEvents() {
 // ============================================================
 
 function resetForm() {
-    isSubmitting = false; // 🔥 RESETEAR ESTADO DE ENVÍO
+    isSubmitting = false;
     document.getElementById('adTitle').value = '';
     document.getElementById('adDescription').value = '';
     document.getElementById('adLink').value = '';
@@ -308,7 +308,6 @@ function resetForm() {
 // ============================================================
 
 async function publishAd() {
-    // 🔥 PREVENIR ENVÍOS MÚLTIPLES
     if (isSubmitting) return;
     
     const title = document.getElementById('adTitle')?.value.trim() || '';
@@ -331,7 +330,6 @@ async function publishAd() {
         return;
     }
 
-    // 🔥 MARCAR COMO ENVIANDO Y BLOQUEAR BOTÓN
     isSubmitting = true;
     publishBtn.disabled = true;
     publishBtn.innerHTML = '<i class="fas fa-spinner fa-pulse"></i> Enviando...';
@@ -363,7 +361,6 @@ async function publishAd() {
                     imageUrl = data.imageUrl;
                 } else {
                     showToast('Error subiendo imagen', true);
-                    // 🔥 DESBLOQUEAR EN CASO DE ERROR
                     isSubmitting = false;
                     publishBtn.disabled = false;
                     publishBtn.innerHTML = '<i class="fas fa-paper-plane"></i> Enviar publicidad';
@@ -417,18 +414,16 @@ async function publishAd() {
             `;
             statusMsg.style.display = 'block';
             
-            // 🔥 DESBLOQUEAR EN CASO DE ERROR
             isSubmitting = false;
             publishBtn.disabled = false;
             publishBtn.innerHTML = '<i class="fas fa-paper-plane"></i> Enviar publicidad';
             publishBtn.style.opacity = '1';
-            validateForm(); // Re-validar
+            validateForm();
         }
     } catch (error) {
         console.error('Error creando publicidad:', error);
         showToast('Error de conexión', true);
         
-        // 🔥 DESBLOQUEAR EN CASO DE ERROR
         isSubmitting = false;
         publishBtn.disabled = false;
         publishBtn.innerHTML = '<i class="fas fa-paper-plane"></i> Enviar publicidad';
@@ -443,7 +438,7 @@ async function publishAd() {
 
 export function closeAdCreator() {
     isOpen = false;
-    isSubmitting = false; // 🔥 RESETEAR ESTADO DE ENVÍO
+    isSubmitting = false;
     const overlay = document.getElementById('adCreatorOverlay');
     if (overlay) {
         overlay.classList.remove('active');

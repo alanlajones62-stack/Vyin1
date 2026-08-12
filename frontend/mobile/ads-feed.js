@@ -9,6 +9,87 @@ const API_URL = window.location.origin;
 
 let cachedAds = [];
 let isLoadingAds = false;
+let socket = null;
+
+// ============================================================
+// INICIALIZAR SOCKET
+// ============================================================
+
+export function initAdsSocket(socketInstance) {
+    socket = socketInstance;
+    
+    if (!socket) return;
+
+    // Escuchar eventos de publicidad
+    socket.on('ad_liked', (data) => {
+        console.log('📢 Like en publicidad:', data);
+        updateAdStats(data.adId, {
+            likes: data.likes,
+            likesCount: data.likesCount
+        });
+    });
+
+    socket.on('ad_viewed', (data) => {
+        console.log('👁️ Vista en publicidad:', data);
+        updateAdStats(data.adId, {
+            views: data.views
+        });
+    });
+
+    socket.on('ad_approved', (data) => {
+        console.log('✅ Publicidad aprobada:', data);
+        // Recargar publicidades
+        loadActiveAds().then(() => {
+            if (window._renderAdsCallback) {
+                window._renderAdsCallback(cachedAds);
+            }
+        });
+    });
+}
+
+// ============================================================
+// ACTUALIZAR ESTADÍSTICAS DE PUBLICIDAD EN EL DOM
+// ============================================================
+
+function updateAdStats(adId, data) {
+    // Actualizar en caché
+    const ad = cachedAds.find(a => a.id === adId);
+    if (ad) {
+        if (data.likes !== undefined) ad.likes = data.likes;
+        if (data.likesCount !== undefined) ad.likesCount = data.likesCount;
+        if (data.views !== undefined) ad.views = data.views;
+    }
+
+    // Actualizar en el DOM
+    const card = document.querySelector(`.ad-card[data-ad-id="${adId}"]`);
+    if (!card) return;
+
+    if (data.views !== undefined) {
+        const viewSpan = card.querySelector('.stats span:first-child');
+        if (viewSpan) {
+            viewSpan.innerHTML = `<i class="fas fa-eye"></i> ${formatNumber(data.views)}`;
+        }
+    }
+
+    if (data.likesCount !== undefined) {
+        const likeSpan = card.querySelector('.stats span:nth-child(2)');
+        if (likeSpan) {
+            const userId = JSON.parse(localStorage.getItem('user') || '{}')?.id;
+            const isLiked = data.likes?.includes(userId) || false;
+            likeSpan.innerHTML = `<i class="fas fa-heart" style="color:${isLiked ? '#ff6b6b' : 'inherit'}"></i> ${formatNumber(data.likesCount)}`;
+        }
+    }
+
+    if (data.likes !== undefined) {
+        const userId = JSON.parse(localStorage.getItem('user') || '{}')?.id;
+        const isLiked = data.likes.includes(userId) || false;
+        const likeBtn = card.querySelector('.ad-like-btn');
+        if (likeBtn) {
+            likeBtn.classList.toggle('liked', isLiked);
+            likeBtn.innerHTML = isLiked ? '<i class="fas fa-heart"></i> Quitar' : '<i class="fas fa-heart"></i> Like';
+        }
+    }
+}
 
 // ============================================================
 // CARGAR PUBLICIDADES ACTIVAS
@@ -57,7 +138,6 @@ export async function registerAdView(adId) {
     const token = getToken();
     if (!token) return;
 
-    // 🔥 PREVENIR VISTAS MÚLTIPLES DEL MISMO USUARIO
     const key = `${adId}_${token}`;
     if (viewedAds.has(key)) {
         console.log(`👁️ Vista de publicidad ${adId} ya registrada para este usuario`);
@@ -74,8 +154,12 @@ export async function registerAdView(adId) {
         });
 
         if (res.ok) {
+            const data = await res.json();
             viewedAds.add(key);
             console.log(`✅ Vista registrada para publicidad ${adId}`);
+            
+            // Actualizar vista localmente
+            updateAdStats(adId, { views: data.views });
         }
     } catch (error) {
         console.error('Error registrando vista de publicidad:', error);
@@ -118,6 +202,9 @@ export function renderAds(ads, container) {
     if (!ads || ads.length === 0) {
         return '';
     }
+
+    // Guardar callback para actualizar
+    window._renderAdsCallback = renderAds;
 
     const currentUser = JSON.parse(localStorage.getItem('user') || '{}');
     const userId = currentUser?.id;
@@ -185,6 +272,25 @@ export function renderAds(ads, container) {
         `;
     });
 
+    // Registrar vistas de publicidades con IntersectionObserver
+    setTimeout(() => {
+        const observer = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    const card = entry.target;
+                    const adId = card.dataset.adId;
+                    if (adId) {
+                        registerAdView(adId);
+                    }
+                }
+            });
+        }, { threshold: 0.3 });
+
+        document.querySelectorAll('.ad-card').forEach(card => {
+            observer.observe(card);
+        });
+    }, 100);
+
     return html;
 }
 
@@ -217,16 +323,25 @@ window.handleAdLike = async function(adId, btn) {
 
         if (res.ok) {
             const data = await res.json();
+            
+            // Actualizar visualmente
             btn.classList.toggle('liked');
             btn.innerHTML = data.liked ? '<i class="fas fa-heart"></i> Quitar' : '<i class="fas fa-heart"></i> Like';
             
-            // Actualizar contador de likes
-            const statsSpan = btn.closest('.actions').querySelector('.stats');
-            if (statsSpan) {
-                const likeSpan = statsSpan.querySelector('span:nth-child(2)');
+            // Actualizar contador
+            const card = btn.closest('.ad-card');
+            if (card) {
+                const likeSpan = card.querySelector('.stats span:nth-child(2)');
                 if (likeSpan) {
                     likeSpan.innerHTML = `<i class="fas fa-heart" style="color:${data.liked ? '#ff6b6b' : 'inherit'}"></i> ${formatNumber(data.likesCount || 0)}`;
                 }
+            }
+
+            // Actualizar caché
+            const ad = cachedAds.find(a => a.id === adId);
+            if (ad) {
+                ad.likes = data.likes;
+                ad.likesCount = data.likesCount;
             }
             
             showToast(data.liked ? '❤️ Like guardado' : '💔 Like eliminado');

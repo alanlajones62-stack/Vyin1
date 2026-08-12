@@ -1,4 +1,4 @@
-// backend/ads.js - Sistema de publicidad para cuentas de empresa (SOLO VISTAS Y LIKES)
+// backend/ads.js - Sistema de publicidad para cuentas de empresa (CON SOCKET)
 
 const auth = require('./middleware/auth');
 
@@ -26,7 +26,7 @@ module.exports = function(read, write, io, logger) {
     };
 
     // ============================================================
-    // CREAR ANUNCIO (SOLO CUENTAS DE EMPRESA)
+    // CREAR ANUNCIO
     // ============================================================
     router.post('/create', auth, async (req, res) => {
         try {
@@ -146,7 +146,7 @@ module.exports = function(read, write, io, logger) {
     });
 
     // ============================================================
-    // DAR LIKE A ANUNCIO
+    // DAR LIKE A ANUNCIO (CON EMIT)
     // ============================================================
     router.post('/:adId/like', auth, (req, res) => {
         try {
@@ -176,6 +176,7 @@ module.exports = function(read, write, io, logger) {
 
             write('ads.json', ads);
 
+            // 🔥 EMITIR EVENTO A TODOS LOS USUARIOS
             io.emit('ad_liked', {
                 adId: ad.id,
                 userId: userId,
@@ -198,7 +199,7 @@ module.exports = function(read, write, io, logger) {
     });
 
     // ============================================================
-    // QUITAR LIKE DE ANUNCIO
+    // QUITAR LIKE DE ANUNCIO (CON EMIT)
     // ============================================================
     router.delete('/:adId/like', auth, (req, res) => {
         try {
@@ -220,6 +221,15 @@ module.exports = function(read, write, io, logger) {
 
             write('ads.json', ads);
 
+            // 🔥 EMITIR EVENTO A TODOS LOS USUARIOS
+            io.emit('ad_liked', {
+                adId: ad.id,
+                userId: userId,
+                liked: false,
+                likesCount: ad.likes.length,
+                likes: ad.likes
+            });
+
             res.json({
                 success: true,
                 liked: false,
@@ -234,45 +244,7 @@ module.exports = function(read, write, io, logger) {
     });
 
     // ============================================================
-    // OBTENER ANUNCIOS ACTIVOS (PARA EL FEED)
-    // ============================================================
-    router.get('/active', auth, (req, res) => {
-        try {
-            const userId = req.userId;
-            const limit = parseInt(req.query.limit) || 10;
-            const ads = read('ads.json');
-            const now = new Date();
-
-            const activeAds = ads
-                .filter(a => {
-                    if (a.status !== AD_STATUS.ACTIVE) return false;
-                    if (!a.isActive) return false;
-                    if (new Date(a.expiresAt) < now) return false;
-                    return true;
-                })
-                .sort((a, b) => {
-                    return (b.durationDays || 0) - (a.durationDays || 0);
-                })
-                .slice(0, limit)
-                .map(a => {
-                    const { budget, ...ad } = a;
-                    return ad;
-                });
-
-            res.json({
-                success: true,
-                ads: activeAds,
-                count: activeAds.length
-            });
-
-        } catch (error) {
-            logger.error('Error obteniendo anuncios activos:', { error: error.message });
-            res.status(500).json({ error: 'Error interno' });
-        }
-    });
-
-    // ============================================================
-    // REGISTRAR VISTA DE ANUNCIO (SOLO UNA VEZ POR USUARIO)
+    // REGISTRAR VISTA DE ANUNCIO (CON EMIT)
     // ============================================================
     router.post('/:adId/view', auth, (req, res) => {
         try {
@@ -288,7 +260,6 @@ module.exports = function(read, write, io, logger) {
 
             const ad = ads[adIndex];
 
-            // 🔥 VERIFICAR SI EL USUARIO YA VIO ESTE ANUNCIO
             if (!ad.viewedBy) ad.viewedBy = [];
             if (ad.viewedBy.includes(userId)) {
                 return res.json({
@@ -298,7 +269,6 @@ module.exports = function(read, write, io, logger) {
                 });
             }
 
-            // Registrar vista
             ad.views = (ad.views || 0) + 1;
             ad.viewedBy.push(userId);
 
@@ -311,6 +281,13 @@ module.exports = function(read, write, io, logger) {
             }
 
             write('ads.json', ads);
+
+            // 🔥 EMITIR EVENTO A TODOS LOS USUARIOS
+            io.emit('ad_viewed', {
+                adId: ad.id,
+                userId: userId,
+                views: ad.views
+            });
 
             res.json({
                 success: true,
@@ -359,6 +336,68 @@ module.exports = function(read, write, io, logger) {
 
         } catch (error) {
             logger.error('Error registrando click:', { error: error.message });
+            res.status(500).json({ error: 'Error interno' });
+        }
+    });
+
+    // ============================================================
+    // OBTENER ANUNCIOS ACTIVOS
+    // ============================================================
+    router.get('/active', auth, (req, res) => {
+        try {
+            const userId = req.userId;
+            const limit = parseInt(req.query.limit) || 10;
+            const ads = read('ads.json');
+            const now = new Date();
+
+            const activeAds = ads
+                .filter(a => {
+                    if (a.status !== AD_STATUS.ACTIVE) return false;
+                    if (!a.isActive) return false;
+                    if (new Date(a.expiresAt) < now) return false;
+                    return true;
+                })
+                .sort((a, b) => {
+                    return (b.durationDays || 0) - (a.durationDays || 0);
+                })
+                .slice(0, limit)
+                .map(a => {
+                    const { budget, ...ad } = a;
+                    return ad;
+                });
+
+            res.json({
+                success: true,
+                ads: activeAds,
+                count: activeAds.length
+            });
+
+        } catch (error) {
+            logger.error('Error obteniendo anuncios activos:', { error: error.message });
+            res.status(500).json({ error: 'Error interno' });
+        }
+    });
+
+    // ============================================================
+    // OBTENER ANUNCIOS DEL USUARIO
+    // ============================================================
+    router.get('/my-ads', auth, (req, res) => {
+        try {
+            const userId = req.userId;
+            const ads = read('ads.json');
+            
+            const userAds = ads
+                .filter(a => a.userId === userId)
+                .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+
+            res.json({
+                success: true,
+                ads: userAds,
+                count: userAds.length
+            });
+
+        } catch (error) {
+            logger.error('Error obteniendo anuncios del usuario:', { error: error.message });
             res.status(500).json({ error: 'Error interno' });
         }
     });
@@ -553,7 +592,7 @@ module.exports = function(read, write, io, logger) {
     });
 
     // ============================================================
-    // OBTENER TODOS LOS ANUNCIOS PENDIENTES (ADMIN)
+    // OBTENER ANUNCIOS PENDIENTES (ADMIN)
     // ============================================================
     router.get('/pending', auth, (req, res) => {
         try {
