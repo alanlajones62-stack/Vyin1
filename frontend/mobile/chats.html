@@ -8,6 +8,8 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- 🔥 CRYPTOJS PARA CIFRADO LOCAL -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
     <style>
         /* ============================================================
            CHAT MOBILE - OPTIMIZADO (SIN RE-RENDERIZADOS)
@@ -854,7 +856,7 @@
 
     <script type="module">
         // ============================================================
-        // CHAT MOBILE - OPTIMIZADO CON CIFRADO Y PERSISTENCIA
+        // CHAT MOBILE - VERSIÓN SIMPLIFICADA (SIN CIFRADO LOCAL PARA EVITAR ERRORES)
         // ============================================================
 
         import { getToken, getCurrentUser, showToast as authShowToast } from './auth.js';
@@ -880,85 +882,6 @@
         let userStatuses = new Map();
         let scrollTimeout = null;
         let isInitialLoad = true;
-        let messageCache = new Map(); // Cache de mensajes para evitar re-renderizados
-
-        // Clave para cifrado local (se genera por usuario)
-        let localEncryptionKey = null;
-
-        // ============================================================
-        // 🔐 CIFRADO LOCAL (End-to-End Encryption)
-        // ============================================================
-        
-        function generateEncryptionKey() {
-            const key = CryptoJS.lib.WordArray.random(256/8).toString();
-            localStorage.setItem('vyin_chat_key', key);
-            return key;
-        }
-
-        function getEncryptionKey() {
-            let key = localStorage.getItem('vyin_chat_key');
-            if (!key) {
-                key = generateEncryptionKey();
-            }
-            return key;
-        }
-
-        function encryptLocal(data) {
-            const key = getEncryptionKey();
-            return CryptoJS.AES.encrypt(JSON.stringify(data), key).toString();
-        }
-
-        function decryptLocal(encryptedData) {
-            try {
-                const key = getEncryptionKey();
-                const bytes = CryptoJS.AES.decrypt(encryptedData, key);
-                const decrypted = bytes.toString(CryptoJS.enc.Utf8);
-                return JSON.parse(decrypted);
-            } catch (error) {
-                console.error('Error descifrando datos locales:', error);
-                return null;
-            }
-        }
-
-        // ============================================================
-        // 📦 PERSISTENCIA EN LOCALSTORAGE
-        // ============================================================
-
-        function saveChatState(userId) {
-            if (!userId) return;
-            try {
-                const state = {
-                    messages: messages,
-                    scrollPosition: messagesContainerEl?.scrollTop || 0,
-                    timestamp: Date.now()
-                };
-                const encrypted = encryptLocal(state);
-                localStorage.setItem(`chat_state_${userId}`, encrypted);
-            } catch (error) {
-                console.error('Error guardando estado del chat:', error);
-            }
-        }
-
-        function loadChatState(userId) {
-            try {
-                const encrypted = localStorage.getItem(`chat_state_${userId}`);
-                if (!encrypted) return null;
-                const state = decryptLocal(encrypted);
-                if (state && Date.now() - state.timestamp < 300000) { // 5 minutos de cache
-                    return state;
-                }
-                return null;
-            } catch (error) {
-                console.error('Error cargando estado del chat:', error);
-                return null;
-            }
-        }
-
-        function clearChatState(userId) {
-            if (userId) {
-                localStorage.removeItem(`chat_state_${userId}`);
-            }
-        }
 
         // ============================================================
         // SHOW TOAST
@@ -1129,7 +1052,10 @@
                     localStorage.removeItem('token');
                     window.location.href = '/login.html';
                 }
-            } catch (error) { console.error('Error cargando conversaciones:', error); }
+            } catch (error) { 
+                console.error('Error cargando conversaciones:', error);
+                showToast('❌ Error cargando conversaciones', true);
+            }
         }
 
         function renderConversations() {
@@ -1183,29 +1109,11 @@
         }
 
         // ============================================================
-        // 🚀 CARGAR MENSAJES - OPTIMIZADO CON CACHÉ
+        // CARGAR MENSAJES
         // ============================================================
         async function loadMessages(userId, loadMore = false, offset = 0) {
             const token = getToken();
             if (!token) return;
-
-            // Intentar cargar desde caché local si es la primera carga
-            if (!loadMore && !isInitialLoad) {
-                const cached = loadChatState(userId);
-                if (cached && cached.messages && cached.messages.length > 0) {
-                    console.log(`📦 Cargando ${cached.messages.length} mensajes desde caché local`);
-                    messages = cached.messages;
-                    renderMessages();
-                    if (cached.scrollPosition) {
-                        setTimeout(() => {
-                            messagesContainerEl.scrollTop = cached.scrollPosition;
-                        }, 50);
-                    }
-                    // Actualizar en segundo plano
-                    refreshMessagesInBackground(userId);
-                    return;
-                }
-            }
 
             if (!loadMore) {
                 messages = [];
@@ -1229,8 +1137,7 @@
                         hasMoreMessages = newMessages.length === MESSAGES_PER_PAGE;
                         nextOffset = offset + MESSAGES_PER_PAGE;
                         
-                        // Renderizado optimizado: solo añadir nuevos mensajes
-                        appendMessages(uniqueNew.reverse());
+                        renderMessages();
                         if (messagesContainerEl) {
                             requestAnimationFrame(() => {
                                 const newScrollHeight = messagesContainerEl.scrollHeight;
@@ -1246,8 +1153,6 @@
                             scrollToBottom();
                         }
                         markMessagesAsRead(userId);
-                        // Guardar en caché local
-                        saveChatState(userId);
                     }
                 }
             } catch (error) {
@@ -1261,29 +1166,7 @@
         }
 
         // ============================================================
-        // 🔄 ACTUALIZAR MENSAJES EN SEGUNDO PLANO
-        // ============================================================
-        async function refreshMessagesInBackground(userId) {
-            try {
-                const token = getToken();
-                if (!token) return;
-                const url = `${API_URL}/api/chats/messages/${userId}?limit=${MESSAGES_PER_PAGE}&offset=0`;
-                const res = await fetch(url, { headers: { 'Authorization': `Bearer ${token}` } });
-                if (res.ok) {
-                    const newMessages = await res.json();
-                    if (newMessages.length > messages.length) {
-                        messages = newMessages;
-                        renderMessages();
-                        saveChatState(userId);
-                    }
-                }
-            } catch (error) {
-                // Silencioso
-            }
-        }
-
-        // ============================================================
-        // 📝 RENDERIZADO OPTIMIZADO - Solo añadir mensajes nuevos
+        // RENDERIZAR MENSAJES
         // ============================================================
         function renderMessages() {
             if (!messagesContainerEl) return;
@@ -1333,12 +1216,6 @@
 
             requestAnimationFrame(() => {
                 messagesContainerEl.innerHTML = messagesHtml;
-                messageCache.clear();
-                // Guardar referencias de mensajes en caché
-                messages.forEach(msg => {
-                    const id = msg.id || `temp_${Date.now()}_${Math.random()}`;
-                    messageCache.set(id, msg);
-                });
                 
                 if (wasNearBottom) {
                     requestAnimationFrame(() => {
@@ -1352,68 +1229,6 @@
             });
         }
 
-        // ============================================================
-        // ➕ AÑADIR MENSAJES NUEVOS SIN RE-RENDERIZAR TODO
-        // ============================================================
-        function appendMessages(newMessages) {
-            if (!messagesContainerEl || !newMessages || newMessages.length === 0) return;
-
-            // Si no hay mensajes, renderizar todo
-            if (messagesContainerEl.querySelector('.empty-state-chat')) {
-                renderMessages();
-                return;
-            }
-
-            let html = '';
-            let lastDate = '';
-            
-            // Obtener la última fecha actual
-            const existingDateDividers = messagesContainerEl.querySelectorAll('.date-divider');
-            if (existingDateDividers.length > 0) {
-                const lastDivider = existingDateDividers[existingDateDividers.length - 1];
-                lastDate = lastDivider.textContent.trim();
-            }
-
-            for (const msg of newMessages) {
-                const msgDate = getDateDivider(msg.timestamp);
-                if (msgDate !== lastDate) {
-                    html += `
-                        <div class="date-divider"><span>${msgDate}</span></div>
-                    `;
-                    lastDate = msgDate;
-                }
-
-                const messageId = msg.id || `temp_${Date.now()}_${Math.random()}`;
-                html += `
-                    <div class="message ${msg.isOwn ? 'message-own' : 'message-other'}" data-message-id="${messageId}" style="animation: messageIn 0.3s ease;">
-                        <div class="message-bubble">
-                            <div class="message-content">${escapeHtml(msg.content)}</div>
-                            <div class="message-time">
-                                ${formatTime(msg.timestamp)}
-                                ${msg.isOwn ? `<span class="message-read">${msg.read ? '✓✓' : '✓'}</span>` : ''}
-                                ${msg.isOwn ? `<i class="fas fa-trash-alt delete-message" onclick="event.stopPropagation(); window.deleteMessage('${messageId}')"></i>` : ''}
-                            </div>
-                        </div>
-                    </div>
-                `;
-            }
-
-            // Insertar al final del contenedor
-            messagesContainerEl.insertAdjacentHTML('beforeend', html);
-            
-            // Hacer scroll al final si estamos cerca del fondo
-            const scrollTop = messagesContainerEl.scrollTop;
-            const scrollHeight = messagesContainerEl.scrollHeight;
-            const clientHeight = messagesContainerEl.clientHeight;
-            const isNearBottom = scrollHeight - (scrollTop + clientHeight) < 200;
-            
-            if (isNearBottom) {
-                requestAnimationFrame(() => {
-                    messagesContainerEl.scrollTop = messagesContainerEl.scrollHeight;
-                });
-            }
-        }
-
         function markMessagesAsRead(userId) {
             const token = getToken();
             if (!token) return;
@@ -1425,10 +1240,7 @@
                     updated = true;
                 }
             });
-            if (updated) {
-                renderMessages();
-                saveChatState(userId);
-            }
+            if (updated) renderMessages();
 
             if (socket && socket.connected) {
                 socket.emit('mark_messages_read', { withUserId: userId });
@@ -1465,10 +1277,6 @@
                         isLoadingMore = false;
                     });
                 }
-                // Guardar posición de scroll en caché
-                if (currentConversation) {
-                    saveChatState(currentConversation.id);
-                }
             }, 200);
         }
 
@@ -1486,11 +1294,6 @@
             } else {
                 userData = userIdOrObject;
                 userId = userData.id;
-            }
-
-            // Guardar estado del chat actual antes de cambiar
-            if (currentConversation && messages.length > 0) {
-                saveChatState(currentConversation.id);
             }
 
             currentConversation = {
@@ -1526,10 +1329,6 @@
             if (name) name.textContent = currentConversation?.fullName || currentConversation?.username || 'Usuario';
             if (backBtn) {
                 backBtn.onclick = function() {
-                    // Guardar estado antes de salir
-                    if (currentConversation) {
-                        saveChatState(currentConversation.id);
-                    }
                     messagesPanelEl.classList.remove('active');
                     loadConversations();
                 };
@@ -1555,7 +1354,7 @@
         }
 
         // ============================================================
-        // ENVIAR MENSAJE - CON CIFRADO
+        // ENVIAR MENSAJE
         // ============================================================
         window.sendMessage = async function() {
             if (!messageInput || !messageInput.value.trim() || !currentConversation) return;
@@ -1576,14 +1375,8 @@
                 read: false
             };
             messages.push(newMsg);
-            
-            // Añadir mensaje sin re-renderizar todo
-            appendMessages([newMsg]);
-            
-            // Guardar estado en caché
-            if (currentConversation) {
-                saveChatState(currentConversation.id);
-            }
+            renderMessages();
+            scrollToBottom();
 
             try {
                 const res = await fetch(`${API_URL}/api/chats/messages/${currentConversation.id}`, {
@@ -1611,7 +1404,6 @@
                             }
                             msgEl.dataset.messageId = realMessage.id;
                         }
-                        saveChatState(currentConversation.id);
                     }
                     loadConversations();
                 } else {
@@ -1642,9 +1434,6 @@
                     messages = messages.filter(m => m.id !== messageId);
                     renderMessages();
                     loadConversations();
-                    if (currentConversation) {
-                        saveChatState(currentConversation.id);
-                    }
                     showToast('✅ Mensaje eliminado');
                 }
             } catch (error) {
@@ -1702,11 +1491,9 @@
             socket.on('receive_message', (message) => {
                 if (currentConversation && message.from === currentConversation.id) {
                     messages.push({ ...message, isOwn: false });
-                    appendMessages([{ ...message, isOwn: false }]);
+                    renderMessages();
+                    scrollToBottom();
                     markMessagesAsRead(currentConversation.id);
-                    if (currentConversation) {
-                        saveChatState(currentConversation.id);
-                    }
                 }
                 loadConversations();
                 if (message.from !== currentConversation?.id) {
@@ -1718,23 +1505,7 @@
                 const index = messages.findIndex(m => m.id === message.id);
                 if (index !== -1) {
                     messages[index] = message;
-                    // Actualizar solo ese mensaje
-                    const msgEl = document.querySelector(`.message[data-message-id="${message.id}"]`);
-                    if (msgEl) {
-                        const contentEl = msgEl.querySelector('.message-content');
-                        const timeEl = msgEl.querySelector('.message-time');
-                        if (contentEl) contentEl.textContent = message.content;
-                        if (timeEl) {
-                            timeEl.innerHTML = `
-                                ${formatTime(message.timestamp)}
-                                <span class="message-read">${message.read ? '✓✓' : '✓'}</span>
-                                <i class="fas fa-trash-alt delete-message" onclick="event.stopPropagation(); window.deleteMessage('${message.id}')"></i>
-                            `;
-                        }
-                    }
-                    if (currentConversation) {
-                        saveChatState(currentConversation.id);
-                    }
+                    renderMessages();
                 }
             });
 
@@ -1761,12 +1532,7 @@
                             updated = true;
                         }
                     });
-                    if (updated) {
-                        renderMessages();
-                        if (currentConversation) {
-                            saveChatState(currentConversation.id);
-                        }
-                    }
+                    if (updated) renderMessages();
                 }
                 loadConversations();
             });
@@ -1774,9 +1540,6 @@
             socket.on('message_deleted', (data) => {
                 messages = messages.filter(m => m.id !== data.messageId);
                 renderMessages();
-                if (currentConversation) {
-                    saveChatState(currentConversation.id);
-                }
             });
 
             socket.on('conversations_update', () => {
@@ -1815,10 +1578,6 @@
                 } catch (error) { console.error('Error cargando usuario:', error); }
             }
 
-            // Inicializar clave de cifrado
-            getEncryptionKey();
-            console.log('🔐 Cifrado local inicializado');
-
             const searchInput = document.getElementById('searchConversations');
             if (searchInput) {
                 searchInput.addEventListener('input', () => renderConversations());
@@ -1835,7 +1594,7 @@
                 }, 500);
             }
 
-            console.log('📱 Chat mobile optimizado inicializado');
+            console.log('📱 Chat mobile inicializado');
         }
 
         // Exponer funciones globales
