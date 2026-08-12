@@ -1,6 +1,6 @@
 // ============================================================
 // story-modal.js - Modal para ver historias con navegación 
-// (VERSIÓN CORREGIDA - CON BOTÓN DE ENVIAR DINÁMICO)
+// (VERSIÓN CORREGIDA - CON BOTÓN ELIMINAR Y LIMPIEZA SEGURA)
 // ============================================================
 
 import {
@@ -9,7 +9,7 @@ import {
 } from './auth.js';
 
 import { formatNumber } from './utils.js';
-import { loadComments, initComments, addCommentToCache, addReplyToCache, updateCommentLikes } from './story-comments.js';
+import { loadComments, initComments, addCommentToCache, addReplyToCache, updateCommentLikes, updateCommentsUIWithoutReload } from './story-comments.js';
 
 const API_URL = window.location.origin;
 let currentStoryId = null;
@@ -211,7 +211,7 @@ export function closeStoryModal() {
     // Limpiar botón de enviar
     const sendBtn = document.getElementById('sendCommentBtn');
     if (sendBtn) {
-        sendBtn.disabled = true;
+        sendBtn.disabled = false;
         sendBtn.textContent = 'Enviar';
     }
     
@@ -372,7 +372,7 @@ function createModalHTML() {
                         </div>
                         <div class="comment-input-wrapper">
                             <input type="text" id="commentInput" placeholder="Escribe un comentario..." maxlength="500" />
-                            <button id="sendCommentBtn" disabled>Enviar</button>
+                            <button id="sendCommentBtn">Enviar</button>
                         </div>
                     </div>
                 </div>
@@ -444,43 +444,25 @@ function setupModalEvents() {
         await toggleTranslation();
     });
 
-    // 🔥 CONFIGURAR ENVÍO DE COMENTARIO - CON CONTROL DINÁMICO DEL BOTÓN
-    const input = document.getElementById('commentInput');
+    // 🔥 CONFIGURAR ENVÍO DE COMENTARIO - Evento directo al botón
     const sendBtn = document.getElementById('sendCommentBtn');
+    if (sendBtn) {
+        // Remover listeners anteriores clonando
+        const newSendBtn = sendBtn.cloneNode(true);
+        sendBtn.parentNode.replaceChild(newSendBtn, sendBtn);
+        newSendBtn.addEventListener('click', handleSendComment);
+    }
 
-    if (input && sendBtn) {
-        // Función para actualizar el estado del botón basado en el input
-        const updateSendButton = () => {
-            const hasText = input.value.trim().length > 0;
-            // Solo habilitar si no está en estado de "enviando"
-            if (!sendBtn.dataset.sending || sendBtn.dataset.sending === 'false') {
-                sendBtn.disabled = !hasText;
-            }
-        };
-
-        // Evento input para habilitar/deshabilitar el botón
-        input.addEventListener('input', updateSendButton);
-
-        // Evento keydown para Enter
-        input.addEventListener('keydown', (e) => {
+    const input = document.getElementById('commentInput');
+    if (input) {
+        const newInput = input.cloneNode(true);
+        input.parentNode.replaceChild(newInput, input);
+        newInput.addEventListener('keydown', (e) => {
             if (e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault();
-                if (!sendBtn.disabled && sendBtn.dataset.sending !== 'true') {
-                    handleSendComment();
-                }
-            }
-        });
-
-        // Evento click del botón
-        sendBtn.addEventListener('click', () => {
-            if (!sendBtn.disabled && sendBtn.dataset.sending !== 'true') {
                 handleSendComment();
             }
         });
-
-        // Estado inicial
-        sendBtn.dataset.sending = 'false';
-        updateSendButton();
     }
 
     let touchStartX = 0;
@@ -576,7 +558,7 @@ async function handleDeleteStory() {
 }
 
 // ============================================================
-// 🔥 ENVIAR COMENTARIO - CON CONTROL DINÁMICO DEL BOTÓN
+// 🔥 ENVIAR COMENTARIO - CORREGIDO DEFINITIVO
 // ============================================================
 
 async function handleSendComment() {
@@ -602,13 +584,12 @@ async function handleSendComment() {
 
     const sendBtn = document.getElementById('sendCommentBtn');
     
-    // 🔥 MARCAR COMO ENVIANDO Y DESHABILITAR
+    // 🔥 DESHABILITAR INPUT Y BOTÓN
+    input.disabled = true;
     if (sendBtn) {
-        sendBtn.dataset.sending = 'true';
         sendBtn.disabled = true;
         sendBtn.textContent = 'Enviando...';
     }
-    input.disabled = true;
 
     try {
         const res = await fetch(`${API_URL}/api/stories/${currentStoryId}/comments`, {
@@ -631,8 +612,8 @@ async function handleSendComment() {
             // ACTUALIZAR EL CACHÉ DE COMENTARIOS
             addCommentToCache(currentStoryId, data);
             
-            // ACTUALIZAR UI - SIN forceReload (usar caché)
-            await initComments(currentStoryId, 'commentsList', null, false);
+            // 🔥 ACTUALIZAR UI SIN RECARGAR EL BOTÓN
+            updateCommentsUIWithoutReload(currentStoryId);
             
             showToast('💬 Comentario enviado');
         } else {
@@ -642,24 +623,18 @@ async function handleSendComment() {
         console.error('Error enviando comentario:', error);
         showToast('Error al enviar comentario', true);
     } finally {
-        // 🔥 REHABILITAR Y ACTUALIZAR ESTADO
+        // 🔥 REHABILITAR INPUT Y BOTÓN
         input.disabled = false;
         if (sendBtn) {
-            sendBtn.dataset.sending = 'false';
-            // Verificar si hay texto para habilitar/deshabilitar
-            const hasText = input.value.trim().length > 0;
-            sendBtn.disabled = !hasText;
+            sendBtn.disabled = false;
             sendBtn.textContent = 'Enviar';
         }
-        // Enfocar el input
-        setTimeout(() => {
-            input.focus();
-        }, 100);
+        input.focus();
     }
 }
 
 // ============================================================
-// 🔥 ENVIAR RESPUESTA - CON CONTROL DINÁMICO DEL BOTÓN
+// 🔥 ENVIAR RESPUESTA - CORREGIDO
 // ============================================================
 
 async function handleSendReply(storyId, commentId) {
@@ -683,10 +658,8 @@ async function handleSendReply(storyId, commentId) {
 
     const sendBtn = wrapper.querySelector('.reply-send-btn');
     
-    // 🔥 MARCAR COMO ENVIANDO Y DESHABILITAR
     input.disabled = true;
     if (sendBtn) {
-        sendBtn.dataset.sending = 'true';
         sendBtn.disabled = true;
         sendBtn.textContent = 'Enviando...';
     }
@@ -713,8 +686,8 @@ async function handleSendReply(storyId, commentId) {
             // ACTUALIZAR EL CACHÉ DE COMENTARIOS
             addReplyToCache(storyId, commentId, data);
             
-            // ACTUALIZAR UI - SIN forceReload (usar caché)
-            await initComments(storyId, 'commentsList', null, false);
+            // ACTUALIZAR UI SIN RECARGAR EL BOTÓN
+            updateCommentsUIWithoutReload(storyId);
             
             showToast('💬 Respuesta enviada');
         } else {
@@ -724,19 +697,13 @@ async function handleSendReply(storyId, commentId) {
         console.error('Error enviando respuesta:', error);
         showToast('Error al enviar respuesta', true);
     } finally {
-        // 🔥 REHABILITAR Y ACTUALIZAR ESTADO
+        // 🔥 REHABILITAR INPUT Y BOTÓN
         input.disabled = false;
         if (sendBtn) {
-            sendBtn.dataset.sending = 'false';
-            // Verificar si hay texto para habilitar/deshabilitar
-            const hasText = input.value.trim().length > 0;
-            sendBtn.disabled = !hasText;
+            sendBtn.disabled = false;
             sendBtn.textContent = 'Enviar';
         }
-        // Enfocar el input
-        setTimeout(() => {
-            input.focus();
-        }, 100);
+        input.focus();
     }
 }
 
@@ -1472,6 +1439,7 @@ window.openStoryModal = openStoryModal;
 window.closeStoryModal = closeStoryModal;
 window.navigateStory = navigateStory;
 window.handleSendReply = handleSendReply;
+window.handleSendComment = handleSendComment;
 
 window.openProfileFromModal = function() {
     const userId = window._modalUserId;
@@ -1494,4 +1462,4 @@ window.openProfileFromModal = function() {
     }
 };
 
-export { loadStoryData, handleModalLike };
+export { loadStoryData, handleModalLike, handleSendComment };

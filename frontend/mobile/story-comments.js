@@ -785,8 +785,8 @@ window.handleReplySubmit = async function(storyId, parentCommentId) {
         input.value = '';
         const container = document.getElementById(`reply-input-${parentCommentId}`);
         if (container) container.style.display = 'none';
-        // 🔥 FORZAR ACTUALIZACIÓN DE UI CON CACHÉ ACTUALIZADO
-        updateCommentsUI(storyId);
+        // 🔥 ACTUALIZAR UI SIN RECARGAR EL BOTÓN
+        updateCommentsUIWithoutReload(storyId);
     }
 };
 
@@ -808,6 +808,24 @@ window.toggleRepliesVisibility = function(commentId) {
         }
     }
 };
+
+// ============================================================
+// 🔥 NUEVA FUNCIÓN: ACTUALIZAR UI SIN RECARGAR EL BOTÓN
+// ============================================================
+
+export function updateCommentsUIWithoutReload(storyId) {
+    const container = document.getElementById('commentsList');
+    if (!container) return;
+    
+    const currentUser = getCurrentUser();
+    const comments = commentsCache.get(storyId) || [];
+    
+    // Asegurar que el container tenga el storyId
+    container.dataset.storyId = storyId;
+    window._currentStoryId = storyId;
+    
+    renderComments(comments, storyId, currentUser?.id, container);
+}
 
 // ============================================================
 // INICIALIZAR COMENTARIOS EN MODAL - VERSIÓN CORREGIDA
@@ -865,38 +883,50 @@ export async function initComments(storyId, containerId = 'commentsList', highli
     
     renderComments(comments, storyId, currentUser?.id, container, highlightCommentId);
 
+    // 🔥 SOLO CONFIGURAR EL BOTÓN SI ES LA PRIMERA VEZ O SI forceReload ES TRUE
+    // Si no es forceReload y el botón ya tiene un listener, no lo reemplaces
     const input = document.getElementById('commentInput');
     const sendBtn = document.getElementById('sendCommentBtn');
 
-    if (input && sendBtn) {
-        // Remover listeners antiguos para evitar duplicados
-        const newSendBtn = sendBtn.cloneNode(true);
-        sendBtn.parentNode.replaceChild(newSendBtn, sendBtn);
-        
-        const newInput = input.cloneNode(true);
-        input.parentNode.replaceChild(newInput, input);
-        
-        const sendComment = async () => {
-            const content = newInput.value.trim();
-            if (!content) return;
+    // Solo configurar si forceReload es true
+    if (forceReload) {
+        if (input && sendBtn) {
+            // Remover listeners antiguos para evitar duplicados
+            const newSendBtn = sendBtn.cloneNode(true);
+            sendBtn.parentNode.replaceChild(newSendBtn, sendBtn);
+            
+            const newInput = input.cloneNode(true);
+            input.parentNode.replaceChild(newInput, input);
+            
+            // Usar la función global handleSendComment de story-modal
+            const sendComment = async () => {
+                const content = newInput.value.trim();
+                if (!content) return;
 
-            newSendBtn.disabled = true;
-            const newComment = await addComment(storyId, content);
-            if (newComment) {
-                newInput.value = '';
-                // 🔥 FORZAR RECARGA PARA MOSTRAR EL NUEVO COMENTARIO
-                await initComments(storyId, containerId, null, false);
-            }
-            newSendBtn.disabled = false;
-        };
+                // Usar handleSendComment si existe
+                if (typeof window.handleSendComment === 'function') {
+                    await window.handleSendComment();
+                } else {
+                    // Fallback: usar addComment directamente
+                    newSendBtn.disabled = true;
+                    const newComment = await addComment(storyId, content);
+                    if (newComment) {
+                        newInput.value = '';
+                        // Recargar UI sin tocar el botón
+                        updateCommentsUIWithoutReload(storyId);
+                    }
+                    newSendBtn.disabled = false;
+                }
+            };
 
-        newSendBtn.onclick = sendComment;
-        newInput.onkeydown = (e) => {
-            if (e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault();
-                sendComment();
-            }
-        };
+            newSendBtn.onclick = sendComment;
+            newInput.onkeydown = (e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    sendComment();
+                }
+            };
+        }
     }
     
     if (highlightCommentId) {
