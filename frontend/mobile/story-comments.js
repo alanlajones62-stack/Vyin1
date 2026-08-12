@@ -1,6 +1,6 @@
 // ============================================================
 // story-comments.js - Sistema de comentarios para historias
-// CON ESTADO CORRECTO DE OCULTAR/MOSTRAR RESPUESTAS
+// VERSIÓN CORREGIDA: SIN RE-RENDER, SOLO ACTUALIZACIÓN LOCAL
 // ============================================================
 
 import { getToken, getCurrentUser, showToast, getAvatar, formatDate, escapeHtml } from './auth.js';
@@ -9,15 +9,15 @@ import { formatNumber } from './utils.js';
 const API_URL = window.location.origin;
 
 // ============================================================
-// ESTADO DE COMENTARIOS
+// 🔥 ESTADO LOCAL (SOLO PARA EL MODAL ACTUAL)
 // ============================================================
 
-let commentsCache = new Map(); // storyId -> [comments]
-let commentLikes = new Map(); // commentId -> Set de userIds
-let repliesVisibility = new Map(); // commentId -> boolean (true = visible, false = oculto)
+let localComments = [];
+let localCommentLikes = {}; // commentId -> Set de userIds
+let localRepliesVisibility = {}; // commentId -> boolean
 
 // ============================================================
-// FUNCIÓN PARA BUSCAR COMENTARIO POR ID (RECURSIVA)
+// 🔥 FUNCIONES AUXILIARES
 // ============================================================
 
 function findCommentById(comments, commentId) {
@@ -35,10 +35,6 @@ function findCommentById(comments, commentId) {
     return null;
 }
 
-// ============================================================
-// FUNCIÓN PARA OBTENER EL COMENTARIO PADRE (RECURSIVA)
-// ============================================================
-
 function findParentComment(comments, commentId, parent = null) {
     if (!comments) return null;
     
@@ -53,10 +49,6 @@ function findParentComment(comments, commentId, parent = null) {
     }
     return null;
 }
-
-// ============================================================
-// FUNCIÓN PARA OBTENER LA CADENA DE PADRES (PARA EXPANDIR)
-// ============================================================
 
 function getParentChain(comments, commentId, chain = []) {
     if (!comments) return null;
@@ -75,22 +67,164 @@ function getParentChain(comments, commentId, chain = []) {
 }
 
 // ============================================================
-// CARGAR COMENTARIOS (FORZAR RECARGA)
+// 🔥 RENDER COMENTARIOS (SOLO CUANDO SE ABRE EL MODAL)
 // ============================================================
 
-export async function loadComments(storyId, forceReload = false) {
-    if (!storyId) return [];
+export function renderComments(comments, container, currentUserId, highlightCommentId = null) {
+    if (!container) return;
+
+    if (!comments || comments.length === 0) {
+        container.innerHTML = `
+            <div class="no-comments">
+                <i class="fas fa-comment-slash"></i>
+                <span>No hay comentarios aún</span>
+            </div>
+        `;
+        return;
+    }
+
+    let html = '';
+    comments.forEach(comment => {
+        const isLiked = localCommentLikes[comment.id]?.has(currentUserId) || false;
+        const likesCount = localCommentLikes[comment.id]?.size || comment.likes?.length || 0;
+        const isOwn = comment.userId === currentUserId;
+        const hasReplies = comment.replies && comment.replies.length > 0;
+        const replyCount = comment.replies?.length || 0;
+        const isExpanded = localRepliesVisibility[comment.id] || false;
+        const isHighlighted = highlightCommentId && comment.id === highlightCommentId;
+
+        html += `
+            <div class="comment-item ${isHighlighted ? 'highlighted' : ''}" data-comment-id="${comment.id}" style="${isHighlighted ? 'background:rgba(192,132,252,0.08);border-left:3px solid #c084fc;padding-left:10px;' : ''}">
+                <img class="avatar" src="${comment.avatar || getAvatar(comment.fullName)}" 
+                     alt="${comment.fullName}" 
+                     onclick="window.goToProfileUser('${comment.userId}')" />
+                <div class="comment-body">
+                    <div class="comment-user" onclick="window.goToProfileUser('${comment.userId}')">
+                        ${escapeHtml(comment.fullName)}
+                        <span class="handle">@${escapeHtml(comment.username)}</span>
+                        <span class="time">${formatDate(comment.createdAt)}</span>
+                    </div>
+                    <div class="comment-text">${escapeHtml(comment.content)}</div>
+                    <div class="comment-meta">
+                        <button class="btn-like-comment ${isLiked ? 'liked' : ''}" 
+                                onclick="window.handleCommentLike('${comment.id}')">
+                            <i class="fas fa-heart"></i> <span class="like-count">${formatNumber(likesCount)}</span>
+                        </button>
+                        <button class="btn-reply-comment" onclick="window.toggleReplyInput('${comment.id}')">
+                            <i class="fas fa-reply"></i> Responder
+                        </button>
+                        ${isOwn ? `
+                            <button class="btn-delete-comment" onclick="window.handleCommentDelete('${comment.id}')">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                        ` : ''}
+                    </div>
+                    
+                    <div class="reply-input-container" id="reply-input-${comment.id}" style="display:none;margin-top:8px;">
+                        <input type="text" class="reply-input" id="replyInput-${comment.id}" 
+                               placeholder="Escribe una respuesta..." maxlength="500" />
+                        <button class="reply-send-btn" onclick="window.handleReplySubmit('${comment.id}')">
+                            <i class="fas fa-paper-plane"></i>
+                        </button>
+                    </div>
+                    
+                    ${hasReplies ? renderRepliesHTML(comment.replies, currentUserId, comment.id, highlightCommentId) : ''}
+                    
+                    ${hasReplies ? `
+                        <div class="show-replies-btn" onclick="window.toggleRepliesVisibility('${comment.id}')" 
+                             style="font-size:12px; color:rgba(192,132,252,0.4); cursor:pointer; margin-top:4px;">
+                            <i class="fas fa-chevron-${isExpanded ? 'up' : 'down'}"></i> 
+                            ${isExpanded ? `Ocultar ${replyCount} respuestas` : `Ver ${replyCount} respuestas`}
+                        </div>
+                    ` : ''}
+                </div>
+            </div>
+        `;
+    });
+
+    container.innerHTML = html;
+}
+
+// ============================================================
+// 🔥 GENERAR HTML DE RESPUESTAS
+// ============================================================
+
+function renderRepliesHTML(replies, currentUserId, parentCommentId, highlightCommentId = null) {
+    if (!replies || replies.length === 0) return '';
+
+    const isExpanded = localRepliesVisibility[parentCommentId] || false;
+    
+    if (!isExpanded) return '';
+
+    let html = `<div class="replies" id="replies-${parentCommentId}" style="margin-left: 40px; margin-top: 8px; display: flex; flex-direction: column; gap: 8px; border-left: 2px solid rgba(192,132,252,0.08); padding-left: 12px;">`;
+    
+    replies.forEach(reply => {
+        const isLiked = localCommentLikes[reply.id]?.has(currentUserId) || false;
+        const likesCount = localCommentLikes[reply.id]?.size || reply.likes?.length || 0;
+        const isOwn = reply.userId === currentUserId;
+        const isHighlighted = highlightCommentId && reply.id === highlightCommentId;
+
+        html += `
+            <div class="comment-item reply-item ${isHighlighted ? 'highlighted' : ''}" data-reply-id="${reply.id}" style="${isHighlighted ? 'background:rgba(192,132,252,0.08);border-left:3px solid #c084fc;padding-left:10px;' : ''}">
+                <img class="avatar" src="${reply.avatar || getAvatar(reply.fullName)}" 
+                     alt="${reply.fullName}" 
+                     style="width:32px;height:32px;border-radius:50%;object-fit:cover;flex-shrink:0;margin-right:10px;"
+                     onclick="window.goToProfileUser('${reply.userId}')" />
+                <div class="comment-body" style="flex:1;min-width:0;">
+                    <div class="comment-user" onclick="window.goToProfileUser('${reply.userId}')">
+                        ${escapeHtml(reply.fullName)}
+                        <span class="handle">@${escapeHtml(reply.username)}</span>
+                        <span class="time">${formatDate(reply.createdAt)}</span>
+                    </div>
+                    <div class="comment-text">${escapeHtml(reply.content)}</div>
+                    <div class="comment-meta">
+                        <button class="btn-like-comment ${isLiked ? 'liked' : ''}" 
+                                onclick="window.handleCommentLike('${reply.id}')">
+                            <i class="fas fa-heart"></i> <span class="like-count">${formatNumber(likesCount)}</span>
+                        </button>
+                        <button class="btn-reply-comment" onclick="window.toggleReplyInput('${reply.id}')">
+                            <i class="fas fa-reply"></i> Responder
+                        </button>
+                        ${isOwn ? `
+                            <button class="btn-delete-comment" onclick="window.handleCommentDelete('${reply.id}', '${parentCommentId}')">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                        ` : ''}
+                    </div>
+                    
+                    <div class="reply-input-container" id="reply-input-${reply.id}" style="display:none;margin-top:6px;">
+                        <input type="text" class="reply-input" id="replyInput-${reply.id}" 
+                               placeholder="Escribe una respuesta..." maxlength="500" />
+                        <button class="reply-send-btn" onclick="window.handleReplySubmit('${reply.id}')">
+                            <i class="fas fa-paper-plane"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        `;
+    });
+    
+    html += '</div>';
+    return html;
+}
+
+// ============================================================
+// 🔥 INICIALIZAR COMENTARIOS (AL ABRIR EL MODAL)
+// ============================================================
+
+export async function initComments(storyId, containerId = 'commentsList', highlightCommentId = null) {
+    if (!storyId) return;
+
+    const container = document.getElementById(containerId);
+    if (!container) return;
 
     const token = getToken();
-    if (!token) return [];
+    if (!token) return;
 
-    if (forceReload && commentsCache.has(storyId)) {
-        commentsCache.delete(storyId);
-    }
-
-    if (commentsCache.has(storyId)) {
-        return commentsCache.get(storyId);
-    }
+    // ✅ LIMPIAR ESTADO LOCAL ANTES DE CARGAR
+    localComments = [];
+    localCommentLikes = {};
+    localRepliesVisibility = {};
 
     try {
         const res = await fetch(`${API_URL}/api/stories/${storyId}/comments`, {
@@ -104,7 +238,7 @@ export async function loadComments(storyId, forceReload = false) {
         // Ordenar: nuevos primero
         comments.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
         
-        // Ordenar respuestas: viejas primero (recursivo)
+        // Ordenar respuestas: viejas primero
         const sortReplies = (items) => {
             if (!items) return;
             items.sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
@@ -121,40 +255,111 @@ export async function loadComments(storyId, forceReload = false) {
             }
         });
         
-        commentsCache.set(storyId, comments);
+        // ✅ GUARDAR EN ESTADO LOCAL
+        localComments = comments;
         
-        // Inicializar visibilidad de respuestas (ocultas por defecto)
+        // Inicializar likes
         comments.forEach(comment => {
-            if (comment.replies && comment.replies.length > 0) {
-                repliesVisibility.set(comment.id, false); // Oculto por defecto
+            if (comment.likes && comment.likes.length > 0) {
+                localCommentLikes[comment.id] = new Set(comment.likes);
+            } else {
+                localCommentLikes[comment.id] = new Set();
             }
-        });
-        
-        comments.forEach(comment => {
-            if (comment.likes) {
-                commentLikes.set(comment.id, new Set(comment.likes));
-            }
+            
             if (comment.replies) {
                 comment.replies.forEach(reply => {
-                    if (reply.likes) {
-                        commentLikes.set(reply.id, new Set(reply.likes));
+                    if (reply.likes && reply.likes.length > 0) {
+                        localCommentLikes[reply.id] = new Set(reply.likes);
+                    } else {
+                        localCommentLikes[reply.id] = new Set();
                     }
+                    // Inicializar visibilidad de respuestas anidadas
                     if (reply.replies && reply.replies.length > 0) {
-                        repliesVisibility.set(reply.id, false); // Oculto por defecto
+                        localRepliesVisibility[reply.id] = false;
                     }
                 });
             }
         });
+        
+        // Inicializar visibilidad de respuestas (ocultas por defecto)
+        comments.forEach(comment => {
+            if (comment.replies && comment.replies.length > 0) {
+                localRepliesVisibility[comment.id] = false;
+            }
+        });
 
-        return comments;
+        // 🔥 SI HAY UN COMENTARIO DESTACADO, EXPANDIR LA CADENA DE PADRES
+        if (highlightCommentId) {
+            const parentChain = getParentChain(comments, highlightCommentId);
+            if (parentChain) {
+                parentChain.forEach(parentId => {
+                    localRepliesVisibility[parentId] = true;
+                });
+            }
+            const parentComment = findParentComment(comments, highlightCommentId);
+            if (parentComment) {
+                localRepliesVisibility[parentComment.id] = true;
+            }
+            const highlightedComment = findCommentById(comments, highlightCommentId);
+            if (highlightedComment && highlightedComment.replies && highlightedComment.replies.length > 0) {
+                localRepliesVisibility[highlightCommentId] = true;
+            }
+        }
+
+        // ✅ RENDER COMPLETO (SOLO UNA VEZ)
+        const currentUser = getCurrentUser();
+        renderComments(localComments, container, currentUser?.id, highlightCommentId);
+
+        // Guardar referencia
+        container.dataset.storyId = storyId;
+        window._currentStoryId = storyId;
+
+        // Configurar eventos del input
+        const input = document.getElementById('commentInput');
+        const sendBtn = document.getElementById('sendCommentBtn');
+
+        if (input && sendBtn) {
+            const sendComment = async () => {
+                const content = input.value.trim();
+                if (!content) return;
+
+                sendBtn.disabled = true;
+                const newComment = await addComment(storyId, content);
+                if (newComment) {
+                    input.value = '';
+                }
+                sendBtn.disabled = false;
+            };
+
+            sendBtn.onclick = sendComment;
+            input.onkeydown = (e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    sendComment();
+                }
+            };
+        }
+
+        // Scroll al comentario destacado
+        if (highlightCommentId) {
+            setTimeout(() => {
+                let highlighted = container.querySelector(`.comment-item[data-comment-id="${highlightCommentId}"]`);
+                if (!highlighted) {
+                    highlighted = container.querySelector(`.comment-item[data-reply-id="${highlightCommentId}"]`);
+                }
+                if (highlighted) {
+                    highlighted.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                }
+            }, 600);
+        }
+
     } catch (error) {
         console.error('Error loading comments:', error);
-        return [];
     }
 }
 
 // ============================================================
-// AGREGAR COMENTARIO
+// 🔥 AGREGAR COMENTARIO (SIN RE-RENDER)
 // ============================================================
 
 export async function addComment(storyId, content, parentCommentId = null) {
@@ -174,6 +379,47 @@ export async function addComment(storyId, content, parentCommentId = null) {
         return null;
     }
 
+    // ✅ CREAR COMENTARIO LOCAL
+    const currentUser = getCurrentUser();
+    const tempComment = {
+        id: 'local_' + Date.now(),
+        userId: currentUser?.id || 'local',
+        username: currentUser?.username || 'usuario',
+        fullName: currentUser?.fullName || 'Usuario',
+        avatar: currentUser?.avatar || getAvatar(currentUser?.fullName || 'U'),
+        content: content.trim(),
+        createdAt: new Date().toISOString(),
+        replies: [],
+        likes: [],
+        _temp: true
+    };
+
+    // ✅ ACTUALIZAR ESTADO LOCAL
+    if (parentCommentId) {
+        const parentComment = findCommentById(localComments, parentCommentId);
+        if (parentComment) {
+            if (!parentComment.replies) parentComment.replies = [];
+            parentComment.replies.push(tempComment);
+            // Ordenar respuestas (viejas primero)
+            parentComment.replies.sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
+            // Mostrar respuestas automáticamente
+            localRepliesVisibility[parentCommentId] = true;
+        }
+    } else {
+        localComments.unshift(tempComment);
+    }
+
+    // ✅ ACTUALIZAR DOM DIRECTAMENTE
+    const container = document.getElementById('commentsList');
+    if (container) {
+        const currentUserId = currentUser?.id;
+        renderComments(localComments, container, currentUserId);
+    }
+
+    // ✅ ACTUALIZAR CONTADOR
+    updateCommentCount(1);
+
+    // ✅ ENVIAR AL SERVIDOR EN SEGUNDO PLANO
     try {
         let url = `${API_URL}/api/stories/${storyId}/comments`;
         let body = { content: content.trim() };
@@ -195,27 +441,36 @@ export async function addComment(storyId, content, parentCommentId = null) {
 
         const newComment = await res.json();
         
-        // ACTUALIZAR CACHÉ LOCAL
-        if (commentsCache.has(storyId)) {
-            const comments = commentsCache.get(storyId);
-            
-            if (parentCommentId) {
-                const parentComment = findCommentById(comments, parentCommentId);
-                if (parentComment) {
-                    if (!parentComment.replies) parentComment.replies = [];
-                    parentComment.replies.push(newComment);
-                    parentComment.replies.sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
-                    // Mostrar respuestas automáticamente cuando se agrega una nueva
-                    repliesVisibility.set(parentCommentId, true);
+        // ✅ REEMPLAZAR COMENTARIO TEMPORAL POR EL REAL
+        if (parentCommentId) {
+            const parentComment = findCommentById(localComments, parentCommentId);
+            if (parentComment && parentComment.replies) {
+                const idx = parentComment.replies.findIndex(c => c.id === tempComment.id);
+                if (idx !== -1) {
+                    parentComment.replies[idx] = newComment;
                 }
-            } else {
-                comments.unshift(newComment);
             }
-            commentsCache.set(storyId, comments);
+        } else {
+            const idx = localComments.findIndex(c => c.id === tempComment.id);
+            if (idx !== -1) {
+                localComments[idx] = newComment;
+            }
         }
 
-        updateCommentsUI(storyId);
+        // ✅ ACTUALIZAR LIKES
+        if (newComment.likes) {
+            localCommentLikes[newComment.id] = new Set(newComment.likes);
+        } else {
+            localCommentLikes[newComment.id] = new Set();
+        }
 
+        // ✅ RE-RENDER SOLO SI ES NECESARIO (reemplazar el temporal)
+        if (container) {
+            const currentUserId = currentUser?.id;
+            renderComments(localComments, container, currentUserId);
+        }
+
+        // ✅ EMITIR VIA SOCKET
         const socket = window.socket;
         if (socket) {
             socket.emit('new_comment', {
@@ -225,18 +480,36 @@ export async function addComment(storyId, content, parentCommentId = null) {
             });
         }
 
-        showToast(parentCommentId ? '💬 Respuesta agregada' : '💬 Comentario agregado');
+        showToast(parentCommentId ? '💬 Respuesta agregada' : '💬 Comentario enviado');
         return newComment;
 
     } catch (error) {
         console.error('Error adding comment:', error);
+        
+        // ❌ REVERTIR COMENTARIO TEMPORAL
+        if (parentCommentId) {
+            const parentComment = findCommentById(localComments, parentCommentId);
+            if (parentComment && parentComment.replies) {
+                parentComment.replies = parentComment.replies.filter(c => c.id !== tempComment.id);
+            }
+        } else {
+            localComments = localComments.filter(c => c.id !== tempComment.id);
+        }
+
+        // ✅ ACTUALIZAR DOM
+        if (container) {
+            const currentUserId = currentUser?.id;
+            renderComments(localComments, container, currentUserId);
+        }
+
+        updateCommentCount(-1);
         showToast('Error al comentar', true);
         return null;
     }
 }
 
 // ============================================================
-// ELIMINAR COMENTARIO
+// 🔥 ELIMINAR COMENTARIO (SIN RE-RENDER)
 // ============================================================
 
 export async function deleteComment(storyId, commentId, parentCommentId = null) {
@@ -245,6 +518,8 @@ export async function deleteComment(storyId, commentId, parentCommentId = null) 
         showToast('Inicia sesión para eliminar', true);
         return false;
     }
+
+    if (!confirm('¿Eliminar este comentario?')) return false;
 
     try {
         let url;
@@ -261,21 +536,28 @@ export async function deleteComment(storyId, commentId, parentCommentId = null) 
 
         if (!res.ok) throw new Error('Error al eliminar');
 
-        if (commentsCache.has(storyId)) {
-            const comments = commentsCache.get(storyId);
-            
-            if (parentCommentId) {
-                const parentComment = findCommentById(comments, parentCommentId);
-                if (parentComment && parentComment.replies) {
-                    parentComment.replies = parentComment.replies.filter(r => r.id !== commentId);
-                }
-            } else {
-                const filtered = comments.filter(c => c.id !== commentId);
-                commentsCache.set(storyId, filtered);
+        // ✅ ELIMINAR DEL ESTADO LOCAL
+        if (parentCommentId) {
+            const parentComment = findCommentById(localComments, parentCommentId);
+            if (parentComment && parentComment.replies) {
+                parentComment.replies = parentComment.replies.filter(r => r.id !== commentId);
             }
+        } else {
+            localComments = localComments.filter(c => c.id !== commentId);
         }
 
-        updateCommentsUI(storyId);
+        // ✅ ELIMINAR LIKES
+        delete localCommentLikes[commentId];
+
+        // ✅ ACTUALIZAR DOM
+        const container = document.getElementById('commentsList');
+        if (container) {
+            const currentUser = getCurrentUser();
+            renderComments(localComments, container, currentUser?.id);
+        }
+
+        // ✅ ACTUALIZAR CONTADOR
+        updateCommentCount(-1);
 
         showToast('🗑️ Eliminado');
         return true;
@@ -288,7 +570,7 @@ export async function deleteComment(storyId, commentId, parentCommentId = null) 
 }
 
 // ============================================================
-// DAR LIKE A COMENTARIO
+// 🔥 DAR LIKE A COMENTARIO (SIN RE-RENDER)
 // ============================================================
 
 export async function likeComment(storyId, commentId) {
@@ -296,6 +578,27 @@ export async function likeComment(storyId, commentId) {
     if (!token) {
         showToast('Inicia sesión para dar like', true);
         return false;
+    }
+
+    const currentUserId = getCurrentUser()?.id;
+    const isCurrentlyLiked = localCommentLikes[commentId]?.has(currentUserId) || false;
+
+    // ✅ ACTUALIZACIÓN OPTIMISTA
+    if (!localCommentLikes[commentId]) {
+        localCommentLikes[commentId] = new Set();
+    }
+
+    if (isCurrentlyLiked) {
+        localCommentLikes[commentId].delete(currentUserId);
+    } else {
+        localCommentLikes[commentId].add(currentUserId);
+    }
+
+    // ✅ ACTUALIZAR DOM
+    const container = document.getElementById('commentsList');
+    if (container) {
+        const currentUser = getCurrentUser();
+        renderComments(localComments, container, currentUser?.id);
     }
 
     try {
@@ -311,313 +614,77 @@ export async function likeComment(storyId, commentId) {
 
         const data = await res.json();
         
-        const currentUserId = getCurrentUser()?.id;
-        if (commentLikes.has(commentId)) {
-            const likes = commentLikes.get(commentId);
-            if (data.liked) {
-                likes.add(currentUserId);
-            } else {
-                likes.delete(currentUserId);
-            }
-        } else {
-            const newSet = new Set();
-            if (data.liked) newSet.add(currentUserId);
-            commentLikes.set(commentId, newSet);
+        // ✅ ACTUALIZAR CON DATOS DEL SERVIDOR
+        if (data.likes) {
+            localCommentLikes[commentId] = new Set(data.likes);
         }
 
-        updateCommentsUI(storyId);
+        // ✅ ACTUALIZAR DOM
+        if (container) {
+            const currentUser = getCurrentUser();
+            renderComments(localComments, container, currentUser?.id);
+        }
 
         showToast(data.liked ? '❤️ Like al comentario' : '💔 Like eliminado');
         return data.liked;
 
     } catch (error) {
         console.error('Error liking comment:', error);
+        
+        // ❌ REVERTIR
+        if (isCurrentlyLiked) {
+            localCommentLikes[commentId].add(currentUserId);
+        } else {
+            localCommentLikes[commentId].delete(currentUserId);
+        }
+
+        if (container) {
+            const currentUser = getCurrentUser();
+            renderComments(localComments, container, currentUser?.id);
+        }
+
         showToast('Error al dar like', true);
         return false;
     }
 }
 
 // ============================================================
-// ACTUALIZAR UI DE COMENTARIOS LOCALMENTE
+// 🔥 ACTUALIZAR CONTADOR DE COMENTARIOS
 // ============================================================
 
-function updateCommentsUI(storyId) {
-    const container = document.getElementById('commentsList');
-    if (!container) return;
-    
-    const currentUser = getCurrentUser();
-    const comments = commentsCache.get(storyId) || [];
-    
-    renderComments(comments, storyId, currentUser?.id, container);
-}
-
-// ============================================================
-// FUNCIÓN PARA OBTENER CONTEXTO DE RESPUESTA
-// ============================================================
-
-function getReplyContext(reply, currentUserId, parentCommentId, allComments) {
-    const parentComment = findCommentById(allComments, parentCommentId);
-    
-    const parentAuthorName = parentComment?.fullName || parentComment?.username || 'usuario';
-    const parentAuthorId = parentComment?.userId || null;
-    
-    const replyToName = reply.replyToName || reply.replyToUsername || parentAuthorName;
-    const replyToUserId = reply.replyToUserId || parentAuthorId;
-    
-    let contextText = '';
-    let contextColor = 'rgba(255,255,255,0.25)';
-    let isTarget = false;
-    
-    if (reply.userId === currentUserId) {
-        if (replyToUserId && replyToUserId !== currentUserId) {
-            contextText = `Respondiste a @${replyToName}`;
-            contextColor = 'rgba(52,211,153,0.6)';
-        } else if (replyToUserId && replyToUserId === currentUserId) {
-            contextText = `Respondiste a tu comentario`;
-            contextColor = 'rgba(52,211,153,0.6)';
-        } else {
-            contextText = `Respondiste`;
-            contextColor = 'rgba(52,211,153,0.6)';
-        }
-        isTarget = false;
-    } else if (replyToUserId && replyToUserId === currentUserId) {
-        contextText = `Te respondió`;
-        contextColor = 'rgba(192,132,252,0.7)';
-        isTarget = true;
-    } else if (replyToUserId) {
-        contextText = `Respondió a @${replyToName}`;
-        contextColor = 'rgba(255,255,255,0.25)';
-        isTarget = false;
-    } else if (parentAuthorId && parentAuthorId !== currentUserId) {
-        contextText = `Respondió a @${parentAuthorName}`;
-        contextColor = 'rgba(255,255,255,0.25)';
-        isTarget = false;
-    } else {
-        contextText = `Respondió`;
-        contextColor = 'rgba(255,255,255,0.15)';
-        isTarget = false;
+function updateCommentCount(increment) {
+    const commentsEl = document.getElementById('modalComments');
+    if (commentsEl) {
+        const current = parseInt(commentsEl.textContent.replace(/[^0-9]/g, '')) || 0;
+        commentsEl.textContent = formatNumber(current + increment);
     }
     
-    return {
-        text: contextText,
-        color: contextColor,
-        isTarget: isTarget,
-        targetName: replyToName
-    };
-}
-
-// ============================================================
-// FUNCIÓN PARA APLANAR RESPUESTAS (TODAS EN EL MISMO NIVEL)
-// ============================================================
-
-function flattenReplies(replies, allComments, parentId) {
-    if (!replies || replies.length === 0) return [];
-    
-    let result = [];
-    
-    replies.forEach(reply => {
-        result.push({
-            ...reply,
-            _parentId: parentId
-        });
-        
-        if (reply.replies && reply.replies.length > 0) {
-            const nested = flattenReplies(reply.replies, allComments, reply.id);
-            result = result.concat(nested);
-        }
-    });
-    
-    return result;
-}
-
-// ============================================================
-// RENDER COMENTARIOS PRINCIPALES
-// ============================================================
-
-export function renderComments(comments, storyId, currentUserId, container, highlightCommentId = null) {
-    if (!container) return;
-
-    if (!comments || comments.length === 0) {
-        container.innerHTML = `
-            <div class="no-comments">
-                <i class="fas fa-comment-slash"></i>
-                <span>No hay comentarios aún</span>
-            </div>
-        `;
-        return;
+    const commentsCountEl = document.getElementById('commentsCount');
+    if (commentsCountEl) {
+        const current = parseInt(commentsCountEl.textContent.replace(/[^0-9]/g, '')) || 0;
+        commentsCountEl.textContent = formatNumber(current + increment);
     }
-
-    let html = '';
-    comments.forEach(comment => {
-        const cachedLikes = commentLikes.get(comment.id);
-        const isLiked = cachedLikes ? cachedLikes.has(currentUserId) : (comment.likes?.includes(currentUserId) || false);
-        const likesCount = cachedLikes ? cachedLikes.size : (comment.likes?.length || 0);
-        const isOwn = comment.userId === currentUserId;
-        const hasReplies = comment.replies && comment.replies.length > 0;
-        const replyCount = comment.replies?.length || 0;
-        const isExpanded = repliesVisibility.get(comment.id) || false;
-        
-        const isHighlighted = highlightCommentId && comment.id === highlightCommentId;
-
-        html += `
-            <div class="comment-item ${isHighlighted ? 'highlighted' : ''}" data-comment-id="${comment.id}" style="${isHighlighted ? 'background:rgba(192,132,252,0.08);border-left:3px solid #c084fc;padding-left:10px;' : ''}">
-                <img class="avatar" src="${comment.avatar || getAvatar(comment.fullName)}" 
-                     alt="${comment.fullName}" 
-                     onclick="window.goToProfileUser('${comment.userId}')" />
-                <div class="comment-body">
-                    <div class="comment-user" onclick="window.goToProfileUser('${comment.userId}')">
-                        ${escapeHtml(comment.fullName)}
-                        <span class="handle">@${escapeHtml(comment.username)}</span>
-                        <span class="time">${formatDate(comment.createdAt)}</span>
-                    </div>
-                    <div class="comment-text" style="font-size:16px; line-height:1.5; color:rgba(255,255,255,0.85);">${escapeHtml(comment.content)}</div>
-                    <div class="comment-meta">
-                        <button class="btn-like-comment ${isLiked ? 'liked' : ''}" 
-                                data-comment-id="${comment.id}"
-                                onclick="window.handleCommentLike('${storyId}', '${comment.id}')">
-                            <i class="fas fa-heart"></i> <span>${formatNumber(likesCount)}</span>
-                        </button>
-                        <button class="btn-reply-comment" onclick="window.toggleReplyInput('${storyId}', '${comment.id}')">
-                            <i class="fas fa-reply"></i> Responder
-                        </button>
-                        ${isOwn ? `
-                            <button class="btn-delete-comment" onclick="window.handleCommentDelete('${storyId}', '${comment.id}')">
-                                <i class="fas fa-trash"></i>
-                            </button>
-                        ` : ''}
-                    </div>
-                    
-                    <div class="reply-input-container" id="reply-input-${comment.id}" style="display:none;margin-top:8px;">
-                        <input type="text" class="reply-input" id="replyInput-${comment.id}" 
-                               placeholder="Escribe una respuesta..." maxlength="500" />
-                        <button class="reply-send-btn" onclick="window.handleReplySubmit('${storyId}', '${comment.id}')">
-                            <i class="fas fa-paper-plane"></i>
-                        </button>
-                    </div>
-                    
-                    ${hasReplies ? renderFlatReplies(comment.replies, storyId, currentUserId, comment.id, comments, highlightCommentId, isExpanded) : ''}
-                    
-                    ${hasReplies ? `
-                        <div class="show-replies-btn" onclick="window.toggleRepliesVisibility('${comment.id}')" style="font-size:12px; color:rgba(192,132,252,0.4); cursor:pointer; margin-top:4px;">
-                            <i class="fas fa-chevron-${isExpanded ? 'up' : 'down'}"></i> 
-                            ${isExpanded ? `Ocultar ${replyCount} respuestas` : `Ver ${replyCount} respuestas`}
-                        </div>
-                    ` : ''}
-                </div>
-            </div>
-        `;
-    });
-
-    container.innerHTML = html;
 }
 
 // ============================================================
-// RENDER RESPUESTAS - TODAS EN EL MISMO NIVEL (APLANADAS)
+// 🔥 FUNCIONES GLOBALES (PARA EVENTOS ONCLICK)
 // ============================================================
 
-function renderFlatReplies(replies, storyId, currentUserId, parentCommentId, allComments, highlightCommentId = null, isExpanded = false) {
-    if (!replies || replies.length === 0) return '';
-
-    const flatReplies = flattenReplies(replies, allComments, parentCommentId);
-    
-    if (flatReplies.length === 0) return '';
-
-    // Si no está expandido, no mostrar nada
-    if (!isExpanded) return '';
-
-    let html = `<div class="replies" id="replies-${parentCommentId}" style="margin-left: 40px; margin-top: 8px; display: flex; flex-direction: column; gap: 8px; border-left: 2px solid rgba(192,132,252,0.08); padding-left: 12px;">`;
-    
-    flatReplies.forEach((reply) => {
-        const cachedLikes = commentLikes.get(reply.id);
-        const isLiked = cachedLikes ? cachedLikes.has(currentUserId) : (reply.likes?.includes(currentUserId) || false);
-        const likesCount = cachedLikes ? cachedLikes.size : (reply.likes?.length || 0);
-        const isOwn = reply.userId === currentUserId;
-        const isHighlighted = highlightCommentId && reply.id === highlightCommentId;
-        
-        const context = getReplyContext(reply, currentUserId, reply._parentId || parentCommentId, allComments);
-        
-        let contextHtml = '';
-        if (context.text) {
-            const color = context.isTarget ? 'rgba(192,132,252,0.7)' : context.color;
-            contextHtml = `
-                <div class="reply-context" style="font-size:11px; color:${color}; margin:2px 0 4px 0;">
-                    <i class="fas fa-reply" style="font-size:8px; margin-right:4px;"></i>
-                    <span style="${context.isTarget ? 'font-weight:500;' : ''}">${context.text}</span>
-                </div>
-            `;
-        }
-
-        html += `
-            <div class="comment-item reply-item ${isHighlighted ? 'highlighted' : ''}" data-reply-id="${reply.id}" style="${isHighlighted ? 'background:rgba(192,132,252,0.08);border-left:3px solid #c084fc;padding-left:10px;' : ''}">
-                <img class="avatar" src="${reply.avatar || getAvatar(reply.fullName)}" 
-                     alt="${reply.fullName}" 
-                     style="width:32px;height:32px;border-radius:50%;object-fit:cover;flex-shrink:0;margin-right:10px;"
-                     onclick="window.goToProfileUser('${reply.userId}')" />
-                <div class="comment-body" style="flex:1;min-width:0;">
-                    <div class="comment-user" onclick="window.goToProfileUser('${reply.userId}')" style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-size:13px;">
-                        <span style="font-weight:600;color:#fff;">${escapeHtml(reply.fullName)}</span>
-                        <span style="font-size:11px;color:rgba(255,255,255,0.2);">@${escapeHtml(reply.username)}</span>
-                        <span style="font-size:10px;color:rgba(255,255,255,0.15);">${formatDate(reply.createdAt)}</span>
-                    </div>
-                    ${contextHtml}
-                    <div class="comment-text" style="font-size:15px; line-height:1.5; color:rgba(255,255,255,0.85);">${escapeHtml(reply.content)}</div>
-                    <div class="comment-meta" style="display:flex;align-items:center;gap:12px;margin-top:4px;flex-wrap:wrap;">
-                        <button class="btn-like-comment ${isLiked ? 'liked' : ''}" 
-                                data-comment-id="${reply.id}"
-                                onclick="window.handleCommentLike('${storyId}', '${reply.id}')"
-                                style="background:transparent;border:none;color:rgba(255,255,255,0.3);font-size:11px;cursor:pointer;display:flex;align-items:center;gap:4px;padding:2px 6px;border-radius:4px;transition:all 0.2s;">
-                            <i class="fas fa-heart" style="font-size:10px;color:${isLiked ? '#ff6b6b' : 'inherit'};"></i> <span>${formatNumber(likesCount)}</span>
-                        </button>
-                        <button class="btn-reply-comment" onclick="window.toggleReplyInput('${storyId}', '${reply.id}')"
-                                style="background:transparent;border:none;color:rgba(255,255,255,0.2);font-size:11px;cursor:pointer;display:flex;align-items:center;gap:4px;padding:2px 6px;border-radius:4px;">
-                            <i class="fas fa-reply" style="font-size:9px;"></i> Responder
-                        </button>
-                        ${isOwn ? `
-                            <button class="btn-delete-comment" onclick="window.handleCommentDelete('${storyId}', '${reply.id}', '${reply._parentId || parentCommentId}')"
-                                    style="background:transparent;border:none;color:rgba(255,107,107,0.3);font-size:11px;cursor:pointer;display:flex;align-items:center;gap:4px;padding:2px 6px;border-radius:4px;">
-                                <i class="fas fa-trash" style="font-size:9px;"></i>
-                            </button>
-                        ` : ''}
-                    </div>
-                    
-                    <div class="reply-input-container" id="reply-input-${reply.id}" style="display:none;margin-top:6px;">
-                        <input type="text" class="reply-input" id="replyInput-${reply.id}" 
-                               placeholder="Escribe una respuesta..." maxlength="500"
-                               style="flex:1;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);border-radius:12px;padding:6px 12px;font-size:13px;color:#fff;outline:none;" />
-                        <button class="reply-send-btn" onclick="window.handleReplySubmit('${storyId}', '${reply.id}')"
-                                style="background:rgba(192,132,252,0.15);border:1px solid rgba(192,132,252,0.2);border-radius:12px;color:#c084fc;padding:6px 14px;font-size:12px;cursor:pointer;transition:all 0.2s;">
-                            <i class="fas fa-paper-plane"></i>
-                        </button>
-                    </div>
-                </div>
-            </div>
-        `;
-    });
-    
-    html += '</div>';
-    return html;
-}
-
-// ============================================================
-// FUNCIONES GLOBALES PARA EL MODAL
-// ============================================================
-
-window.handleCommentLike = async function(storyId, commentId) {
-    const liked = await likeComment(storyId, commentId);
-    if (liked !== false) {
-        updateCommentsUI(storyId);
+window.handleCommentLike = async function(commentId) {
+    const storyId = window._currentStoryId;
+    if (storyId) {
+        await likeComment(storyId, commentId);
     }
 };
 
-window.handleCommentDelete = async function(storyId, commentId, parentCommentId = null) {
-    if (!confirm('¿Eliminar este comentario?')) return;
-    const success = await deleteComment(storyId, commentId, parentCommentId);
-    if (success) {
-        updateCommentsUI(storyId);
+window.handleCommentDelete = async function(commentId, parentCommentId = null) {
+    const storyId = window._currentStoryId;
+    if (storyId) {
+        await deleteComment(storyId, commentId, parentCommentId);
     }
 };
 
-window.toggleReplyInput = function(storyId, commentId) {
+window.toggleReplyInput = function(commentId) {
     document.querySelectorAll('.reply-input-container').forEach(el => {
         if (el.id !== `reply-input-${commentId}`) {
             el.style.display = 'none';
@@ -637,7 +704,7 @@ window.toggleReplyInput = function(storyId, commentId) {
     }
 };
 
-window.handleReplySubmit = async function(storyId, parentCommentId) {
+window.handleReplySubmit = async function(parentCommentId) {
     const input = document.getElementById(`replyInput-${parentCommentId}`);
     if (!input) return;
     
@@ -647,158 +714,36 @@ window.handleReplySubmit = async function(storyId, parentCommentId) {
         return;
     }
     
+    const storyId = window._currentStoryId;
+    if (!storyId) return;
+    
     const newReply = await addComment(storyId, content, parentCommentId);
     if (newReply) {
         input.value = '';
         const container = document.getElementById(`reply-input-${parentCommentId}`);
         if (container) container.style.display = 'none';
-        updateCommentsUI(storyId);
     }
 };
-
-// ============================================================
-// 🔥 TOGGLE VISIBILIDAD DE RESPUESTAS (CORREGIDO)
-// ============================================================
 
 window.toggleRepliesVisibility = function(commentId) {
-    const currentState = repliesVisibility.get(commentId) || false;
-    const newState = !currentState;
-    repliesVisibility.set(commentId, newState);
+    const currentState = localRepliesVisibility[commentId] || false;
+    localRepliesVisibility[commentId] = !currentState;
     
-    // Actualizar la UI
     const container = document.getElementById('commentsList');
     if (container) {
-        const storyId = container.dataset.storyId || window._currentStoryId;
-        if (storyId) {
-            updateCommentsUI(storyId);
-        }
+        const currentUser = getCurrentUser();
+        renderComments(localComments, container, currentUser?.id);
     }
 };
 
 // ============================================================
-// INICIALIZAR COMENTARIOS EN MODAL
+// 🔥 EXPORTAR FUNCIONES
 // ============================================================
 
-export async function initComments(storyId, containerId = 'commentsList', highlightCommentId = null) {
-    if (!storyId) return;
-
-    const container = document.getElementById(containerId);
-    if (!container) return;
-    
-    // Guardar storyId en el container para referencia
-    container.dataset.storyId = storyId;
-    window._currentStoryId = storyId;
-
-    // FORZAR RECARGA COMPLETA DESDE EL SERVIDOR
-    const comments = await loadComments(storyId, true);
-    const currentUser = getCurrentUser();
-    
-    // 🔥 SI HAY UN COMENTARIO DESTACADO, EXPANDIR LA CADENA DE PADRES
-    if (highlightCommentId) {
-        // Buscar la cadena de padres para expandir todas las respuestas necesarias
-        const parentChain = getParentChain(comments, highlightCommentId);
-        if (parentChain) {
-            // Expandir todos los padres
-            parentChain.forEach(parentId => {
-                repliesVisibility.set(parentId, true);
-            });
-            // También expandir el comentario padre directo
-            const parentComment = findParentComment(comments, highlightCommentId);
-            if (parentComment) {
-                repliesVisibility.set(parentComment.id, true);
-            }
-            // Expandir el comentario destacado si tiene respuestas
-            const highlightedComment = findCommentById(comments, highlightCommentId);
-            if (highlightedComment && highlightedComment.replies && highlightedComment.replies.length > 0) {
-                repliesVisibility.set(highlightCommentId, true);
-            }
-        } else {
-            // Si no tiene padres (es un comentario principal), solo expandirlo si tiene respuestas
-            const comment = findCommentById(comments, highlightCommentId);
-            if (comment && comment.replies && comment.replies.length > 0) {
-                repliesVisibility.set(highlightCommentId, true);
-            }
-        }
-    }
-    
-    renderComments(comments, storyId, currentUser?.id, container, highlightCommentId);
-
-    const input = document.getElementById('commentInput');
-    const sendBtn = document.getElementById('sendCommentBtn');
-
-    if (input && sendBtn) {
-        const sendComment = async () => {
-            const content = input.value.trim();
-            if (!content) return;
-
-            sendBtn.disabled = true;
-            const newComment = await addComment(storyId, content);
-            if (newComment) {
-                input.value = '';
-                updateCommentsUI(storyId);
-            }
-            sendBtn.disabled = false;
-        };
-
-        sendBtn.onclick = sendComment;
-        input.onkeydown = (e) => {
-            if (e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault();
-                sendComment();
-            }
-        };
-    }
-    
-    if (highlightCommentId) {
-        setTimeout(() => {
-            // Buscar en comentarios principales
-            let highlighted = container.querySelector(`.comment-item[data-comment-id="${highlightCommentId}"]`);
-            // Si no está en comentarios principales, buscar en respuestas
-            if (!highlighted) {
-                highlighted = container.querySelector(`.comment-item[data-reply-id="${highlightCommentId}"]`);
-            }
-            if (highlighted) {
-                highlighted.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                highlighted.style.background = 'rgba(192,132,252,0.1)';
-                highlighted.style.borderLeft = '3px solid #c084fc';
-                setTimeout(() => {
-                    highlighted.style.background = '';
-                    highlighted.style.borderLeft = '';
-                }, 3000);
-            }
-        }, 600);
-    }
-}
-
-// ============================================================
-// EXPORTAR FUNCIÓN PARA EXPANDIR RESPUESTAS DESDE NOTIFICACIONES
-// ============================================================
-
-export function expandRepliesForComment(commentId) {
-    if (!commentId) return;
-    
-    // Buscar el comentario en el caché
-    let found = false;
-    for (const [storyId, comments] of commentsCache) {
-        const comment = findCommentById(comments, commentId);
-        if (comment) {
-            // Encontrar la cadena de padres
-            const parentChain = getParentChain(comments, commentId);
-            if (parentChain) {
-                parentChain.forEach(parentId => {
-                    repliesVisibility.set(parentId, true);
-                });
-            }
-            // Expandir el comentario si tiene respuestas
-            if (comment.replies && comment.replies.length > 0) {
-                repliesVisibility.set(commentId, true);
-            }
-            found = true;
-            break;
-        }
-    }
-    
-    if (found) {
-        updateCommentsUI(window._currentStoryId);
-    }
-}
+export { 
+    localComments,
+    localCommentLikes,
+    localRepliesVisibility,
+    findCommentById,
+    getParentChain
+};
