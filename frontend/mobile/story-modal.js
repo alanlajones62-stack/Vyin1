@@ -558,7 +558,7 @@ async function handleDeleteStory() {
 }
 
 // ============================================================
-// 🔥 ENVIAR COMENTARIO - CORREGIDO (SIN DUPLICADOS Y CON RESET DE BOTÓN)
+// 🔥 ENVIAR COMENTARIO - CORREGIDO (CON RESET DE BOTÓN ASEGURADO)
 // ============================================================
 
 async function handleSendComment() {
@@ -623,18 +623,21 @@ async function handleSendComment() {
         console.error('Error enviando comentario:', error);
         showToast('Error al enviar comentario', true);
     } finally {
-        // 🔥 REHABILITAR INPUT Y BOTÓN SIEMPRE
+        // 🔥 REHABILITAR INPUT Y BOTÓN SIEMPRE - ESTO ES CRÍTICO
         input.disabled = false;
         if (sendBtn) {
             sendBtn.disabled = false;
             sendBtn.textContent = 'Enviar';
         }
-        input.focus();
+        // 🔥 ENFOCAR EL INPUT DESPUÉS DE ENVIAR
+        setTimeout(() => {
+            input.focus();
+        }, 100);
     }
 }
 
 // ============================================================
-// 🔥 ENVIAR RESPUESTA - CORREGIDO (SIN DUPLICADOS Y CON RESET DE BOTÓN)
+// 🔥 ENVIAR RESPUESTA - CORREGIDO (CON RESET DE BOTÓN ASEGURADO)
 // ============================================================
 
 async function handleSendReply(storyId, commentId) {
@@ -697,13 +700,16 @@ async function handleSendReply(storyId, commentId) {
         console.error('Error enviando respuesta:', error);
         showToast('Error al enviar respuesta', true);
     } finally {
-        // 🔥 REHABILITAR INPUT Y BOTÓN SIEMPRE
+        // 🔥 REHABILITAR INPUT Y BOTÓN SIEMPRE - ESTO ES CRÍTICO
         input.disabled = false;
         if (sendBtn) {
             sendBtn.disabled = false;
             sendBtn.textContent = 'Enviar';
         }
-        input.focus();
+        // 🔥 ENFOCAR EL INPUT DESPUÉS DE ENVIAR
+        setTimeout(() => {
+            input.focus();
+        }, 100);
     }
 }
 
