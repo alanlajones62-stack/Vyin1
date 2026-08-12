@@ -569,7 +569,7 @@ window.openChatFromProfile = function(userId) {
 
     // Redirigir a la página de chats con el userId
     setTimeout(() => {
-        window.location.href = `/chat.html?userId=${userId}`;
+        window.location.href = `/chats.html?userId=${userId}`;
     }, 300);
 };
 
