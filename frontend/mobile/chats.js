@@ -30,94 +30,119 @@ let scrollTimeout = null;
 let isInitialLoad = true;
 
 // ============================================================
-// 🔗 DETECCIÓN Y APERTURA DE ENLACES
+// 🔗 DETECCIÓN Y APERTURA DE ENLACES (CORREGIDO)
 // ============================================================
 
 /**
  * Detecta enlaces en un texto y los convierte en HTML con preview
+ * 🔥 CORREGIDO: No usa escapeHtml antes de procesar enlaces
  */
 function detectAndRenderLinks(text) {
     if (!text) return text;
     
+    // 🔥 PRIMERO: Escapar HTML para seguridad, pero preservar URLs
+    let html = escapeHtml(text);
+    
     // Patrones de enlaces
-    const urlPattern = /(https?:\/\/[^\s]+)/gi;
-    const vyinPattern = /(?:https?:\/\/)?(?:www\.)?vyin-social\.onrender\.com\/(story|feed|profile)\/([a-zA-Z0-9_-]+)/i;
-    const tiktokPattern = /(?:https?:\/\/)?(?:www\.)?(?:vm\.tiktok\.com|tiktok\.com)\/[^\s]+/gi;
-    const youtubePattern = /(?:https?:\/\/)?(?:www\.)?(?:youtube\.com|youtu\.be)\/[^\s]+/gi;
-    const instagramPattern = /(?:https?:\/\/)?(?:www\.)?instagram\.com\/[^\s]+/gi;
-    const twitterPattern = /(?:https?:\/\/)?(?:www\.)?(?:twitter\.com|x\.com)\/[^\s]+/gi;
+    const urlPattern = /(https?:\/\/[^\s<>]+)/gi;
+    const vyinPattern = /(https?:\/\/[^\s]*vyin-social\.onrender\.com\/(?:story|feed|profile)\/[a-zA-Z0-9_-]+)/gi;
+    const tiktokPattern = /(https?:\/\/[^\s]*(?:vm\.tiktok\.com|tiktok\.com)[^\s]*)/gi;
+    const youtubePattern = /(https?:\/\/[^\s]*(?:youtube\.com|youtu\.be)[^\s]*)/gi;
+    const instagramPattern = /(https?:\/\/[^\s]*instagram\.com[^\s]*)/gi;
+    const twitterPattern = /(https?:\/\/[^\s]*(?:twitter\.com|x\.com)[^\s]*)/gi;
     
-    // Reemplazar enlaces por HTML
-    let html = text;
-    
-    // 1. Enlaces de Vyin (prioridad)
-    html = html.replace(vyinPattern, (match, type, id) => {
-        const url = match.startsWith('http') ? match : `https://${match}`;
+    // 🔥 1. Enlaces de Vyin (prioridad)
+    html = html.replace(vyinPattern, (match) => {
+        const url = match.trim();
+        const type = url.includes('/story/') ? 'story' : 
+                     url.includes('/profile/') ? 'profile' : 
+                     url.includes('/feed/') ? 'feed' : 'link';
         const label = type === 'story' ? '📖 Ver historia' : 
-                      type === 'feed' ? '📱 Ver publicación' : 
-                      '👤 Ver perfil';
-        return `<a href="${url}" target="_blank" class="link-preview vyin-link" onclick="event.stopPropagation(); window.openLink('${url}', 'vyin')">
-            <span class="link-domain">${type === 'story' ? '📖 Historia' : type === 'feed' ? '📱 Publicación' : '👤 Perfil'} · Vyin</span>
+                      type === 'profile' ? '👤 Ver perfil' : 
+                      type === 'feed' ? '📱 Ver publicación' : '🔗 Abrir enlace';
+        const domain = 'Vyin';
+        const icon = type === 'story' ? '📖' : type === 'profile' ? '👤' : type === 'feed' ? '📱' : '🔗';
+        
+        return `<a href="${url}" target="_blank" class="link-preview vyin-link" data-url="${url}" data-type="vyin">
+            <span class="link-domain">${icon} ${domain}</span>
             <span class="link-title">${label}</span>
         </a>`;
     });
     
-    // 2. TikTok
+    // 🔥 2. TikTok
     html = html.replace(tiktokPattern, (match) => {
-        const url = match.startsWith('http') ? match : `https://${match}`;
-        return `<a href="${url}" target="_blank" class="link-preview tiktok-link" onclick="event.stopPropagation(); window.openLink('${url}', 'tiktok')">
+        const url = match.trim();
+        return `<a href="${url}" target="_blank" class="link-preview tiktok-link" data-url="${url}" data-type="tiktok">
             <span class="link-domain">🎵 TikTok</span>
             <span class="link-title">Ver video en TikTok</span>
         </a>`;
     });
     
-    // 3. YouTube
+    // 🔥 3. YouTube
     html = html.replace(youtubePattern, (match) => {
-        const url = match.startsWith('http') ? match : `https://${match}`;
-        return `<a href="${url}" target="_blank" class="link-preview youtube-link" onclick="event.stopPropagation(); window.openLink('${url}', 'youtube')">
+        const url = match.trim();
+        return `<a href="${url}" target="_blank" class="link-preview youtube-link" data-url="${url}" data-type="youtube">
             <span class="link-domain">▶️ YouTube</span>
             <span class="link-title">Ver video en YouTube</span>
         </a>`;
     });
     
-    // 4. Instagram
+    // 🔥 4. Instagram
     html = html.replace(instagramPattern, (match) => {
-        const url = match.startsWith('http') ? match : `https://${match}`;
-        return `<a href="${url}" target="_blank" class="link-preview instagram-link" onclick="event.stopPropagation(); window.openLink('${url}', 'instagram')">
+        const url = match.trim();
+        return `<a href="${url}" target="_blank" class="link-preview instagram-link" data-url="${url}" data-type="instagram">
             <span class="link-domain">📸 Instagram</span>
             <span class="link-title">Ver en Instagram</span>
         </a>`;
     });
     
-    // 5. Twitter/X
+    // 🔥 5. Twitter/X
     html = html.replace(twitterPattern, (match) => {
-        const url = match.startsWith('http') ? match : `https://${match}`;
-        return `<a href="${url}" target="_blank" class="link-preview twitter-link" onclick="event.stopPropagation(); window.openLink('${url}', 'twitter')">
+        const url = match.trim();
+        return `<a href="${url}" target="_blank" class="link-preview twitter-link" data-url="${url}" data-type="twitter">
             <span class="link-domain">🐦 Twitter/X</span>
             <span class="link-title">Ver en Twitter/X</span>
         </a>`;
     });
     
-    // 6. Otros enlaces (genérico)
+    // 🔥 6. Otros enlaces (genérico)
     html = html.replace(urlPattern, (match) => {
         // Si ya fue procesado por los patrones anteriores, saltar
-        if (html.includes(`href="${match}"`)) return match;
+        if (match.includes('link-preview')) return match;
         
-        const url = match.startsWith('http') ? match : `https://${match}`;
-        const domain = new URL(url).hostname.replace('www.', '');
-        return `<a href="${url}" target="_blank" class="link-preview" onclick="event.stopPropagation(); window.openLink('${url}', 'other')">
-            <span class="link-domain">🔗 ${domain}</span>
-            <span class="link-title">${url.length > 40 ? url.substring(0, 40) + '...' : url}</span>
-        </a>`;
+        const url = match.trim();
+        try {
+            const urlObj = new URL(url);
+            const domain = urlObj.hostname.replace('www.', '');
+            const displayUrl = url.length > 40 ? url.substring(0, 40) + '...' : url;
+            return `<a href="${url}" target="_blank" class="link-preview" data-url="${url}" data-type="other">
+                <span class="link-domain">🔗 ${domain}</span>
+                <span class="link-title">${displayUrl}</span>
+            </a>`;
+        } catch (e) {
+            return `<a href="${url}" target="_blank" class="link-preview" data-url="${url}" data-type="other">
+                <span class="link-domain">🔗 Enlace</span>
+                <span class="link-title">${url.length > 40 ? url.substring(0, 40) + '...' : url}</span>
+            </a>`;
+        }
     });
     
     return html;
 }
 
 /**
- * Abrir un enlace desde el chat
+ * Abrir un enlace desde el chat - 🔥 CORREGIDO con event delegation
  */
-window.openLink = function(url, type) {
+function openLinkFromChat(event) {
+    const link = event.target.closest('a.link-preview');
+    if (!link) return;
+    
+    event.preventDefault();
+    event.stopPropagation();
+    
+    const url = link.getAttribute('data-url') || link.href;
+    const type = link.getAttribute('data-type') || 'other';
+    
     console.log(`🔗 Abriendo enlace: ${url} (tipo: ${type})`);
     
     // Si es un enlace de Vyin, intentar abrir dentro de la app
@@ -127,23 +152,20 @@ window.openLink = function(url, type) {
             const pathParts = urlObj.pathname.split('/').filter(p => p);
             
             if (pathParts.length >= 2) {
-                const type = pathParts[0];
+                const pathType = pathParts[0];
                 const id = pathParts[1];
                 
-                if (type === 'story') {
-                    // Abrir historia con el modal de historias
+                if (pathType === 'story') {
                     if (typeof window.openStoryModal === 'function') {
                         window.openStoryModal(id);
                         return;
                     }
-                } else if (type === 'profile') {
-                    // Abrir perfil con el modal de perfil
+                } else if (pathType === 'profile') {
                     if (typeof window.openProfileModal === 'function') {
                         window.openProfileModal(id);
                         return;
                     }
-                } else if (type === 'feed') {
-                    // Abrir feed/post
+                } else if (pathType === 'feed') {
                     if (typeof window.openPostModal === 'function') {
                         window.openPostModal(id);
                         return;
@@ -157,7 +179,16 @@ window.openLink = function(url, type) {
     
     // Para enlaces externos, abrir en nueva pestaña
     window.open(url, '_blank');
-};
+}
+
+// ============================================================
+// CONFIGURAR EVENT DELEGATION PARA ENLACES
+// ============================================================
+function setupLinkDelegation() {
+    if (!messagesContainerEl) return;
+    messagesContainerEl.removeEventListener('click', openLinkFromChat);
+    messagesContainerEl.addEventListener('click', openLinkFromChat);
+}
 
 // ============================================================
 // PERSISTENCIA EN LOCALSTORAGE
@@ -682,7 +713,7 @@ function renderMessages() {
 
         const messageId = msg.id || `temp_${Date.now()}_${Math.random()}`;
         // 🔥 PROCESAR CONTENIDO CON DETECCIÓN DE ENLACES
-        const processedContent = detectAndRenderLinks(escapeHtml(msg.content));
+        const processedContent = detectAndRenderLinks(msg.content);
         
         messagesHtml += `
             <div class="message ${msg.isOwn ? 'message-own' : 'message-other'}" data-message-id="${messageId}">
@@ -700,6 +731,8 @@ function renderMessages() {
 
     requestAnimationFrame(() => {
         messagesContainerEl.innerHTML = messagesHtml;
+        // 🔥 CONFIGURAR EVENT DELEGATION PARA ENLACES
+        setupLinkDelegation();
         
         if (wasNearBottom) {
             requestAnimationFrame(() => {
@@ -744,7 +777,8 @@ function appendSingleMessage(msg) {
     }
 
     const messageId = msg.id || `temp_${Date.now()}_${Math.random()}`;
-    const processedContent = detectAndRenderLinks(escapeHtml(msg.content));
+    // 🔥 PROCESAR CONTENIDO CON DETECCIÓN DE ENLACES
+    const processedContent = detectAndRenderLinks(msg.content);
     
     html += `
         <div class="message ${msg.isOwn ? 'message-own' : 'message-other'}" data-message-id="${messageId}" style="animation: messageIn 0.3s ease;">
@@ -760,6 +794,9 @@ function appendSingleMessage(msg) {
     `;
 
     messagesContainerEl.insertAdjacentHTML('beforeend', html);
+    
+    // 🔥 RECONFIGURAR EVENT DELEGATION
+    setupLinkDelegation();
     
     const scrollTop = messagesContainerEl.scrollTop;
     const scrollHeight = messagesContainerEl.scrollHeight;
@@ -782,7 +819,7 @@ function updateSingleMessage(tempId, realMessage) {
         const contentEl = msgEl.querySelector('.message-content');
         const timeEl = msgEl.querySelector('.message-time');
         if (contentEl) {
-            const processedContent = detectAndRenderLinks(escapeHtml(realMessage.content));
+            const processedContent = detectAndRenderLinks(realMessage.content);
             contentEl.innerHTML = processedContent;
         }
         if (timeEl) {
@@ -953,6 +990,8 @@ function showMessagesPanel() {
     }
 
     setupInfiniteScroll();
+    // 🔥 CONFIGURAR EVENT DELEGATION PARA ENLACES
+    setupLinkDelegation();
 }
 
 // ============================================================
@@ -1207,15 +1246,19 @@ async function init() {
         }, 500);
     }
 
-    console.log('📱 Chat mobile optimizado - con detección de enlaces');
+    // 🔥 CONFIGURAR EVENT DELEGATION PARA ENLACES
+    setupLinkDelegation();
+
+    console.log('📱 Chat mobile optimizado - con detección de enlaces corregida');
 }
 
+// Exponer funciones globales
 window.selectConversation = window.selectConversation;
 window.sendMessage = window.sendMessage;
 window.deleteMessage = window.deleteMessage;
 window.switchChatTab = window.switchChatTab;
 window.acceptChatRequest = window.acceptChatRequest;
 window.rejectChatRequest = window.rejectChatRequest;
-window.openLink = window.openLink;
+window.openLinkFromChat = openLinkFromChat;
 
 document.addEventListener('DOMContentLoaded', init);
