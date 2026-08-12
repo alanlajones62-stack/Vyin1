@@ -2,6 +2,7 @@
 // story-comments.js - Sistema de comentarios para historias
 // CON ESTADO CORRECTO DE OCULTAR/MOSTRAR RESPUESTAS
 // Y FUNCIONES DE CACHÉ PARA EVITAR DUPLICADOS
+// VERSIÓN CORREGIDA - SIN DUPLICADOS EN UI
 // ============================================================
 
 import { getToken, getCurrentUser, showToast, getAvatar, formatDate, escapeHtml } from './auth.js';
@@ -95,6 +96,16 @@ export function addCommentToCache(storyId, comment) {
         return;
     }
     
+    // Verificar si ya está renderizado en UI
+    const container = document.getElementById('commentsList');
+    if (container) {
+        const existingElement = container.querySelector(`[data-comment-id="${comment.id}"]`);
+        if (existingElement) {
+            console.log('⚠️ Comentario ya existe en UI, omitiendo caché');
+            return;
+        }
+    }
+    
     // Añadir al principio (nuevos primero)
     comments.unshift(comment);
     commentsCache.set(storyId, comments);
@@ -108,6 +119,8 @@ export function addCommentToCache(storyId, comment) {
     if (comment.likes) {
         commentLikes.set(comment.id, new Set(comment.likes));
     }
+    
+    console.log(`✅ Comentario ${comment.id} añadido al caché`);
 }
 
 export function addReplyToCache(storyId, parentCommentId, reply) {
@@ -136,6 +149,16 @@ export function addReplyToCache(storyId, parentCommentId, reply) {
         return;
     }
     
+    // Verificar si ya está renderizado en UI
+    const container = document.getElementById('commentsList');
+    if (container) {
+        const existingElement = container.querySelector(`[data-reply-id="${reply.id}"]`);
+        if (existingElement) {
+            console.log('⚠️ Respuesta ya existe en UI, omitiendo caché');
+            return;
+        }
+    }
+    
     parentComment.replies.push(reply);
     
     // Ordenar respuestas (viejas primero)
@@ -152,6 +175,8 @@ export function addReplyToCache(storyId, parentCommentId, reply) {
     if (reply.likes) {
         commentLikes.set(reply.id, new Set(reply.likes));
     }
+    
+    console.log(`✅ Respuesta ${reply.id} añadida al caché`);
 }
 
 export function updateCommentLikes(storyId, commentId, liked) {
@@ -424,7 +449,7 @@ export async function likeComment(storyId, commentId) {
 }
 
 // ============================================================
-// ACTUALIZAR UI DE COMENTARIOS LOCALMENTE
+// ACTUALIZAR UI DE COMENTARIOS LOCALMENTE (USANDO CACHÉ)
 // ============================================================
 
 function updateCommentsUI(storyId) {
@@ -434,7 +459,10 @@ function updateCommentsUI(storyId) {
     const currentUser = getCurrentUser();
     const comments = commentsCache.get(storyId) || [];
     
-    renderComments(comments, storyId, currentUser?.id, container);
+    // Usar el storyId del container o el proporcionado
+    const currentStoryId = container.dataset.storyId || window._currentStoryId || storyId;
+    
+    renderComments(comments, currentStoryId, currentUser?.id, container);
 }
 
 // ============================================================
@@ -762,7 +790,7 @@ window.toggleRepliesVisibility = function(commentId) {
 };
 
 // ============================================================
-// INICIALIZAR COMENTARIOS EN MODAL
+// INICIALIZAR COMENTARIOS EN MODAL - VERSIÓN CORREGIDA
 // ============================================================
 
 export async function initComments(storyId, containerId = 'commentsList', highlightCommentId = null, forceReload = false) {
@@ -775,31 +803,35 @@ export async function initComments(storyId, containerId = 'commentsList', highli
     container.dataset.storyId = storyId;
     window._currentStoryId = storyId;
 
-    // FORZAR RECARGA COMPLETA DESDE EL SERVIDOR si se solicita
-    const comments = await loadComments(storyId, forceReload);
+    // SOLO FORZAR RECARGA COMPLETA DESDE EL SERVIDOR si se solicita EXPLÍCITAMENTE
+    // y si NO hay datos en caché o si forceReload es true
+    let comments = commentsCache.get(storyId);
+    
+    if (forceReload || !comments || comments.length === 0) {
+        comments = await loadComments(storyId, forceReload);
+    } else {
+        // Si ya hay datos en caché, NO recargar del servidor
+        console.log(`📦 Usando caché de comentarios para historia ${storyId} (${comments.length} comentarios)`);
+    }
+    
     const currentUser = getCurrentUser();
     
-    // 🔥 SI HAY UN COMENTARIO DESTACADO, EXPANDIR LA CADENA DE PADRES
+    // SI HAY UN COMENTARIO DESTACADO, EXPANDIR LA CADENA DE PADRES
     if (highlightCommentId) {
-        // Buscar la cadena de padres para expandir todas las respuestas necesarias
         const parentChain = getParentChain(comments, highlightCommentId);
         if (parentChain) {
-            // Expandir todos los padres
             parentChain.forEach(parentId => {
                 repliesVisibility.set(parentId, true);
             });
-            // También expandir el comentario padre directo
             const parentComment = findParentComment(comments, highlightCommentId);
             if (parentComment) {
                 repliesVisibility.set(parentComment.id, true);
             }
-            // Expandir el comentario destacado si tiene respuestas
             const highlightedComment = findCommentById(comments, highlightCommentId);
             if (highlightedComment && highlightedComment.replies && highlightedComment.replies.length > 0) {
                 repliesVisibility.set(highlightCommentId, true);
             }
         } else {
-            // Si no tiene padres (es un comentario principal), solo expandirlo si tiene respuestas
             const comment = findCommentById(comments, highlightCommentId);
             if (comment && comment.replies && comment.replies.length > 0) {
                 repliesVisibility.set(highlightCommentId, true);
@@ -813,21 +845,28 @@ export async function initComments(storyId, containerId = 'commentsList', highli
     const sendBtn = document.getElementById('sendCommentBtn');
 
     if (input && sendBtn) {
+        // Remover listeners antiguos para evitar duplicados
+        const newSendBtn = sendBtn.cloneNode(true);
+        sendBtn.parentNode.replaceChild(newSendBtn, sendBtn);
+        
+        const newInput = input.cloneNode(true);
+        input.parentNode.replaceChild(newInput, input);
+        
         const sendComment = async () => {
-            const content = input.value.trim();
+            const content = newInput.value.trim();
             if (!content) return;
 
-            sendBtn.disabled = true;
+            newSendBtn.disabled = true;
             const newComment = await addComment(storyId, content);
             if (newComment) {
-                input.value = '';
+                newInput.value = '';
                 updateCommentsUI(storyId);
             }
-            sendBtn.disabled = false;
+            newSendBtn.disabled = false;
         };
 
-        sendBtn.onclick = sendComment;
-        input.onkeydown = (e) => {
+        newSendBtn.onclick = sendComment;
+        newInput.onkeydown = (e) => {
             if (e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault();
                 sendComment();
@@ -837,9 +876,7 @@ export async function initComments(storyId, containerId = 'commentsList', highli
     
     if (highlightCommentId) {
         setTimeout(() => {
-            // Buscar en comentarios principales
             let highlighted = container.querySelector(`.comment-item[data-comment-id="${highlightCommentId}"]`);
-            // Si no está en comentarios principales, buscar en respuestas
             if (!highlighted) {
                 highlighted = container.querySelector(`.comment-item[data-reply-id="${highlightCommentId}"]`);
             }
@@ -863,19 +900,16 @@ export async function initComments(storyId, containerId = 'commentsList', highli
 export function expandRepliesForComment(commentId) {
     if (!commentId) return;
     
-    // Buscar el comentario en el caché
     let found = false;
     for (const [storyId, comments] of commentsCache) {
         const comment = findCommentById(comments, commentId);
         if (comment) {
-            // Encontrar la cadena de padres
             const parentChain = getParentChain(comments, commentId);
             if (parentChain) {
                 parentChain.forEach(parentId => {
                     repliesVisibility.set(parentId, true);
                 });
             }
-            // Expandir el comentario si tiene respuestas
             if (comment.replies && comment.replies.length > 0) {
                 repliesVisibility.set(commentId, true);
             }
@@ -885,6 +919,12 @@ export function expandRepliesForComment(commentId) {
     }
     
     if (found) {
-        updateCommentsUI(window._currentStoryId);
+        const container = document.getElementById('commentsList');
+        if (container) {
+            const storyId = container.dataset.storyId || window._currentStoryId;
+            if (storyId) {
+                updateCommentsUI(storyId);
+            }
+        }
     }
 }

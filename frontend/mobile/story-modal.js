@@ -342,23 +342,14 @@ function setupModalEvents() {
         }
     });
 
-    // 🔥 BOTÓN DE TRADUCCIÓN
+    // BOTÓN DE TRADUCCIÓN
     document.getElementById('modalTranslateBtn')?.addEventListener('click', async () => {
         if (!currentStoryId) return;
         await toggleTranslation();
     });
 
-    // 🔥 ENVÍO DE COMENTARIO
-    document.getElementById('sendCommentBtn')?.addEventListener('click', async () => {
-        await handleSendComment();
-    });
-
-    document.getElementById('commentInput')?.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter' && !e.shiftKey) {
-            e.preventDefault();
-            handleSendComment();
-        }
-    });
+    // ENVÍO DE COMENTARIO - Los eventos se configuran en initComments ahora
+    // para evitar duplicados
 
     let touchStartX = 0;
     let touchStartY = 0;
@@ -436,11 +427,11 @@ async function handleSendComment() {
             // Actualizar contador
             updateCommentCount(1);
             
-            // 🔥 SOLO ACTUALIZAR EL CACHÉ DE COMENTARIOS (no duplicar en múltiples lugares)
+            // ACTUALIZAR EL CACHÉ DE COMENTARIOS
             addCommentToCache(currentStoryId, data);
             
-            // Actualizar UI (solo una vez, desde el caché)
-            await initComments(currentStoryId, 'commentsList', null, true);
+            // ACTUALIZAR UI - SIN forceReload (usar caché)
+            await initComments(currentStoryId, 'commentsList', null, false);
             
             showToast('💬 Comentario enviado');
         } else {
@@ -508,11 +499,11 @@ async function handleSendReply(storyId, commentId) {
             // Actualizar contador
             updateCommentCount(1);
 
-            // 🔥 SOLO ACTUALIZAR EL CACHÉ DE COMENTARIOS
+            // ACTUALIZAR EL CACHÉ DE COMENTARIOS
             addReplyToCache(storyId, commentId, data);
             
-            // Actualizar UI (solo una vez, desde el caché)
-            await initComments(storyId, 'commentsList', null, true);
+            // ACTUALIZAR UI - SIN forceReload (usar caché)
+            await initComments(storyId, 'commentsList', null, false);
             
             showToast('💬 Respuesta enviada');
         } else {
@@ -872,7 +863,8 @@ async function loadStoryData(storyId, isNavigation = false) {
                 updateModalUI(currentStoryData);
                 updateProgress();
                 const highlightCommentId = window._activityCommentId || null;
-                await initComments(storyId, 'commentsList', highlightCommentId, true);
+                // NO forzar recarga si ya hay caché
+                await initComments(storyId, 'commentsList', highlightCommentId, false);
                 return;
             }
             if (currentStoriesList.length > 0) {
@@ -882,7 +874,7 @@ async function loadStoryData(storyId, isNavigation = false) {
                     updateModalUI(currentStoryData);
                     updateProgress();
                     const highlightCommentId = window._activityCommentId || null;
-                    await initComments(storyId, 'commentsList', highlightCommentId, true);
+                    await initComments(storyId, 'commentsList', highlightCommentId, false);
                     return;
                 }
             }
@@ -933,7 +925,9 @@ async function loadStoryData(storyId, isNavigation = false) {
         updateProgress();
         
         const highlightCommentId = window._activityCommentId || null;
-        await initComments(storyId, 'commentsList', highlightCommentId, true);
+        // SOLO forzar recarga si es la primera vez o si es navegación y no hay caché
+        const forceReload = isNavigation && !commentsCache.has(storyId);
+        await initComments(storyId, 'commentsList', highlightCommentId, forceReload);
         
         await registerView(storyId);
 
