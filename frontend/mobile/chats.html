@@ -29,7 +29,6 @@
 
         ::-webkit-scrollbar { width: 0; height: 0; }
 
-        /* ===== HEADER ===== */
         .chat-header {
             display: flex;
             align-items: center;
@@ -116,7 +115,6 @@
             background: rgba(255, 255, 255, 0.08);
         }
 
-        /* ===== CHAT CONTAINER ===== */
         .chat-container {
             display: flex;
             flex-direction: column;
@@ -125,7 +123,6 @@
             position: relative;
         }
 
-        /* ===== CONVERSATIONS LIST ===== */
         .conversations-panel {
             display: flex;
             flex-direction: column;
@@ -159,7 +156,6 @@
             margin-left: 4px;
         }
 
-        /* ===== CHAT TABS ===== */
         .chat-tabs {
             display: flex;
             padding: 0 12px;
@@ -400,7 +396,6 @@
             color: #fff;
         }
 
-        /* ===== MESSAGES PANEL ===== */
         .messages-panel {
             display: none;
             flex-direction: column;
@@ -502,7 +497,6 @@
             50% { opacity: 0.4; }
         }
 
-        /* ===== MESSAGES CONTAINER ===== */
         .messages-container {
             flex: 1;
             overflow-y: auto;
@@ -526,7 +520,6 @@
             border-radius: 10px;
         }
 
-        /* ===== MESSAGE ===== */
         .message {
             display: flex;
             max-width: 82%;
@@ -601,7 +594,6 @@
             color: #ff6b6b;
         }
 
-        /* ===== DATE DIVIDER ===== */
         .date-divider {
             text-align: center;
             padding: 12px 0 8px;
@@ -617,7 +609,6 @@
             border: 1px solid rgba(255, 255, 255, 0.03);
         }
 
-        /* ===== INPUT ===== */
         .messages-input {
             padding: 10px 12px 12px;
             border-top: 1px solid rgba(255, 255, 255, 0.04);
@@ -673,32 +664,6 @@
             transform: none;
         }
 
-        /* ===== EMPTY STATE ===== */
-        .empty-state {
-            flex: 1;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            text-align: center;
-            color: rgba(255, 255, 255, 0.15);
-            padding: 40px 20px;
-        }
-        .empty-state i {
-            font-size: 56px;
-            color: rgba(192, 132, 252, 0.05);
-            margin-bottom: 16px;
-        }
-        .empty-state h3 {
-            font-size: 18px;
-            color: rgba(255, 255, 255, 0.25);
-            margin-bottom: 4px;
-        }
-        .empty-state p {
-            font-size: 13px;
-            color: rgba(255, 255, 255, 0.08);
-        }
-
         .empty-state-chat {
             display: flex;
             flex-direction: column;
@@ -724,7 +689,6 @@
             color: rgba(255, 255, 255, 0.06);
         }
 
-        /* ===== LOADING ===== */
         .loading-spinner {
             display: flex;
             align-items: center;
@@ -739,7 +703,6 @@
             color: #c084fc;
         }
 
-        /* ===== TOAST ===== */
         .toast {
             position: fixed;
             bottom: 85px;
@@ -775,9 +738,6 @@
             100% { opacity: 0; transform: translateX(-50%) translateY(-16px) scale(0.95); }
         }
 
-        /* ============================================================
-           RESPONSIVE
-        ============================================================ */
         @media (max-width: 480px) {
             .conversation-item { padding: 10px 12px; }
             .conversation-avatar { width: 44px; height: 44px; }
@@ -817,26 +777,6 @@
             .chat-tab { font-size: 10px; padding: 6px 4px; }
         }
 
-        /* ===== SCROLLBAR MEJORADA ===== */
-        .messages-container::-webkit-scrollbar,
-        .conversations-list::-webkit-scrollbar {
-            width: 3px;
-        }
-        .messages-container::-webkit-scrollbar-track,
-        .conversations-list::-webkit-scrollbar-track {
-            background: transparent;
-        }
-        .messages-container::-webkit-scrollbar-thumb,
-        .conversations-list::-webkit-scrollbar-thumb {
-            background: rgba(192, 132, 252, 0.15);
-            border-radius: 10px;
-        }
-        .messages-container::-webkit-scrollbar-thumb:hover,
-        .conversations-list::-webkit-scrollbar-thumb:hover {
-            background: rgba(192, 132, 252, 0.3);
-        }
-
-        /* ===== LOADING OVERLAY ===== */
         .loading-overlay {
             display: none;
             position: fixed;
@@ -868,12 +808,10 @@
 </head>
 <body>
 
-    <!-- LOADING OVERLAY -->
     <div class="loading-overlay" id="loadingOverlay">
         <div class="spinner"></div>
     </div>
 
-    <!-- HEADER -->
     <header class="chat-header">
         <button class="back-btn" onclick="window.location.href='/feed.html'">
             <i class="fas fa-arrow-left"></i>
@@ -885,10 +823,7 @@
         </div>
     </header>
 
-    <!-- CHAT CONTAINER -->
     <div class="chat-container">
-
-        <!-- CONVERSACIONES -->
         <div class="conversations-panel" id="conversationsPanel">
             <div class="conversations-header">
                 <h2>
@@ -897,7 +832,6 @@
                 </h2>
             </div>
 
-            <!-- TABS -->
             <div class="chat-tabs">
                 <button class="chat-tab active" data-tab="active" onclick="switchChatTab('active')">
                     <i class="fas fa-comment"></i> Activos
@@ -922,7 +856,6 @@
             </div>
         </div>
 
-        <!-- MESSAGES PANEL -->
         <div class="messages-panel" id="messagesPanel">
             <div class="messages-header" id="messagesHeader">
                 <button class="back-chat-btn" id="backChatBtn">
@@ -941,7 +874,6 @@
                 </div>
             </div>
 
-            <!-- Mensajes -->
             <div class="messages-container" id="messagesContainer">
                 <div class="empty-state-chat">
                     <i class="fas fa-comment-dots"></i>
@@ -950,7 +882,6 @@
                 </div>
             </div>
 
-            <!-- Input -->
             <div class="messages-input">
                 <input type="text" id="messageInput" placeholder="Escribe un mensaje..." autocomplete="off" />
                 <button class="send-btn" id="sendBtn" onclick="sendMessage()">
@@ -960,12 +891,11 @@
         </div>
     </div>
 
-    <!-- SOCKET.IO -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.2/socket.io.min.js"></script>
 
     <script type="module">
         // ============================================================
-        // CHAT MOBILE - COMPLETO CON PERSISTENCIA Y SOLICITUDES
+        // CHAT MOBILE - RENDERIZADO OPTIMIZADO SIN PARPADEOS
         // ============================================================
 
         import { getToken, getCurrentUser, showToast as authShowToast } from './auth.js';
@@ -983,6 +913,7 @@
         let nextOffset = 0;
         const MESSAGES_PER_PAGE = 30;
         let currentTab = 'active';
+        let isRendering = false;
 
         let conversationsListEl = document.getElementById('conversationsList');
         let messagesContainerEl = document.getElementById('messagesContainer');
@@ -994,7 +925,7 @@
         let isInitialLoad = true;
 
         // ============================================================
-        // 📦 PERSISTENCIA EN LOCALSTORAGE
+        // PERSISTENCIA EN LOCALSTORAGE
         // ============================================================
         function saveChatState(userId) {
             if (!userId || messages.length === 0) return;
@@ -1023,12 +954,6 @@
             } catch (error) {
                 console.error('Error cargando estado del chat:', error);
                 return null;
-            }
-        }
-
-        function clearChatState(userId) {
-            if (userId) {
-                localStorage.removeItem(`chat_state_${userId}`);
             }
         }
 
@@ -1197,13 +1122,11 @@
                         archived: data.archived || []
                     };
 
-                    // Actualizar contador de pendientes
                     const pendingCount = document.getElementById('pendingCount');
                     if (pendingCount) {
                         pendingCount.textContent = conversations.pending.length || '0';
                     }
 
-                    // Cargar estados de usuarios
                     const allUserIds = [
                         ...conversations.active.map(c => c.user.id),
                         ...conversations.pending.map(c => c.user.id),
@@ -1240,13 +1163,11 @@
             
             const searchTerm = document.getElementById('searchConversations')?.value.toLowerCase() || '';
             
-            // Obtener las conversaciones según la pestaña activa
             let allConversations = [];
             if (currentTab === 'active') allConversations = conversations.active || [];
             else if (currentTab === 'pending') allConversations = conversations.pending || [];
             else if (currentTab === 'archived') allConversations = conversations.archived || [];
             
-            // Filtrar por búsqueda
             if (searchTerm) {
                 allConversations = allConversations.filter(c =>
                     c.user.fullName?.toLowerCase().includes(searchTerm) ||
@@ -1274,7 +1195,6 @@
                 const statusClass = userStatus.status === 'online' ? 'status-online' : 'status-offline';
                 const isActive = currentConversation?.id === conv.user.id;
                 
-                // Badge de solicitud pendiente
                 let pendingBadge = '';
                 let pendingActions = '';
                 
@@ -1322,7 +1242,7 @@
         }
 
         // ============================================================
-        // ACEPTAR SOLICITUD DE CHAT
+        // ACEPTAR/RECHAZAR SOLICITUD
         // ============================================================
         window.acceptChatRequest = async function(userId) {
             const token = getToken();
@@ -1348,9 +1268,6 @@
             }
         };
 
-        // ============================================================
-        // RECHAZAR SOLICITUD DE CHAT
-        // ============================================================
         window.rejectChatRequest = async function(userId) {
             const token = getToken();
             if (!token) return;
@@ -1381,7 +1298,6 @@
             const token = getToken();
             if (!token) return;
 
-            // 🔥 INTENTAR CARGAR DESDE CACHÉ LOCAL
             if (!loadMore && !isInitialLoad) {
                 const cached = loadChatState(userId);
                 if (cached && cached.messages && cached.messages.length > 0) {
@@ -1415,7 +1331,6 @@
                     const data = await res.json();
                     const newMessages = data.messages || [];
                     
-                    // Guardar estado de la conversación
                     if (currentConversation) {
                         currentConversation.status = data.conversationStatus || 'active';
                         currentConversation.mutualFollow = data.mutualFollow || false;
@@ -1447,7 +1362,6 @@
                             scrollToBottom();
                         }
                         markMessagesAsRead(userId);
-                        // Guardar en caché local
                         saveChatState(userId);
                     }
                 }
@@ -1461,9 +1375,6 @@
             }
         }
 
-        // ============================================================
-        // ACTUALIZAR MENSAJES EN SEGUNDO PLANO
-        // ============================================================
         async function refreshMessagesInBackground(userId) {
             try {
                 const token = getToken();
@@ -1479,16 +1390,20 @@
                         saveChatState(userId);
                     }
                 }
-            } catch (error) {
-                // Silencioso
-            }
+            } catch (error) {}
         }
 
         // ============================================================
-        // 📝 RENDERIZAR MENSAJES (SOLO PARA CARGA INICIAL)
+        // 📝 RENDERIZAR MENSAJES - SOLO CUANDO ES NECESARIO
         // ============================================================
         function renderMessages() {
-            if (!messagesContainerEl) return;
+            if (isRendering) return;
+            isRendering = true;
+            
+            if (!messagesContainerEl) {
+                isRendering = false;
+                return;
+            }
             
             const scrollTop = messagesContainerEl.scrollTop;
             const scrollHeight = messagesContainerEl.scrollHeight;
@@ -1496,7 +1411,6 @@
             const wasNearBottom = scrollHeight - (scrollTop + clientHeight) < 100;
 
             if (messages.length === 0) {
-                // Mostrar mensaje según estado de la conversación
                 let emptyMessage = 'No hay mensajes';
                 let emptySubMessage = 'Envía el primer mensaje';
                 
@@ -1515,6 +1429,7 @@
                         <p>${emptySubMessage}</p>
                     </div>
                 `;
+                isRendering = false;
                 return;
             }
 
@@ -1557,6 +1472,7 @@
                     const ratio = scrollTop / (scrollHeight || 1);
                     messagesContainerEl.scrollTop = ratio * newScrollHeight;
                 }
+                isRendering = false;
             });
         }
 
@@ -1564,9 +1480,10 @@
         // ➕ AÑADIR UN SOLO MENSAJE SIN RE-RENDERIZAR TODO
         // ============================================================
         function appendSingleMessage(msg) {
-            if (!messagesContainerEl) return;
+            if (!messagesContainerEl || isRendering) return;
 
-            if (messagesContainerEl.querySelector('.empty-state-chat')) {
+            // Si no hay mensajes o está vacío, renderizar todo
+            if (messagesContainerEl.querySelector('.empty-state-chat') || messages.length === 0) {
                 renderMessages();
                 return;
             }
@@ -1605,9 +1522,17 @@
 
             messagesContainerEl.insertAdjacentHTML('beforeend', html);
             
-            requestAnimationFrame(() => {
-                messagesContainerEl.scrollTop = messagesContainerEl.scrollHeight;
-            });
+            // Hacer scroll al final si estamos cerca del fondo
+            const scrollTop = messagesContainerEl.scrollTop;
+            const scrollHeight = messagesContainerEl.scrollHeight;
+            const clientHeight = messagesContainerEl.clientHeight;
+            const isNearBottom = scrollHeight - (scrollTop + clientHeight) < 200;
+            
+            if (isNearBottom) {
+                requestAnimationFrame(() => {
+                    messagesContainerEl.scrollTop = messagesContainerEl.scrollHeight;
+                });
+            }
         }
 
         // ============================================================
@@ -1660,7 +1585,12 @@
                     updated = true;
                 }
             });
-            if (updated) renderMessages();
+            if (updated) {
+                // Solo actualizar los mensajes que cambiaron
+                document.querySelectorAll('.message-other .message-read').forEach(el => {
+                    el.textContent = '✓✓';
+                });
+            }
 
             if (socket && socket.connected) {
                 socket.emit('mark_messages_read', { withUserId: userId });
@@ -1710,7 +1640,6 @@
             let userId, userData;
             if (typeof userIdOrObject === 'string') {
                 userId = userIdOrObject;
-                // Buscar en todas las categorías
                 const allConvs = [...conversations.active, ...conversations.pending, ...conversations.archived];
                 const existingConv = allConvs.find(c => c.user.id === userId);
                 if (existingConv) userData = existingConv.user;
@@ -1721,7 +1650,6 @@
                 userId = userData.id;
             }
 
-            // Guardar estado del chat actual antes de cambiar
             if (currentConversation && messages.length > 0) {
                 saveChatState(currentConversation.id);
             }
@@ -1916,10 +1844,12 @@
                 if (currentConversation && message.from === currentConversation.id) {
                     const newMsg = { ...message, isOwn: false };
                     messages.push(newMsg);
+                    // 🔥 SOLO AÑADIR EL MENSAJE, NO RE-RENDERIZAR TODO
                     appendSingleMessage(newMsg);
                     markMessagesAsRead(currentConversation.id);
                     saveChatState(currentConversation.id);
                 }
+                // 🔥 ACTUALIZAR CONVERSACIONES EN SEGUNDO PLANO
                 loadConversations();
                 if (message.from !== currentConversation?.id) {
                     showToast(`📩 Nuevo mensaje de ${message.fromName || 'alguien'}`);
@@ -1972,7 +1902,10 @@
                         }
                     });
                     if (updated) {
-                        renderMessages();
+                        // Actualizar solo los mensajes que cambiaron
+                        document.querySelectorAll('.message-own .message-read').forEach(el => {
+                            el.textContent = '✓✓';
+                        });
                         saveChatState(currentConversation.id);
                     }
                 }
@@ -2037,10 +1970,9 @@
                 }, 500);
             }
 
-            console.log('📱 Chat mobile optimizado con persistencia y solicitudes');
+            console.log('📱 Chat mobile optimizado - renderizado sin parpadeos');
         }
 
-        // Exponer funciones globales
         window.selectConversation = window.selectConversation;
         window.sendMessage = window.sendMessage;
         window.deleteMessage = window.deleteMessage;
