@@ -1,6 +1,7 @@
 // ============================================================
 // story-comments.js - Sistema de comentarios para historias
-// VERSIÓN CORREGIDA: SIN RE-RENDER, SOLO ACTUALIZACIÓN LOCAL
+// VERSIÓN CORREGIDA: SIN RE-RENDER
+// CON loadComments PARA COMPATIBILIDAD
 // ============================================================
 
 import { getToken, getCurrentUser, showToast, getAvatar, formatDate, escapeHtml } from './auth.js';
@@ -64,6 +65,37 @@ function getParentChain(comments, commentId, chain = []) {
         }
     }
     return null;
+}
+
+// ============================================================
+// 🔥 LOAD COMMENTS (PARA COMPATIBILIDAD CON story-modal.js)
+// ============================================================
+
+export async function loadComments(storyId, forceReload = false) {
+    if (!storyId) return localComments;
+    
+    // Si ya tenemos comentarios locales y no forzamos recarga
+    if (localComments && localComments.length > 0 && !forceReload) {
+        return localComments;
+    }
+    
+    const token = getToken();
+    if (!token) return [];
+
+    try {
+        const res = await fetch(`${API_URL}/api/stories/${storyId}/comments`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+
+        if (!res.ok) throw new Error('Error loading comments');
+
+        const comments = await res.json();
+        localComments = comments;
+        return comments;
+    } catch (error) {
+        console.error('Error loading comments:', error);
+        return [];
+    }
 }
 
 // ============================================================
@@ -273,7 +305,6 @@ export async function initComments(storyId, containerId = 'commentsList', highli
                     } else {
                         localCommentLikes[reply.id] = new Set();
                     }
-                    // Inicializar visibilidad de respuestas anidadas
                     if (reply.replies && reply.replies.length > 0) {
                         localRepliesVisibility[reply.id] = false;
                     }
@@ -400,9 +431,7 @@ export async function addComment(storyId, content, parentCommentId = null) {
         if (parentComment) {
             if (!parentComment.replies) parentComment.replies = [];
             parentComment.replies.push(tempComment);
-            // Ordenar respuestas (viejas primero)
             parentComment.replies.sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
-            // Mostrar respuestas automáticamente
             localRepliesVisibility[parentCommentId] = true;
         }
     } else {
@@ -464,7 +493,7 @@ export async function addComment(storyId, content, parentCommentId = null) {
             localCommentLikes[newComment.id] = new Set();
         }
 
-        // ✅ RE-RENDER SOLO SI ES NECESARIO (reemplazar el temporal)
+        // ✅ RE-RENDER SOLO SI ES NECESARIO
         if (container) {
             const currentUserId = currentUser?.id;
             renderComments(localComments, container, currentUserId);
@@ -496,7 +525,6 @@ export async function addComment(storyId, content, parentCommentId = null) {
             localComments = localComments.filter(c => c.id !== tempComment.id);
         }
 
-        // ✅ ACTUALIZAR DOM
         if (container) {
             const currentUserId = currentUser?.id;
             renderComments(localComments, container, currentUserId);
@@ -546,19 +574,15 @@ export async function deleteComment(storyId, commentId, parentCommentId = null) 
             localComments = localComments.filter(c => c.id !== commentId);
         }
 
-        // ✅ ELIMINAR LIKES
         delete localCommentLikes[commentId];
 
-        // ✅ ACTUALIZAR DOM
         const container = document.getElementById('commentsList');
         if (container) {
             const currentUser = getCurrentUser();
             renderComments(localComments, container, currentUser?.id);
         }
 
-        // ✅ ACTUALIZAR CONTADOR
         updateCommentCount(-1);
-
         showToast('🗑️ Eliminado');
         return true;
 
@@ -594,7 +618,6 @@ export async function likeComment(storyId, commentId) {
         localCommentLikes[commentId].add(currentUserId);
     }
 
-    // ✅ ACTUALIZAR DOM
     const container = document.getElementById('commentsList');
     if (container) {
         const currentUser = getCurrentUser();
@@ -614,12 +637,10 @@ export async function likeComment(storyId, commentId) {
 
         const data = await res.json();
         
-        // ✅ ACTUALIZAR CON DATOS DEL SERVIDOR
         if (data.likes) {
             localCommentLikes[commentId] = new Set(data.likes);
         }
 
-        // ✅ ACTUALIZAR DOM
         if (container) {
             const currentUser = getCurrentUser();
             renderComments(localComments, container, currentUser?.id);
@@ -745,5 +766,10 @@ export {
     localCommentLikes,
     localRepliesVisibility,
     findCommentById,
-    getParentChain
+    getParentChain,
+    loadComments,
+    initComments,
+    addComment,
+    deleteComment,
+    likeComment
 };
