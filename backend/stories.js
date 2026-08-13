@@ -1,4 +1,4 @@
-// backend/stories.js - VERSIÓN COMPLETA CON CLOUDINARY Y SISTEMA DE BLOQUEOS
+// backend/stories.js - VERSIÓN COMPLETA CON CLOUDINARY, SISTEMA DE BLOQUEOS Y RECOMENDACIONES
 
 const auth = require('./middleware/auth');
 const multer = require('multer');
@@ -494,7 +494,7 @@ module.exports = function(read, write, io, processHashtags, isProfileVisible, ar
     });
 
     // ============================================================
-    // 🔥🔥🔥 RUTA: FEED POR CURSOR - CON FILTRO DE BLOQUEOS
+    // 🔥🔥🔥 RUTA: FEED POR CURSOR - CON FILTRO DE BLOQUEOS Y RECOMENDACIONES
     // ============================================================
 
     router.get('/feed/cursor', auth, async (req, res) => {
@@ -519,67 +519,166 @@ module.exports = function(read, write, io, processHashtags, isProfileVisible, ar
             const blockedIds = user.blocked || [];
             const blockedByIds = user.blockedBy || [];
 
-            const userCountry = user.country || null;
-            const userRegion = user.region || 'other';
-            const userFollowing = user.following || [];
-
-            let activeStories = stories.filter(s => {
-                if (!s.expiresAt) return false;
-                if (new Date(s.expiresAt).getTime() <= now) return false;
-                if (s.hidden) return false;
-                if (s.userId === userId) return false;
-                
-                // 🔥 FILTRAR BLOQUEADOS
-                if (blockedIds.includes(s.userId)) return false;
-                if (blockedByIds.includes(s.userId)) return false;
-                
-                return true;
-            });
-
-            if (filter === 'recent') {
-                activeStories = activeStories.filter(s => {
-                    const storyCountry = s.country || null;
-                    const storyRegion = s.region || 'other';
+            // ============================================================
+            // 🔥 OBTENER RECOMENDACIONES DEL SERVICIO UNIFICADO
+            // ============================================================
+            let recommendedStories = [];
+            
+            if (filter === 'ranked' || filter === 'recommended') {
+                try {
+                    const getRecommendationService = require('./services/recommendation');
+                    const recommendationService = getRecommendationService();
                     
-                    if (!userCountry && userRegion === 'other') return true;
-                    if (userCountry && storyCountry === userCountry) return true;
-                    if (storyRegion === userRegion && !userCountry) return true;
-                    if (storyRegion === userRegion && storyCountry === userCountry) return true;
-                    return false;
+                    // Obtener hasta 200 historias recomendadas (para tener suficiente para paginar)
+                    recommendedStories = await recommendationService.recommendStories(userId, 200);
+                    console.log(`✅ [RECOMMENDATIONS] ${recommendedStories.length} historias recomendadas obtenidas`);
+                } catch (error) {
+                    console.warn('⚠️ Error obteniendo recomendaciones:', error.message);
+                    // Fallback: usar el método tradicional
+                    recommendedStories = [];
+                }
+            }
+
+            // ============================================================
+            // 🔥 SI NO HAY RECOMENDACIONES O FILTRO ES 'recent', USAR MÉTODO TRADICIONAL
+            // ============================================================
+            if (filter === 'recent' || recommendedStories.length === 0) {
+                console.log(`📡 Usando método tradicional para filter=${filter}`);
+                
+                const userCountry = user.country || null;
+                const userRegion = user.region || 'other';
+                const userFollowing = user.following || [];
+
+                let activeStories = stories.filter(s => {
+                    if (!s.expiresAt) return false;
+                    if (new Date(s.expiresAt).getTime() <= now) return false;
+                    if (s.hidden) return false;
+                    if (s.userId === userId) return false;
+                    
+                    // 🔥 FILTRAR BLOQUEADOS
+                    if (blockedIds.includes(s.userId)) return false;
+                    if (blockedByIds.includes(s.userId)) return false;
+                    
+                    return true;
                 });
 
-                activeStories.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-            } else {
-                const getGeoScore = (story) => {
-                    const storyCountry = story.country || null;
-                    const storyRegion = story.region || 'other';
-                    let geoScore = 0;
-                    
-                    if (userCountry && storyCountry === userCountry) geoScore += 100;
-                    if (storyRegion === userRegion) geoScore += 50;
-                    if (isNearbyRegion(storyRegion, userRegion)) geoScore += 20;
-                    if (userFollowing.includes(story.userId)) geoScore += 30;
-                    
-                    return geoScore;
-                };
+                if (filter === 'recent') {
+                    activeStories = activeStories.filter(s => {
+                        const storyCountry = s.country || null;
+                        const storyRegion = s.region || 'other';
+                        
+                        if (!userCountry && userRegion === 'other') return true;
+                        if (userCountry && storyCountry === userCountry) return true;
+                        if (storyRegion === userRegion && !userCountry) return true;
+                        if (storyRegion === userRegion && storyCountry === userCountry) return true;
+                        return false;
+                    });
 
-                activeStories.sort((a, b) => {
-                    const aScore = (a.score || 0) + getGeoScore(a);
-                    const bScore = (b.score || 0) + getGeoScore(b);
-                    return bScore - aScore;
+                    activeStories.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+                } else {
+                    const getGeoScore = (story) => {
+                        const storyCountry = story.country || null;
+                        const storyRegion = story.region || 'other';
+                        let geoScore = 0;
+                        
+                        if (userCountry && storyCountry === userCountry) geoScore += 100;
+                        if (storyRegion === userRegion) geoScore += 50;
+                        if (isNearbyRegion(storyRegion, userRegion)) geoScore += 20;
+                        if (userFollowing.includes(story.userId)) geoScore += 30;
+                        
+                        return geoScore;
+                    };
+
+                    activeStories.sort((a, b) => {
+                        const aScore = (a.score || 0) + getGeoScore(a);
+                        const bScore = (b.score || 0) + getGeoScore(b);
+                        return bScore - aScore;
+                    });
+                }
+
+                // Filtrar historias ya vistas
+                activeStories = activeStories.filter(s => {
+                    if (s.views && s.views.includes(userId)) {
+                        return false;
+                    }
+                    return true;
+                });
+
+                // Aplicar cursor
+                let startIndex = 0;
+                if (cursor && cursor !== 'null') {
+                    const cursorIndex = activeStories.findIndex(s => s.id === cursor);
+                    if (cursorIndex !== -1) {
+                        startIndex = cursorIndex + 1;
+                    }
+                }
+
+                const paginated = activeStories.slice(startIndex, startIndex + limit);
+                const hasMore = startIndex + limit < activeStories.length;
+                const remaining = activeStories.length - startIndex - limit;
+
+                const userMap = {};
+                users.forEach(u => { userMap[u.id] = u; });
+
+                const enriched = paginated.map(story => {
+                    const owner = userMap[story.userId];
+                    return {
+                        ...story,
+                        userData: {
+                            id: owner?.id,
+                            username: owner?.username,
+                            fullName: owner?.fullName,
+                            avatar: owner?.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(owner?.fullName || 'U')}&background=a855f7&color=fff`,
+                            isVerified: owner?.isVerified || false,
+                            accountType: owner?.accountType || 'personal'
+                        },
+                        hasSubtitles: story.hasSubtitles || false,
+                        subtitles: story.subtitles || null,
+                        language: story.language || 'es',
+                        country: story.country || null,
+                        region: story.region || 'other'
+                    };
+                });
+
+                const nextCursor = enriched.length > 0 ? enriched[enriched.length - 1].id : null;
+
+                return res.json({
+                    success: true,
+                    data: enriched,
+                    pagination: {
+                        limit: limit,
+                        hasMore: hasMore,
+                        nextCursor: nextCursor,
+                        totalRemaining: Math.max(0, remaining),
+                        totalAvailable: activeStories.length
+                    },
+                    meta: {
+                        filter: filter,
+                        userId: userId,
+                        cursor: cursor,
+                        algorithm: filter === 'recent' ? 'recent_traditional' : 'geo_score',
+                        timestamp: new Date().toISOString()
+                    }
                 });
             }
 
-            activeStories = activeStories.filter(s => {
-                if (s.views && s.views.includes(userId)) {
-                    return false;
-                }
+            // ============================================================
+            // 🔥 FILTRAR RECOMENDACIONES POR BLOQUEOS
+            // ============================================================
+            const filteredRecommendations = recommendedStories.filter(story => {
+                if (blockedIds.includes(story.userId)) return false;
+                if (blockedByIds.includes(story.userId)) return false;
                 return true;
             });
 
+            console.log(`🔍 Recomendaciones después de filtrar bloqueos: ${filteredRecommendations.length} (de ${recommendedStories.length})`);
+
+            // ============================================================
+            // 🔥 PROCESAR RECOMENDACIONES CON CURSOR
+            // ============================================================
             let startIndex = 0;
             if (cursor && cursor !== 'null') {
-                const cursorIndex = activeStories.findIndex(s => s.id === cursor);
+                const cursorIndex = filteredRecommendations.findIndex(s => s.id === cursor);
                 if (cursorIndex !== -1) {
                     startIndex = cursorIndex + 1;
                     console.log(`📍 Cursor encontrado en posición ${cursorIndex}, continuando desde ${startIndex}`);
@@ -588,10 +687,13 @@ module.exports = function(read, write, io, processHashtags, isProfileVisible, ar
                 }
             }
 
-            const paginated = activeStories.slice(startIndex, startIndex + limit);
-            const hasMore = startIndex + limit < activeStories.length;
-            const remaining = activeStories.length - startIndex - limit;
+            const paginated = filteredRecommendations.slice(startIndex, startIndex + limit);
+            const hasMore = startIndex + limit < filteredRecommendations.length;
+            const remaining = filteredRecommendations.length - startIndex - limit;
 
+            // ============================================================
+            // 🔥 ENRIQUECER CON DATOS DE USUARIO
+            // ============================================================
             const userMap = {};
             users.forEach(u => { userMap[u.id] = u; });
 
@@ -607,17 +709,24 @@ module.exports = function(read, write, io, processHashtags, isProfileVisible, ar
                         isVerified: owner?.isVerified || false,
                         accountType: owner?.accountType || 'personal'
                     },
+                    // Asegurar que estos campos existan
                     hasSubtitles: story.hasSubtitles || false,
                     subtitles: story.subtitles || null,
                     language: story.language || 'es',
                     country: story.country || null,
-                    region: story.region || 'other'
+                    region: story.region || 'other',
+                    // Información de recomendación
+                    recommendationScore: story.recommendationScore || 0,
+                    topics: story.topics || [],
+                    semanticMatch: story.semanticMatch || false,
+                    interestMatch: story.interestMatch || false,
+                    interestMatchCount: story.interestMatchCount || 0
                 };
             });
 
             const nextCursor = enriched.length > 0 ? enriched[enriched.length - 1].id : null;
 
-            console.log(`📊 Resultados: ${enriched.length} historias, más: ${hasMore}, restantes: ${remaining}`);
+            console.log(`📊 Resultados recomendados: ${enriched.length} historias, más: ${hasMore}, restantes: ${remaining}`);
 
             res.json({
                 success: true,
@@ -627,12 +736,13 @@ module.exports = function(read, write, io, processHashtags, isProfileVisible, ar
                     hasMore: hasMore,
                     nextCursor: nextCursor,
                     totalRemaining: Math.max(0, remaining),
-                    totalAvailable: activeStories.length
+                    totalAvailable: filteredRecommendations.length
                 },
                 meta: {
                     filter: filter,
                     userId: userId,
                     cursor: cursor,
+                    algorithm: 'recommendation_v3_unified',
                     timestamp: new Date().toISOString()
                 }
             });

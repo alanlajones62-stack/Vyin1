@@ -4,11 +4,12 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
     <meta name="theme-color" content="#0a0a1a" />
-    <title>Vyin · Social</title>
+    <title>Vygorax · Social</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
+    <link rel="icon" href="/images/logo.png">
     
     <!-- Estilos de modales -->
     <link rel="stylesheet" href="/mobile/story-modal.css" />
@@ -53,6 +54,333 @@
             width: 100vw;
             background: #0a0a1a;
             position: relative;
+        }
+
+        /* ============================================================
+           PANTALLA DE CARGA VYGORAX (SPLASH)
+        ============================================================ */
+        #splashScreen {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: #0a0a1a;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 999999;
+            animation: splashFadeOut 0.8s ease 2.5s forwards;
+        }
+
+        @keyframes splashFadeOut {
+            0% { opacity: 1; }
+            100% { opacity: 0; visibility: hidden; }
+        }
+
+        #splashScreen .splash-logo {
+            width: 120px;
+            height: 120px;
+            margin-bottom: 20px;
+            animation: splashPulse 2s ease-in-out infinite;
+        }
+
+        #splashScreen .splash-logo img {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+        }
+
+        @keyframes splashPulse {
+            0%, 100% { transform: scale(1); opacity: 1; }
+            50% { transform: scale(1.05); opacity: 0.8; }
+        }
+
+        #splashScreen .splash-title {
+            font-size: 28px;
+            font-weight: 800;
+            background: linear-gradient(135deg, #c084fc, #db2777, #f43f5e);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            letter-spacing: 2px;
+            margin-bottom: 4px;
+        }
+
+        #splashScreen .splash-subtitle {
+            color: rgba(255,255,255,0.2);
+            font-size: 12px;
+            letter-spacing: 4px;
+            text-transform: uppercase;
+        }
+
+        #splashScreen .splash-loader {
+            margin-top: 30px;
+            width: 40px;
+            height: 40px;
+            border: 2px solid rgba(192,132,252,0.1);
+            border-top: 2px solid #c084fc;
+            border-radius: 50%;
+            animation: splashSpin 1s linear infinite;
+        }
+
+        @keyframes splashSpin {
+            to { transform: rotate(360deg); }
+        }
+
+        #splashScreen .splash-version {
+            position: absolute;
+            bottom: 30px;
+            color: rgba(255,255,255,0.05);
+            font-size: 10px;
+            letter-spacing: 1px;
+        }
+
+        /* ============================================================
+           PANTALLA DE PREFERENCIAS (PRIMER LOGIN)
+        ============================================================ */
+        #preferencesScreen {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: #0a0a1a;
+            z-index: 99999;
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            justify-content: flex-start;
+            padding: 40px 24px 24px;
+            overflow-y: auto;
+            animation: prefFadeIn 0.5s ease;
+        }
+
+        #preferencesScreen.active {
+            display: flex !important;
+        }
+
+        @keyframes prefFadeIn {
+            from { opacity: 0; transform: scale(0.95); }
+            to { opacity: 1; transform: scale(1); }
+        }
+
+        #preferencesScreen .pref-header {
+            text-align: center;
+            margin-bottom: 28px;
+            padding-top: 20px;
+        }
+
+        #preferencesScreen .pref-header .pref-icon {
+            font-size: 48px;
+            margin-bottom: 12px;
+            display: block;
+        }
+
+        #preferencesScreen .pref-header h2 {
+            color: #fff;
+            font-size: 22px;
+            font-weight: 700;
+            margin: 0 0 6px 0;
+        }
+
+        #preferencesScreen .pref-header p {
+            color: rgba(255,255,255,0.3);
+            font-size: 13px;
+            margin: 0;
+        }
+
+        #preferencesScreen .pref-header .pref-sub {
+            color: rgba(255,255,255,0.15);
+            font-size: 11px;
+            margin-top: 4px;
+        }
+
+        #preferencesScreen .pref-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+            gap: 10px;
+            width: 100%;
+            max-width: 500px;
+            margin-bottom: 24px;
+        }
+
+        #preferencesScreen .pref-option {
+            background: rgba(255,255,255,0.03);
+            border: 1px solid rgba(255,255,255,0.06);
+            border-radius: 14px;
+            padding: 14px 8px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            user-select: none;
+            -webkit-tap-highlight-color: transparent;
+            position: relative;
+        }
+
+        #preferencesScreen .pref-option:active {
+            transform: scale(0.95);
+        }
+
+        #preferencesScreen .pref-option.selected {
+            border-color: #c084fc;
+            background: rgba(192,132,252,0.08);
+            box-shadow: 0 0 20px rgba(192,132,252,0.05);
+        }
+
+        #preferencesScreen .pref-option .pref-emoji {
+            font-size: 28px;
+            display: block;
+            margin-bottom: 4px;
+        }
+
+        #preferencesScreen .pref-option .pref-label {
+            color: rgba(255,255,255,0.5);
+            font-size: 10px;
+            font-weight: 500;
+            display: block;
+            line-height: 1.2;
+        }
+
+        #preferencesScreen .pref-option.selected .pref-label {
+            color: #c084fc;
+        }
+
+        #preferencesScreen .pref-option .pref-check {
+            position: absolute;
+            top: 4px;
+            right: 4px;
+            width: 16px;
+            height: 16px;
+            background: #c084fc;
+            border-radius: 50%;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            font-size: 8px;
+            color: #0a0a1a;
+        }
+
+        #preferencesScreen .pref-option.selected .pref-check {
+            display: flex;
+        }
+
+        #preferencesScreen .pref-counter {
+            color: rgba(255,255,255,0.2);
+            font-size: 11px;
+            margin-bottom: 16px;
+        }
+
+        #preferencesScreen .pref-counter span {
+            color: #c084fc;
+            font-weight: 600;
+        }
+
+        #preferencesScreen .pref-btn {
+            background: linear-gradient(135deg, #c084fc, #db2777);
+            border: none;
+            color: #fff;
+            padding: 14px 48px;
+            border-radius: 50px;
+            font-size: 16px;
+            font-weight: 700;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            width: 100%;
+            max-width: 300px;
+            font-family: inherit;
+            position: relative;
+            overflow: hidden;
+        }
+
+        #preferencesScreen .pref-btn:active {
+            transform: scale(0.97);
+        }
+
+        #preferencesScreen .pref-btn:disabled {
+            opacity: 0.3;
+            cursor: not-allowed;
+            transform: none !important;
+        }
+
+        #preferencesScreen .pref-btn .pref-btn-spinner {
+            display: inline-block;
+            width: 18px;
+            height: 18px;
+            border: 2px solid rgba(255,255,255,0.3);
+            border-top: 2px solid #fff;
+            border-radius: 50%;
+            animation: splashSpin 0.8s linear infinite;
+            vertical-align: middle;
+            margin-right: 8px;
+        }
+
+        #preferencesScreen .pref-skip {
+            color: rgba(255,255,255,0.15);
+            font-size: 11px;
+            background: none;
+            border: none;
+            cursor: pointer;
+            margin-top: 12px;
+            font-family: inherit;
+            transition: color 0.3s;
+            text-decoration: underline;
+        }
+
+        #preferencesScreen .pref-skip:hover {
+            color: rgba(255,255,255,0.3);
+        }
+
+        @media (max-width: 480px) {
+            #preferencesScreen .pref-grid {
+                grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
+                gap: 8px;
+            }
+            #preferencesScreen .pref-option {
+                padding: 10px 6px;
+            }
+            #preferencesScreen .pref-option .pref-emoji {
+                font-size: 22px;
+            }
+            #preferencesScreen .pref-option .pref-label {
+                font-size: 9px;
+            }
+            #preferencesScreen .pref-header h2 {
+                font-size: 18px;
+            }
+        }
+
+        @media (orientation: landscape) and (max-height: 500px) {
+            #preferencesScreen {
+                padding: 16px 20px;
+            }
+            #preferencesScreen .pref-header {
+                margin-bottom: 12px;
+                padding-top: 0;
+            }
+            #preferencesScreen .pref-header .pref-icon {
+                font-size: 28px;
+                margin-bottom: 4px;
+            }
+            #preferencesScreen .pref-header h2 {
+                font-size: 16px;
+            }
+            #preferencesScreen .pref-grid {
+                grid-template-columns: repeat(auto-fill, minmax(70px, 1fr));
+                gap: 6px;
+            }
+            #preferencesScreen .pref-option {
+                padding: 6px 4px;
+            }
+            #preferencesScreen .pref-option .pref-emoji {
+                font-size: 18px;
+            }
+            #preferencesScreen .pref-btn {
+                padding: 10px 24px;
+                font-size: 14px;
+                max-width: 200px;
+            }
         }
 
         /* ============================================================
@@ -379,7 +707,6 @@
             padding: 30px;
         }
 
-        /* 🔥 BOTONES EN EL CENTRO - SUBIDOS A 125px */
         .story-card .card-actions-center {
             position: absolute;
             bottom: 125px;
@@ -514,7 +841,6 @@
             margin-left: 4px;
         }
 
-        /* 🔥 FOOTER - SOLO DECORATIVO */
         .story-card .card-footer {
             position: absolute;
             bottom: 0;
@@ -545,9 +871,6 @@
         }
         .profile-container::-webkit-scrollbar { display: none; }
 
-        /* ============================================================
-           PERFIL NATIVO - ESTILOS
-        ============================================================ */
         .profile-native {
             padding: 0 0 80px 0;
             min-height: 100%;
@@ -1280,16 +1603,61 @@
 </head>
 <body>
 
+    <!-- ============================================================
+    PANTALLA DE CARGA VYGORAX (SPLASH)
+    ============================================================ -->
+    <div id="splashScreen">
+        <div class="splash-logo">
+            <img src="/images/logo.png" alt="Vygorax" />
+        </div>
+        <div class="splash-title">Vygorax</div>
+        <div class="splash-subtitle">Conecta · Comparte · Crea</div>
+        <div class="splash-loader"></div>
+        <div class="splash-version">v1.0.0</div>
+    </div>
+
+    <!-- ============================================================
+    PANTALLA DE PREFERENCIAS (PRIMER LOGIN)
+    ============================================================ -->
+    <div id="preferencesScreen">
+        <div class="pref-header">
+            <span class="pref-icon">🎯</span>
+            <h2>Selecciona tus preferencias de contenido</h2>
+            <p>Elige al menos 1 tema para personalizar tu feed</p>
+            <div class="pref-sub">Puedes cambiar esto después en ajustes</div>
+        </div>
+
+        <div class="pref-grid" id="prefGrid">
+            <!-- Las categorías se cargarán dinámicamente desde el servidor -->
+            <div style="grid-column:1/-1;text-align:center;color:rgba(255,255,255,0.2);padding:30px 0;">
+                <i class="fas fa-spinner fa-pulse" style="font-size:24px;"></i>
+                <p style="margin-top:8px;">Cargando categorías...</p>
+            </div>
+        </div>
+
+        <div class="pref-counter" id="prefCounter">
+            Seleccionados: <span id="prefCount">0</span> / 6
+        </div>
+
+        <button class="pref-btn" id="prefSubmitBtn" disabled>
+            Selecciona al menos 1 tema
+        </button>
+
+        <button class="pref-skip" id="prefSkipBtn">Omitir por ahora</button>
+    </div>
+
+    <!-- ============================================================
+    APP PRINCIPAL
+    ============================================================ -->
     <div id="app">
 
         <!-- HEADER -->
         <header class="app-header">
             <div class="logo" id="logoBtn">
-                <img src="/images/logo.png" alt="Vyin" />
-                <span class="logo-text">Vyin</span>
+                <img src="/images/logo.png" alt="Vygorax" />
+                <span class="logo-text">Vygorax</span>
             </div>
             <div class="header-right">
-                <!-- 🔥 NUEVO BOTÓN DE MENSAJES -->
                 <button class="icon-btn" id="chatBtn" title="Mensajes" onclick="window.location.href='/mobile/chats.html'">
                     <i class="fas fa-comment-dots"></i>
                 </button>
@@ -1311,11 +1679,8 @@
         <!-- CONTENIDO PRINCIPAL -->
         <div class="main-content">
 
-            <!-- ==========================================================
-                 SECCIÓN 1: INICIO (FEED)
-            ========================================================== -->
+            <!-- SECCIÓN 1: INICIO (FEED) -->
             <section class="section" id="sectionFeed">
-                <!-- FILTROS -->
                 <div class="filter-bar">
                     <button class="filter-btn active" data-filter="ranked" id="filterRanked">
                         <i class="fas fa-rocket"></i> Para ti
@@ -1328,7 +1693,6 @@
                     </button>
                 </div>
 
-                <!-- FEED -->
                 <div class="feed-container" id="feedContainer">
                     <div class="empty-state" id="loadingState">
                         <i class="fas fa-spinner fa-pulse"></i>
@@ -1338,13 +1702,10 @@
                 </div>
             </section>
 
-            <!-- ==========================================================
-                 SECCIÓN 2: PERFIL (NATIVO)
-            ========================================================== -->
+            <!-- SECCIÓN 2: PERFIL -->
             <section class="section hidden" id="sectionProfile">
                 <div class="profile-container" id="profileContainer">
                     <div class="profile-native" id="profileNativeContent">
-                        <!-- Estado de carga -->
                         <div class="empty-state" id="profileLoadingState">
                             <i class="fas fa-spinner fa-pulse"></i>
                             <h3>Cargando perfil</h3>

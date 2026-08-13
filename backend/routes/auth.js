@@ -1,4 +1,4 @@
-// backend/routes/auth.js - Rutas de autenticación (SEPARADO)
+// backend/routes/auth.js - Rutas de autenticación (SEPARADO) CON INTERESES Y FIRST LOGIN
 
 const express = require('express');
 const bcrypt = require('bcryptjs');
@@ -75,12 +75,19 @@ router.post('/register', async (req, res) => {
             countryName: countryName || null,
             timezone: timezone || null,
             role: role,
+            // 🔥 INTERESES DEL USUARIO (inicialmente vacíos)
+            interests: [],
+            // 🔥 FLAG DE PRIMER LOGIN (siempre true al registrarse)
+            firstLogin: true,
+            // 🔥 PORCENTAJE DE INTERESES (se calcula según cantidad seleccionada)
+            interestPercentage: 0,
             feedPreferences: {
                 countryWeight: 34,
                 regionWeight: 27,
                 nearbyRegionsWeight: 23,
                 farRegionsWeight: 5,
-                followingWeight: 11
+                followingWeight: 11,
+                interestWeight: 15
             },
             vyinPayNumber: vyinPayNumber,
             isVerified: false,
@@ -102,6 +109,8 @@ router.post('/register', async (req, res) => {
         res.status(201).json({
             token,
             user: userWithoutPassword,
+            // 🔥 INDICAR QUE ES PRIMER LOGIN
+            firstLogin: true,
             wallet: {
                 vyinPayNumber: vyinPayNumber,
                 balance: 0,
@@ -110,7 +119,7 @@ router.post('/register', async (req, res) => {
             }
         });
         
-        if (loggerFn) loggerFn.info(`✅ Usuario registrado: ${username} - Rol: ${role}`);
+        if (loggerFn) loggerFn.info(`✅ Usuario registrado: ${username} - Rol: ${role} - FirstLogin: true`);
         
     } catch (err) {
         if (loggerFn) loggerFn.error('Error en registro:', { error: err.message });
@@ -149,6 +158,8 @@ router.post('/login', async (req, res) => {
         res.json({
             token,
             user: userWithoutPassword,
+            // 🔥 INDICAR SI ES PRIMER LOGIN
+            firstLogin: user.firstLogin || false,
             wallet: wallet ? {
                 vyinPayNumber: wallet.vyinPayNumber,
                 balance: wallet.balance,
@@ -157,7 +168,7 @@ router.post('/login', async (req, res) => {
             } : null
         });
         
-        if (loggerFn) loggerFn.info(`✅ Usuario logueado: ${user.username}`);
+        if (loggerFn) loggerFn.info(`✅ Usuario logueado: ${user.username} - FirstLogin: ${user.firstLogin || false}`);
         
     } catch (err) {
         if (loggerFn) loggerFn.error('Error en login:', { error: err.message });
@@ -191,6 +202,8 @@ router.get('/verify', async (req, res) => {
         res.json({ 
             success: true, 
             user: userWithoutPassword,
+            // 🔥 INDICAR SI ES PRIMER LOGIN
+            firstLogin: user.firstLogin || false,
             wallet: wallet ? {
                 vyinPayNumber: wallet.vyinPayNumber,
                 balance: wallet.balance,

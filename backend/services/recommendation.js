@@ -1,4 +1,4 @@
-// backend/services/recommendation.js - VERSIÓN UNIFICADA CON EMBEDDINGS
+// backend/services/recommendation.js - VERSIÓN UNIFICADA CON EMBEDDINGS E INTERESES
 
 const { getContentClassifier } = require('../classifiers');
 const { getEmbeddingService } = require('./embedding.service');
@@ -28,7 +28,10 @@ class RecommendationService {
             hasText: 4,
             sameLanguage: 8,
             alreadyViewed: -50,
-            lowEngagement: -5
+            lowEngagement: -5,
+            // 🔥 INTERESES
+            interestMatch: 30,
+            interestBonus: 10
         };
 
         this.cache = new Map();
@@ -53,7 +56,18 @@ class RecommendationService {
     }
 
     /**
-     * 🔥 RECOMENDACIÓN HÍBRIDA: LITERAL + SEMÁNTICA + CLASIFICACIÓN
+     * 🔥 CALCULA EL PORCENTAJE DE INTERESES SEGÚN CANTIDAD SELECCIONADA
+     */
+    calculateInterestPercentage(interestsCount) {
+        if (!interestsCount || interestsCount === 0) return 0;
+        if (interestsCount >= 6) return 20;
+        if (interestsCount >= 4) return 15;
+        if (interestsCount >= 2) return 10;
+        return 5; // 1 interés = 5%
+    }
+
+    /**
+     * 🔥 RECOMENDACIÓN HÍBRIDA: LITERAL + SEMÁNTICA + CLASIFICACIÓN + INTERESES
      */
     async recommendStories(userId, limit = 50) {
         const cacheKey = `recommendations_${userId}_${limit}`;
@@ -69,8 +83,20 @@ class RecommendationService {
         }
 
         try {
-            const users = require('../data/users.json');
-            const stories = require('../data/stories.json');
+            const fs = require('fs');
+            const path = require('path');
+            const DATA_DIR = path.join(__dirname, '../data');
+            
+            const usersPath = path.join(DATA_DIR, 'users.json');
+            const storiesPath = path.join(DATA_DIR, 'stories.json');
+            
+            if (!fs.existsSync(usersPath) || !fs.existsSync(storiesPath)) {
+                console.warn('⚠️ [Recommendation] Archivos de datos no encontrados');
+                return [];
+            }
+            
+            const users = JSON.parse(fs.readFileSync(usersPath, 'utf8'));
+            const stories = JSON.parse(fs.readFileSync(storiesPath, 'utf8'));
             
             const user = users.find(u => u.id === userId);
             if (!user) {
@@ -82,6 +108,12 @@ class RecommendationService {
             const userRegion = user.region || 'other';
             const userCountry = user.country || null;
             const userFollowing = user.following || [];
+            
+            // 🔥 OBTENER INTERESES DEL USUARIO
+            const userInterests = user.interests || [];
+            const interestPercentage = user.interestPercentage || 0;
+            
+            console.log(`📊 [Recommendation] Usuario ${userId}: ${userInterests.length} intereses (${interestPercentage}% del feed)`);
 
             // Filtrar historias activas
             const now = Date.now();
@@ -146,7 +178,16 @@ class RecommendationService {
                 // Clasificar historia
                 const classification = await this.classifier.classifyStory(story, userLanguage);
                 
-                // Calcular score
+                // 🔥 VERIFICAR COINCIDENCIA CON INTERESES DEL USUARIO
+                const storyCategories = classification.categories.map(c => c.category);
+                const matches = userInterests.filter(interest => 
+                    storyCategories.includes(interest)
+                );
+                
+                const hasInterestMatch = matches.length > 0;
+                const matchCount = matches.length;
+                
+                // 🔥 Calcular score base
                 let score = this._calculateScore(
                     story, 
                     owner, 
@@ -154,6 +195,27 @@ class RecommendationService {
                     preferredCategories, 
                     classification
                 );
+
+                // 🔥 BONUS POR INTERESES (si el usuario tiene intereses seleccionados)
+                if (userInterests.length > 0) {
+                    if (hasInterestMatch) {
+                        // Bonus proporcional a cuántos intereses coinciden
+                        const matchBonus = (matchCount / userInterests.length) * this.weights.interestMatch;
+                        score += matchBonus;
+                        
+                        // Bonus extra si coincide con el interés principal
+                        if (matchCount >= 2) {
+                            score += this.weights.interestBonus;
+                        }
+                        
+                        console.log(`   🎯 Interés: ${matchCount}/${userInterests.length} coincidencias, +${Math.round(matchBonus)} puntos`);
+                    } else {
+                        // Penalización si no coincide con ningún interés
+                        // (solo si el usuario tiene intereses definidos)
+                        const penalty = Math.min(20, userInterests.length * 2);
+                        score -= penalty;
+                    }
+                }
 
                 // 🔥 BONUS SEMÁNTICO
                 if (semanticIds.has(story.id)) {
@@ -173,21 +235,55 @@ class RecommendationService {
                     owner: owner,
                     classification: classification,
                     recommendationScore: Math.max(0, score),
-                    semanticMatch: semanticIds.has(story.id)
+                    semanticMatch: semanticIds.has(story.id),
+                    // 🔥 METADATOS DE INTERESES
+                    interestMatch: hasInterestMatch,
+                    interestMatchCount: matchCount,
+                    userInterests: userInterests,
+                    interestPercentage: interestPercentage,
+                    storyCategories: storyCategories
                 });
             }
 
             // 🔥 4. ORDENAR Y SELECCIONAR
             const sorted = scoredStories.sort((a, b) => {
-                // Prioridad: Following > Score
+                // Prioridad: Following > Intereses > Score
                 const aFollowing = userFollowing.includes(a.userId) ? 1 : 0;
                 const bFollowing = userFollowing.includes(b.userId) ? 1 : 0;
                 if (aFollowing !== bFollowing) return bFollowing - aFollowing;
+                
+                // Si ambos tienen intereses o no
+                const aInterest = a.interestMatch ? 1 : 0;
+                const bInterest = b.interestMatch ? 1 : 0;
+                if (aInterest !== bInterest) return bInterest - aInterest;
+                
                 return (b.recommendationScore || 0) - (a.recommendationScore || 0);
             });
 
-            // 🔥 5. DIVERSIFICAR RESULTADOS
-            const result = this._diversifyResults(sorted, limit);
+            // 🔥 5. APLICAR PORCENTAJE DE INTERESES
+            let result = [];
+            
+            if (userInterests.length > 0 && interestPercentage > 0) {
+                // Calcular cuántas historias deben ser de intereses
+                const interestCount = Math.round((interestPercentage / 100) * limit);
+                const nonInterestCount = limit - interestCount;
+                
+                console.log(`📊 [Recommendation] ${interestCount} de ${limit} historias serán de intereses (${interestPercentage}%)`);
+                
+                // Separar historias con y sin intereses
+                const interestStories = sorted.filter(s => s.interestMatch);
+                const nonInterestStories = sorted.filter(s => !s.interestMatch);
+                
+                // Tomar las mejores de cada grupo
+                const selectedInterest = interestStories.slice(0, interestCount);
+                const selectedNonInterest = nonInterestStories.slice(0, nonInterestCount);
+                
+                // Combinar y mezclar
+                result = this._interleaveResults(selectedInterest, selectedNonInterest);
+            } else {
+                // Sin intereses: usar todas las historias ordenadas
+                result = sorted.slice(0, limit);
+            }
 
             // Guardar en caché
             this.cache.set(cacheKey, {
@@ -195,13 +291,33 @@ class RecommendationService {
                 timestamp: Date.now()
             });
 
-            console.log(`✅ [Recommendation] ${result.length} recomendaciones generadas`);
+            console.log(`✅ [Recommendation] ${result.length} recomendaciones generadas (${result.filter(s => s.interestMatch).length} de intereses)`);
             return result;
 
         } catch (error) {
             console.error('❌ [Recommendation] Error:', error);
             return [];
         }
+    }
+
+    /**
+     * 🔥 INTERCALAR RESULTADOS CON Y SIN INTERESES
+     */
+    _interleaveResults(interestStories, nonInterestStories) {
+        const result = [];
+        const maxLength = Math.max(interestStories.length, nonInterestStories.length);
+        
+        // Alternar: interés, no-interés, interés, no-interés, ...
+        for (let i = 0; i < maxLength; i++) {
+            if (i < interestStories.length) {
+                result.push(interestStories[i]);
+            }
+            if (i < nonInterestStories.length) {
+                result.push(nonInterestStories[i]);
+            }
+        }
+        
+        return result;
     }
 
     /**

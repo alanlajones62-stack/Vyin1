@@ -1,5 +1,5 @@
 // ============================================================
-// auth.js - AUTENTICACIÓN Y SESIÓN (VERSIÓN CORREGIDA)
+// auth.js - AUTENTICACIÓN Y SESIÓN (VERSIÓN CORREGIDA CON FIRSTLOGIN)
 // ============================================================
 
 const API_URL = window.location.origin || 'http://localhost:3000';
@@ -12,7 +12,6 @@ let token = localStorage.getItem('token');
 // ============================================================
 
 export function getToken() {
-    // Siempre verificar localStorage para mantener sincronía
     const stored = localStorage.getItem('token');
     if (stored) {
         token = stored;
@@ -41,7 +40,7 @@ export function getHeaders() {
 }
 
 // ============================================================
-// USUARIO ACTUAL
+// USUARIO ACTUAL - CORREGIDO CON FIRSTLOGIN
 // ============================================================
 
 export function getCurrentUser() {
@@ -63,12 +62,67 @@ export function getCurrentUser() {
 export function setCurrentUser(user) {
     currentUser = user;
     if (user) {
+        // 🔥 Asegurar que firstLogin existe
+        if (user.firstLogin === undefined) {
+            user.firstLogin = true;
+        }
+        // 🔥 Asegurar que interests existe
+        if (user.interests === undefined) {
+            user.interests = [];
+        }
+        // 🔥 Asegurar que interestPercentage existe
+        if (user.interestPercentage === undefined) {
+            user.interestPercentage = 0;
+        }
         localStorage.setItem('user', JSON.stringify(user));
-        console.log('✅ Usuario guardado en localStorage:', user.username);
+        console.log('✅ Usuario guardado en localStorage:', user.username, 'firstLogin:', user.firstLogin);
     } else {
         localStorage.removeItem('user');
         console.log('🗑️ Usuario eliminado de localStorage');
     }
+}
+
+// ============================================================
+// 🔥 FUNCIONES DE PREFERENCIAS
+// ============================================================
+
+export function hasUserPreferences() {
+    const user = getCurrentUser();
+    if (!user) return false;
+    
+    // Verificar si tiene intereses guardados
+    if (user.interests && user.interests.length > 0) return true;
+    
+    // Verificar si ya se marcó como completado en localStorage
+    try {
+        return localStorage.getItem('vygorax_preferences_done') === 'true';
+    } catch {
+        return false;
+    }
+}
+
+export function markUserPreferencesDone() {
+    const user = getCurrentUser();
+    if (user) {
+        user.firstLogin = false;
+        setCurrentUser(user);
+    }
+    try {
+        localStorage.setItem('vygorax_preferences_done', 'true');
+        console.log('✅ Preferencias marcadas como completadas');
+    } catch (e) {
+        console.warn('Error guardando preferencias:', e);
+    }
+}
+
+export function getUserInterests() {
+    const user = getCurrentUser();
+    return user?.interests || [];
+}
+
+export function getUserInterestPercentage() {
+    const user = getCurrentUser();
+    return user?.interestPercentage || 0;
 }
 
 // ============================================================
@@ -264,7 +318,7 @@ export async function detectLanguage(text) {
 }
 
 // ============================================================
-// 🔥 SESIÓN - CORREGIDO
+// 🔥 SESIÓN - CORREGIDO CON FIRSTLOGIN
 // ============================================================
 
 export function restoreSession() {
@@ -279,11 +333,14 @@ export function restoreSession() {
         try {
             token = savedToken;
             currentUser = JSON.parse(savedUser);
-            console.log('✅ Sesión restaurada:', currentUser.username);
+            // 🔥 Asegurar campos de preferencias
+            if (currentUser.firstLogin === undefined) currentUser.firstLogin = true;
+            if (currentUser.interests === undefined) currentUser.interests = [];
+            if (currentUser.interestPercentage === undefined) currentUser.interestPercentage = 0;
+            console.log('✅ Sesión restaurada:', currentUser.username, 'firstLogin:', currentUser.firstLogin);
             return true;
         } catch (e) {
             console.error('❌ Error restaurando sesión:', e);
-            // Limpiar datos corruptos
             localStorage.removeItem('token');
             localStorage.removeItem('user');
             token = null;
@@ -292,7 +349,6 @@ export function restoreSession() {
         }
     }
     
-    // Si no hay token pero hay user, limpiar
     if (!savedToken && savedUser) {
         console.warn('⚠️ Token ausente pero user existe - limpiando');
         localStorage.removeItem('user');
@@ -320,8 +376,12 @@ export async function verifySession() {
             const data = await res.json();
             if (data.user) {
                 currentUser = data.user;
-                localStorage.setItem('user', JSON.stringify(data.user));
-                console.log('✅ Sesión verificada:', currentUser.username);
+                // 🔥 Asegurar campos de preferencias
+                if (currentUser.firstLogin === undefined) currentUser.firstLogin = true;
+                if (currentUser.interests === undefined) currentUser.interests = [];
+                if (currentUser.interestPercentage === undefined) currentUser.interestPercentage = 0;
+                localStorage.setItem('user', JSON.stringify(currentUser));
+                console.log('✅ Sesión verificada:', currentUser.username, 'firstLogin:', currentUser.firstLogin);
                 return true;
             }
             return false;
@@ -336,7 +396,6 @@ export async function verifySession() {
         return false;
     } catch (error) {
         console.error('❌ Error verificando sesión:', error);
-        // Si hay usuario local, asumir que la sesión es válida (fallback)
         return !!currentUser;
     }
 }
@@ -348,7 +407,6 @@ export function logout() {
     token = null;
     currentUser = null;
     
-    // Cerrar socket si existe
     if (window.socket) {
         window.socket.disconnect();
         window.socket = null;

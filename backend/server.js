@@ -1,4 +1,4 @@
-// backend/server.js - COMPLETO CON TODOS LOS MÓDULOS (VERIFICACIÓN, VYIN PAY, ASIGNACIÓN, MODERACIÓN, VYIN IA, BLOQUEOS, PUBLICIDAD)
+// backend/server.js - COMPLETO CON TODOS LOS MÓDULOS (VERIFICACIÓN, VYIN PAY, ASIGNACIÓN, MODERACIÓN, VYIN IA, BLOQUEOS, PUBLICIDAD, INTERESES)
 // 🔥 CORREGIDO: Rutas de login, register y chat
 
 const express = require('express');
@@ -691,6 +691,19 @@ function migrateAllData() {
             user.blockedBy = [];
             modified = true;
         }
+        // 🔥 NUEVO: INTERESES
+        if (user.interests === undefined) {
+            user.interests = [];
+            modified = true;
+        }
+        if (user.firstLogin === undefined) {
+            user.firstLogin = true;
+            modified = true;
+        }
+        if (user.interestPercentage === undefined) {
+            user.interestPercentage = 0;
+            modified = true;
+        }
         
         if (modified) usersModified = true;
         return user;
@@ -888,8 +901,56 @@ try {
     const usersRoutes = require('./users')(read, write, isProfileVisible, areStoriesVisible, userIndex, logger);
     app.use('/api/users', usersRoutes);
     logger.info('✅ Users routes cargadas');
+    console.log('👤 SISTEMA DE USUARIOS ACTIVADO:');
+    console.log('   ✅ Perfiles, búsqueda y sugerencias');
+    console.log('   ✅ Gestión de intereses (máx 6)');
+    console.log('   ✅ Porcentaje dinámico: 5%-20% del feed');
 } catch (error) {
     logger.error('❌ Error cargando users:', { error: error.message });
+    console.error('❌ Error cargando sistema de usuarios:', error.message);
+}
+
+// ============================================================
+// 🔥🔥🔥 RUTA DE CATEGORÍAS (PARA INTERESES)
+// ============================================================
+try {
+    app.get('/api/categories', async (req, res) => {
+        try {
+            const { getContentClassifier } = require('./classifiers');
+            const classifier = getContentClassifier();
+            
+            // Obtener categorías en español (por defecto)
+            const categories = await classifier.getCategories('es');
+            
+            // Formatear para el frontend
+            const formatted = categories.map(c => ({
+                id: c.name,
+                name: c.displayName,
+                emoji: c.emoji,
+                description: c.description || '',
+                keywordCount: c.keywordCount || 0
+            }));
+            
+            res.json({
+                success: true,
+                categories: formatted,
+                total: formatted.length,
+                maxSelection: 6,
+                language: 'es'
+            });
+        } catch (error) {
+            console.error('❌ Error obteniendo categorías:', error);
+            res.status(500).json({ error: 'Error interno del servidor' });
+        }
+    });
+    logger.info('✅ Categories route cargada en /api/categories');
+    console.log('📂 SISTEMA DE CATEGORÍAS ACTIVADO:');
+    console.log('   ✅ Selección de intereses para nuevos usuarios');
+    console.log('   ✅ Máximo 6 intereses');
+    console.log('   ✅ Porcentaje dinámico: 5%-20% del feed');
+} catch (error) {
+    logger.error('❌ Error cargando categories:', { error: error.message });
+    console.error('❌ Error cargando sistema de categorías:', error.message);
 }
 
 // 2. RUTAS DE RANKING
@@ -1229,6 +1290,19 @@ app.get('/health', (req, res) => {
                 pause: true,
                 resume: true,
                 limit: 5
+            }
+        },
+        // 🔥 ESTADÍSTICAS DE INTERESES
+        interests: {
+            enabled: true,
+            maxSelection: 6,
+            percentages: {
+                1: 5,
+                2: 10,
+                3: 10,
+                4: 15,
+                5: 15,
+                6: 20
             }
         }
     };
@@ -1785,6 +1859,11 @@ server.listen(PORT, HOST, () => {
        ✅ Aprobación/Rechazo por administradores
        ✅ Estadísticas de anuncios
        ✅ Límite de 5 anuncios activos
+    
+    📂 SISTEMA DE CATEGORÍAS: ACTIVADO
+       ✅ Selección de intereses para nuevos usuarios
+       ✅ Máximo 6 intereses
+       ✅ Porcentaje dinámico: 5%-20% del feed
     
     🔥 ========================================
     

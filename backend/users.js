@@ -1,4 +1,4 @@
-// backend/users.js - VERSIÓN COMPLETA CON isFollowing, VERIFICACIÓN Y BLOQUEOS
+// backend/users.js - VERSIÓN COMPLETA CON isFollowing, VERIFICACIÓN, BLOQUEOS E INTERESES
 
 const jwt = require('jsonwebtoken');
 const auth = require('./middleware/auth');
@@ -29,6 +29,17 @@ module.exports = (read, write, isProfileVisible, areStoriesVisible, userIndex, l
             if (blockedByIds.includes(u.id)) return false;
             return true;
         });
+    }
+
+    // ============================================================
+    // 🔥 FUNCIÓN PARA CALCULAR PORCENTAJE DE INTERESES
+    // ============================================================
+    function calculateInterestPercentage(interestsCount) {
+        if (!interestsCount || interestsCount === 0) return 0;
+        if (interestsCount >= 6) return 20;
+        if (interestsCount >= 4) return 15;
+        if (interestsCount >= 2) return 10;
+        return 5; // 1 interés = 5%
     }
 
     // ============================================================
@@ -456,6 +467,271 @@ module.exports = (read, write, isProfileVisible, areStoriesVisible, userIndex, l
     });
 
     // ============================================================
+    // 🔥 GUARDAR INTERESES DEL USUARIO (PRIMER LOGIN)
+    // ============================================================
+    router.post('/:userId/interests', auth, async (req, res) => {
+        try {
+            const userId = req.params.userId;
+            const currentUserId = req.userId;
+            const { interests } = req.body;
+            
+            // Verificar que el usuario está actualizando sus propios intereses
+            if (userId !== currentUserId) {
+                return res.status(403).json({ error: 'No tienes permiso' });
+            }
+            
+            if (!interests || !Array.isArray(interests)) {
+                return res.status(400).json({ error: 'Intereses inválidos' });
+            }
+            
+            // Limitar a máximo 6 intereses
+            if (interests.length > 6) {
+                return res.status(400).json({ error: 'Máximo 6 intereses' });
+            }
+            
+            // Verificar que los intereses sean válidos (existan en el clasificador)
+            let validInterests = [];
+            try {
+                const { getContentClassifier } = require('./classifiers');
+                const classifier = getContentClassifier();
+                const allCategories = await classifier.getCategories('es');
+                const validCategoryNames = allCategories.map(c => c.name);
+                
+                validInterests = interests.filter(i => validCategoryNames.includes(i));
+                
+                if (validInterests.length !== interests.length) {
+                    const invalid = interests.filter(i => !validCategoryNames.includes(i));
+                    logger.warn(`⚠️ Intereses inválidos ignorados: ${invalid.join(', ')}`);
+                }
+            } catch (error) {
+                logger.warn('⚠️ Error verificando categorías, guardando tal cual:', error.message);
+                validInterests = interests;
+            }
+            
+            const users = read('users.json');
+            const userIndex = users.findIndex(u => u.id === userId);
+            
+            if (userIndex === -1) {
+                return res.status(404).json({ error: 'Usuario no encontrado' });
+            }
+            
+            // Guardar intereses
+            users[userIndex].interests = validInterests;
+            
+            // Calcular porcentaje según cantidad
+            const percentage = calculateInterestPercentage(validInterests.length);
+            users[userIndex].interestPercentage = percentage;
+            
+            // Marcar que ya no es primer login
+            users[userIndex].firstLogin = false;
+            
+            write('users.json', users);
+            
+            if (logger) logger.info(`✅ Usuario ${userId} seleccionó ${validInterests.length} intereses (${percentage}% del feed)`);
+            
+            // Obtener categorías traducidas para la respuesta
+            let categoriesInfo = [];
+            try {
+                const { getContentClassifier } = require('./classifiers');
+                const classifier = getContentClassifier();
+                const userLang = users[userIndex].language || 'es';
+                const allCategories = await classifier.getCategories(userLang);
+                
+                categoriesInfo = allCategories
+                    .filter(c => validInterests.includes(c.name))
+                    .map(c => ({
+                        name: c.name,
+                        displayName: c.displayName,
+                        emoji: c.emoji,
+                        description: c.description || ''
+                    }));
+            } catch (error) {
+                logger.warn('⚠️ Error obteniendo info de categorías:', error.message);
+            }
+            
+            res.json({
+                success: true,
+                interests: validInterests,
+                percentage: percentage,
+                categories: categoriesInfo,
+                message: `✅ Intereses guardados. ${percentage}% de tu feed será de estos temas.`,
+                firstLogin: false
+            });
+            
+        } catch (error) {
+            console.error('❌ Error guardando intereses:', error);
+            if (logger) logger.error('Error guardando intereses:', { error: error.message });
+            res.status(500).json({ error: 'Error interno del servidor' });
+        }
+    });
+
+    // ============================================================
+    // 🔥 OBTENER INTERESES DEL USUARIO
+    // ============================================================
+    router.get('/:userId/interests', auth, async (req, res) => {
+        try {
+            const userId = req.params.userId;
+            const currentUserId = req.userId;
+            
+            // Solo el propio usuario puede ver sus intereses
+            if (userId !== currentUserId) {
+                return res.status(403).json({ error: 'No tienes permiso' });
+            }
+            
+            const users = read('users.json');
+            const user = users.find(u => u.id === userId);
+            
+            if (!user) {
+                return res.status(404).json({ error: 'Usuario no encontrado' });
+            }
+            
+            // Obtener info de categorías
+            let categoriesInfo = [];
+            try {
+                const { getContentClassifier } = require('./classifiers');
+                const classifier = getContentClassifier();
+                const userLang = user.language || 'es';
+                const allCategories = await classifier.getCategories(userLang);
+                
+                categoriesInfo = allCategories
+                    .filter(c => (user.interests || []).includes(c.name))
+                    .map(c => ({
+                        name: c.name,
+                        displayName: c.displayName,
+                        emoji: c.emoji,
+                        description: c.description || ''
+                    }));
+            } catch (error) {
+                logger.warn('⚠️ Error obteniendo info de categorías:', error.message);
+            }
+            
+            res.json({
+                success: true,
+                interests: user.interests || [],
+                percentage: user.interestPercentage || 0,
+                firstLogin: user.firstLogin || false,
+                categories: categoriesInfo
+            });
+            
+        } catch (error) {
+            console.error('❌ Error obteniendo intereses:', error);
+            if (logger) logger.error('Error obteniendo intereses:', { error: error.message });
+            res.status(500).json({ error: 'Error interno del servidor' });
+        }
+    });
+
+    // ============================================================
+    // 🔥 ACTUALIZAR INTERESES (DESPUÉS DEL PRIMER LOGIN)
+    // ============================================================
+    router.put('/:userId/interests', auth, async (req, res) => {
+        try {
+            const userId = req.params.userId;
+            const currentUserId = req.userId;
+            const { interests } = req.body;
+            
+            if (userId !== currentUserId) {
+                return res.status(403).json({ error: 'No tienes permiso' });
+            }
+            
+            if (!interests || !Array.isArray(interests)) {
+                return res.status(400).json({ error: 'Intereses inválidos' });
+            }
+            
+            if (interests.length > 6) {
+                return res.status(400).json({ error: 'Máximo 6 intereses' });
+            }
+            
+            const users = read('users.json');
+            const userIndex = users.findIndex(u => u.id === userId);
+            
+            if (userIndex === -1) {
+                return res.status(404).json({ error: 'Usuario no encontrado' });
+            }
+            
+            // Validar intereses
+            let validInterests = interests;
+            try {
+                const { getContentClassifier } = require('./classifiers');
+                const classifier = getContentClassifier();
+                const allCategories = await classifier.getCategories('es');
+                const validCategoryNames = allCategories.map(c => c.name);
+                validInterests = interests.filter(i => validCategoryNames.includes(i));
+            } catch (error) {
+                logger.warn('⚠️ Error verificando categorías:', error.message);
+            }
+            
+            users[userIndex].interests = validInterests;
+            const percentage = calculateInterestPercentage(validInterests.length);
+            users[userIndex].interestPercentage = percentage;
+            
+            write('users.json', users);
+            
+            if (logger) logger.info(`✅ Usuario ${userId} actualizó intereses: ${validInterests.length} (${percentage}%)`);
+            
+            res.json({
+                success: true,
+                interests: validInterests,
+                percentage: percentage,
+                message: `✅ Intereses actualizados. ${percentage}% de tu feed será de estos temas.`
+            });
+            
+        } catch (error) {
+            console.error('❌ Error actualizando intereses:', error);
+            if (logger) logger.error('Error actualizando intereses:', { error: error.message });
+            res.status(500).json({ error: 'Error interno del servidor' });
+        }
+    });
+
+    // ============================================================
+    // 🔥 OBTENER CATEGORÍAS DISPONIBLES PARA INTERESES
+    // ============================================================
+    router.get('/categories', auth, async (req, res) => {
+        try {
+            const userId = req.userId;
+            const users = read('users.json');
+            const user = users.find(u => u.id === userId);
+            const language = user?.language || 'es';
+            
+            const { getContentClassifier } = require('./classifiers');
+            const classifier = getContentClassifier();
+            const categories = await classifier.getCategories(language);
+            
+            // Formatear para selección
+            const formatted = categories.map(c => ({
+                id: c.name,
+                name: c.displayName,
+                emoji: c.emoji,
+                description: c.description || '',
+                keywordCount: c.keywordCount || 0,
+                selected: (user?.interests || []).includes(c.name)
+            }));
+            
+            // Ordenar: primero las seleccionadas, luego alfabéticamente
+            formatted.sort((a, b) => {
+                if (a.selected && !b.selected) return -1;
+                if (!a.selected && b.selected) return 1;
+                return a.name.localeCompare(b.name);
+            });
+            
+            res.json({
+                success: true,
+                categories: formatted,
+                total: formatted.length,
+                maxSelection: 6,
+                language: language,
+                userInterests: user?.interests || [],
+                userPercentage: user?.interestPercentage || 0,
+                firstLogin: user?.firstLogin || false
+            });
+            
+        } catch (error) {
+            console.error('❌ Error obteniendo categorías:', error);
+            if (logger) logger.error('Error obteniendo categorías:', { error: error.message });
+            res.status(500).json({ error: 'Error interno del servidor' });
+        }
+    });
+
+    // ============================================================
     // ESTADO DE USUARIO (online/offline)
     // ============================================================
     router.get('/status/:userId', auth, (req, res) => {
@@ -669,12 +945,17 @@ module.exports = (read, write, isProfileVisible, areStoriesVisible, userIndex, l
                 verifiedAt: new Date().toISOString(),
                 verifiedBadge: 'verified',
                 accountType: 'verified',
+                // 🔥 INTERESES DEL ADMIN
+                interests: [],
+                firstLogin: false,
+                interestPercentage: 0,
                 feedPreferences: {
                     countryWeight: 34,
                     regionWeight: 27,
                     nearbyRegionsWeight: 23,
                     farRegionsWeight: 5,
-                    followingWeight: 11
+                    followingWeight: 11,
+                    interestWeight: 15
                 }
             };
 

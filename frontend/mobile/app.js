@@ -1,4 +1,4 @@
-// app.js - VERSIÓN COMPLETA CON FILTRO PUBLICIDAD Y LOGIN MODULAR
+// app.js - VERSIÓN COMPLETA CON FILTRO PUBLICIDAD, LOGIN MODULAR Y PREFERENCIAS
 // ============================================================
 
 import {
@@ -78,6 +78,219 @@ const VIEWED_IN_RECENT_KEY = 'vyn_viewed_in_recent';
 
 // 🔥 CLAVE PARA GUARDAR EL FILTRO ACTUAL
 const FILTER_STATE_KEY = 'vyn_current_filter';
+
+// ============================================================
+// 🔥 PREFERENCIAS - PRIMER LOGIN
+// ============================================================
+
+const PREFERENCES_KEY = 'vygorax_preferences_done';
+const SELECTED_INTERESTS_KEY = 'vygorax_selected_interests';
+
+// Verificar si ya se seleccionaron preferencias
+function hasPreferencesDone() {
+    try {
+        return localStorage.getItem(PREFERENCES_KEY) === 'true';
+    } catch {
+        return false;
+    }
+}
+
+// Marcar preferencias como completadas
+function markPreferencesDone() {
+    try {
+        localStorage.setItem(PREFERENCES_KEY, 'true');
+        console.log('✅ Preferencias marcadas como completadas');
+    } catch (e) {
+        console.warn('Error guardando preferencias:', e);
+    }
+}
+
+// Cargar categorías desde el servidor
+async function loadCategoriesFromServer() {
+    const token = getToken();
+    if (!token) return [];
+
+    try {
+        // Intentar con /api/categories
+        let res = await fetch(`${API_URL}/api/categories`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+
+        if (!res.ok) {
+            res = await fetch(`${API_URL}/api/users/categories`, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+        }
+
+        if (res.ok) {
+            const data = await res.json();
+            return data.categories || [];
+        }
+        return [];
+    } catch (error) {
+        console.error('Error cargando categorías:', error);
+        return [];
+    }
+}
+
+// Mostrar pantalla de preferencias
+async function showPreferencesScreen() {
+    const screen = document.getElementById('preferencesScreen');
+    if (!screen) return;
+
+    // Cargar categorías
+    const categories = await loadCategoriesFromServer();
+    const grid = document.getElementById('prefGrid');
+
+    if (!categories || categories.length === 0) {
+        grid.innerHTML = `
+            <div style="grid-column:1/-1;text-align:center;color:rgba(255,255,255,0.2);padding:20px 0;">
+                <i class="fas fa-exclamation-circle" style="font-size:24px;color:#ff6b6b;"></i>
+                <p style="margin-top:8px;">No se pudieron cargar las categorías</p>
+                <button onclick="location.reload()" style="margin-top:8px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);color:#fff;padding:6px 20px;border-radius:50px;cursor:pointer;">
+                    <i class="fas fa-redo"></i> Reintentar
+                </button>
+            </div>
+        `;
+        return;
+    }
+
+    const displayCategories = categories.slice(0, 12);
+    grid.innerHTML = displayCategories.map(cat => `
+        <div class="pref-option" data-category="${cat.id || cat.name}" data-emoji="${cat.emoji || '📌'}">
+            <span class="pref-emoji">${cat.emoji || '📌'}</span>
+            <span class="pref-label">${cat.name || cat.displayName || cat.id}</span>
+            <span class="pref-check"><i class="fas fa-check"></i></span>
+        </div>
+    `).join('');
+
+    let selected = [];
+
+    grid.querySelectorAll('.pref-option').forEach(el => {
+        el.addEventListener('click', () => {
+            const category = el.dataset.category;
+            if (el.classList.contains('selected')) {
+                el.classList.remove('selected');
+                selected = selected.filter(c => c !== category);
+            } else {
+                if (selected.length >= 6) {
+                    showToast('Máximo 6 temas', true);
+                    return;
+                }
+                el.classList.add('selected');
+                selected.push(category);
+            }
+            updatePrefCounter(selected);
+        });
+    });
+
+    screen.style.display = 'flex';
+    screen.classList.add('active');
+    document.body.style.overflow = 'hidden';
+
+    // Configurar botón de guardar
+    const submitBtn = document.getElementById('prefSubmitBtn');
+    if (submitBtn) {
+        const newBtn = submitBtn.cloneNode(true);
+        submitBtn.parentNode.replaceChild(newBtn, submitBtn);
+        newBtn.addEventListener('click', async () => {
+            if (selected.length === 0) {
+                showToast('Selecciona al menos 1 tema', true);
+                return;
+            }
+
+            const user = getCurrentUser();
+            if (!user) {
+                showToast('Inicia sesión primero', true);
+                return;
+            }
+
+            newBtn.disabled = true;
+            newBtn.innerHTML = '<span class="pref-btn-spinner"></span> Guardando...';
+
+            try {
+                const res = await fetch(`${API_URL}/api/users/${user.id}/interests`, {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${getToken()}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ interests: selected })
+                });
+
+                const data = await res.json();
+
+                if (res.ok) {
+                    user.interests = data.interests;
+                    user.interestPercentage = data.percentage || 0;
+                    user.firstLogin = false;
+                    setCurrentUser(user);
+
+                    markPreferencesDone();
+                    localStorage.setItem(SELECTED_INTERESTS_KEY, JSON.stringify(selected));
+
+                    showToast(`✅ ${data.percentage || 0}% de tu feed será de tus temas`);
+
+                    closePreferencesScreen();
+                    if (typeof refreshFeed === 'function') {
+                        setTimeout(refreshFeed, 500);
+                    }
+                } else {
+                    showToast(data.error || 'Error guardando preferencias', true);
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                showToast('Error de conexión', true);
+            } finally {
+                newBtn.disabled = false;
+                newBtn.innerHTML = 'Continuar <i class="fas fa-arrow-right" style="margin-left:8px;"></i>';
+            }
+        });
+    }
+
+    // Configurar botón de omitir
+    const skipBtn = document.getElementById('prefSkipBtn');
+    if (skipBtn) {
+        const newSkip = skipBtn.cloneNode(true);
+        skipBtn.parentNode.replaceChild(newSkip, skipBtn);
+        newSkip.addEventListener('click', () => {
+            markPreferencesDone();
+            closePreferencesScreen();
+            showToast('Puedes configurar tus intereses después en ajustes');
+            if (typeof refreshFeed === 'function') {
+                setTimeout(refreshFeed, 500);
+            }
+        });
+    }
+
+    updatePrefCounter(selected);
+}
+
+function updatePrefCounter(selected) {
+    const countEl = document.getElementById('prefCount');
+    const submitBtn = document.getElementById('prefSubmitBtn');
+    if (countEl) countEl.textContent = selected.length;
+    if (submitBtn) {
+        submitBtn.disabled = selected.length === 0;
+        if (selected.length === 0) {
+            submitBtn.textContent = 'Selecciona al menos 1 tema';
+        } else {
+            submitBtn.innerHTML = 'Continuar <i class="fas fa-arrow-right" style="margin-left:8px;"></i>';
+        }
+    }
+}
+
+function closePreferencesScreen() {
+    const screen = document.getElementById('preferencesScreen');
+    if (screen) {
+        screen.classList.remove('active');
+        screen.style.display = 'none';
+    }
+    document.body.style.overflow = '';
+}
+
+// Exportar funciones de preferencias
+export { showPreferencesScreen, closePreferencesScreen, hasPreferencesDone, markPreferencesDone };
 
 // ============================================================
 // ESTADO GLOBAL
@@ -358,11 +571,11 @@ function restoreNavToHome() {
 window.restoreNavToHome = restoreNavToHome;
 
 // ============================================================
-// INICIALIZAR - USANDO LOGIN MODULE
+// INICIALIZAR - USANDO LOGIN MODULE CON PREFERENCIAS
 // ============================================================
 
 async function init() {
-    console.log('📱 Iniciando Vyin Social...');
+    console.log('📱 Iniciando Vygorax...');
 
     loadPersistedData();
 
@@ -373,7 +586,7 @@ async function init() {
         console.log(`📂 Filtro restaurado: ${savedFilter}`);
     }
 
-    // 🔥 INICIALIZAR MÓDULO DE LOGIN
+    // 🔥 INICIALIZAR MÓDULO DE LOGIN CON PREFERENCIAS
     initLoginModule({
         onSuccess: async (user) => {
             console.log(`✅ Usuario autenticado: ${user?.fullName || user?.username}`);
@@ -385,6 +598,37 @@ async function init() {
             
             initSocket();
             updateHeaderUI(user);
+            
+            // 🔥 VERIFICAR PREFERENCIAS
+            const preferencesDone = hasPreferencesDone();
+            const hasInterests = user?.interests && user.interests.length > 0;
+            
+            if (!preferencesDone && !hasInterests) {
+                console.log('🎯 Primera vez - Mostrando preferencias');
+                await showPreferencesScreen();
+                // Esperar a que el usuario complete o omita
+                await new Promise(resolve => {
+                    const check = () => {
+                        if (hasPreferencesDone()) {
+                            resolve();
+                        } else {
+                            setTimeout(check, 500);
+                        }
+                    };
+                    // Si el usuario cierra la pantalla manualmente
+                    const observer = new MutationObserver(() => {
+                        const screen = document.getElementById('preferencesScreen');
+                        if (!screen || !screen.classList.contains('active')) {
+                            observer.disconnect();
+                            resolve();
+                        }
+                    });
+                    observer.observe(document.body, { childList: true, subtree: true });
+                    // Timeout de seguridad
+                    setTimeout(() => { observer.disconnect(); resolve(); }, 30000);
+                });
+                console.log('✅ Preferencias procesadas');
+            }
             
             feedCursor = restoreFeedCursor();
             
@@ -785,7 +1029,7 @@ function renderAdsFeed(ads) {
             const adId = btn.dataset.adId;
             const url = `${window.location.origin}/ad/${adId}`;
             if (navigator.share) {
-                navigator.share({ title: 'Vyin Social - Publicidad', url });
+                navigator.share({ title: 'Vygorax - Publicidad', url });
             } else {
                 navigator.clipboard?.writeText(url).then(() => {
                     showToast('📋 Enlace copiado');
@@ -1347,7 +1591,7 @@ function renderFeed(storiesData) {
             const storyId = btn.dataset.storyId;
             const url = `${window.location.origin}/story/${storyId}`;
             if (navigator.share) {
-                navigator.share({ title: 'Vyin Social', url });
+                navigator.share({ title: 'Vygorax - Historia', url });
             } else {
                 navigator.clipboard?.writeText(url).then(() => {
                     showToast('📋 Enlace copiado');
