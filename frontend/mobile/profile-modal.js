@@ -5,6 +5,7 @@
 // 🔥 MODIFICADO: Restaura correctamente el estado de explore-modal
 // 🔥 AÑADIDO: Botón para enviar mensaje
 // 🔥 MODIFICADO: Soporte para restaurar chat al cerrar perfil
+// 🔥 CORREGIDO: Abrir chat sin cerrar explore ni perfil
 
 import {
     getToken, getCurrentUser, showToast,
@@ -550,7 +551,7 @@ window.handleBlockUser = async function(userId) {
 };
 
 // ============================================================
-// 🔥 FUNCIÓN PARA ABRIR CHAT DESDE EL PERFIL
+// 🔥 FUNCIÓN PARA ABRIR CHAT DESDE EL PERFIL - CORREGIDO (NO CIERRA MODALES)
 // ============================================================
 
 window.openChatFromProfile = function(userId) {
@@ -565,13 +566,116 @@ window.openChatFromProfile = function(userId) {
         return;
     }
 
-    // Cerrar el modal de perfil
+    console.log(`💬 Abriendo chat con usuario: ${userId}`);
+    console.log(`📊 _fromExploreModal: ${window._fromExploreModal}`);
+    console.log(`📊 _fromProfileModal: ${window._fromProfileModal}`);
+
+    // 🔥 GUARDAR EL ESTADO ACTUAL ANTES DE NAVEGAR
+    const isFromExplore = window._fromExploreModal || false;
+    
+    // Guardar contexto de Explore si existe
+    if (isFromExplore) {
+        window._chatFromExplore = true;
+        import('./explore-modal.js').then(({ saveExploreState, getExploreState }) => {
+            const currentState = getExploreState();
+            if (currentState) {
+                window._exploreStateBeforeChat = currentState;
+                console.log('💾 Estado de Explore guardado antes de ir al chat:', currentState);
+            }
+        }).catch(() => {});
+    }
+
+    // 🔥 CERRAR SOLO EL MODAL DE PERFIL (NO EL DE EXPLORE)
+    // Guardar el perfil actual para restaurarlo después
+    const profileUserId = currentProfileUserId;
+    const profileData = currentProfileData;
+    
     closeProfileModal();
 
-    // Redirigir a la página de chats con el userId
+    // 🔥 ABRIR CHAT MANTENIENDO EXPLORE (si estaba abierto)
     setTimeout(() => {
+        // Verificar si explore sigue abierto
+        const exploreOverlay = document.getElementById('exploreOverlay');
+        const isExploreOpen = exploreOverlay && exploreOverlay.classList.contains('active');
+        
+        if (isExploreOpen) {
+            console.log('📍 Explore sigue abierto, abriendo chat encima');
+            // Asegurar que explore siga visible
+            exploreOverlay.style.display = 'flex';
+            exploreOverlay.style.zIndex = '10001';
+        }
+        
+        // Usar navegación SPA si está disponible
+        if (typeof window.navigateToChat === 'function') {
+            window.navigateToChat(userId);
+        } else {
+            // Fallback: redirigir a la página de chats
+            window.location.href = `/mobile/chats.html?userId=${userId}`;
+        }
+    }, 150);
+};
+
+// ============================================================
+// 🔥 FUNCIÓN PARA RESTAURAR EXPLORE DESPUÉS DEL CHAT
+// ============================================================
+
+window.restoreExploreAfterChat = function() {
+    if (window._chatFromExplore && window._exploreStateBeforeChat) {
+        console.log('🔄 Restaurando Explore después del chat');
+        const state = window._exploreStateBeforeChat;
+        
+        import('./explore-modal.js').then(({ openExploreModal }) => {
+            // Abrir explore con el estado guardado
+            openExploreModal(true);
+            
+            // Restaurar scroll después de un momento
+            setTimeout(() => {
+                const content = document.getElementById('exploreContent');
+                if (content && state.scrollPosition) {
+                    content.scrollTop = state.scrollPosition;
+                }
+                const searchInput = document.querySelector('#exploreSearchInput');
+                if (searchInput && state.query) {
+                    searchInput.value = state.query;
+                }
+            }, 200);
+            
+            window._chatFromExplore = false;
+            window._exploreStateBeforeChat = null;
+        }).catch(() => {
+            // Fallback: abrir explore sin estado
+            if (typeof window.openExploreModal === 'function') {
+                window.openExploreModal(true);
+            }
+            window._chatFromExplore = false;
+            window._exploreStateBeforeChat = null;
+        });
+    }
+};
+
+// ============================================================
+// 🔥 FUNCIÓN PARA NAVEGAR A CHAT DESDE PERFIL (SPA)
+// ============================================================
+
+window.navigateToChat = function(userId) {
+    console.log(`💬 Navegando a chat con usuario: ${userId}`);
+    
+    // Verificar si ya estamos en la página de chat
+    const isChatPage = window.location.pathname.includes('/chats.html') || 
+                       window.location.pathname.includes('/chat.html');
+    
+    if (isChatPage) {
+        // Si ya estamos en chat, solo actualizar el userId en la URL
+        const url = new URL(window.location);
+        url.searchParams.set('userId', userId);
+        window.history.pushState({}, '', url);
+        
+        // Disparar evento para que chats.js cargue la conversación
+        window.dispatchEvent(new CustomEvent('chatUserSelected', { detail: { userId } }));
+    } else {
+        // Si no estamos en chat, redirigir
         window.location.href = `/mobile/chats.html?userId=${userId}`;
-    }, 300);
+    }
 };
 
 // ============================================================
@@ -1239,6 +1343,8 @@ function createProfileModalHTML() {
     window.handleBlockUser = window.handleBlockUser;
     window.handleFollowPrivate = window.handleFollowPrivate;
     window.openChatFromProfile = window.openChatFromProfile;
+    window.restoreExploreAfterChat = window.restoreExploreAfterChat;
+    window.navigateToChat = window.navigateToChat;
 }
 
 // ============================================================
@@ -1483,6 +1589,8 @@ window.handleBlockUser = window.handleBlockUser;
 window.handleFollowPrivate = window.handleFollowPrivate;
 window.preloadCurrentUserProfile = preloadCurrentUserProfile;
 window.openChatFromProfile = window.openChatFromProfile;
+window.restoreExploreAfterChat = window.restoreExploreAfterChat;
+window.navigateToChat = window.navigateToChat;
 
 // ============================================================
 // EXPORTAR
