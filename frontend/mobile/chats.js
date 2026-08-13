@@ -4,6 +4,8 @@
 // ============================================================
 
 import { getToken, getCurrentUser, showToast as authShowToast } from './auth.js';
+// 🔥 IMPORTAR PROFILE MODAL PARA ABRIR PERFIL DESDE CHAT
+import { openProfileModal } from './profile-modal.js';
 
 const API_URL = window.location.origin;
 
@@ -31,18 +33,14 @@ let scrollTimeout = null;
 let isInitialLoad = true;
 
 // ============================================================
-// 🔗 DETECCIÓN Y APERTURA DE ENLACES (CORREGIDO - SIN DUPLICADOS)
+// 🔗 DETECCIÓN Y APERTURA DE ENLACES
 // ============================================================
 
-/**
- * Detecta enlaces en un texto y los convierte en HTML con preview
- */
 function detectAndRenderLinks(text) {
     if (!text) return text;
     
     let html = text;
     
-    // Patrones de enlaces
     const vyinPattern = /(https?:\/\/[^\s]*vyin-social\.onrender\.com\/(?:story|feed|profile)\/[a-zA-Z0-9_-]+)/gi;
     const tiktokPattern = /(https?:\/\/[^\s]*(?:vm\.tiktok\.com|tiktok\.com)[^\s]*)/gi;
     const youtubePattern = /(https?:\/\/[^\s]*(?:youtube\.com|youtu\.be)[^\s]*)/gi;
@@ -57,7 +55,6 @@ function detectAndRenderLinks(text) {
         </a>`;
     }
     
-    // 🔥 1. Enlaces de Vyin (prioridad)
     html = html.replace(vyinPattern, (match) => {
         const url = match.trim();
         const type = url.includes('/story/') ? 'story' : 
@@ -70,31 +67,26 @@ function detectAndRenderLinks(text) {
         return createLinkHtml(url, 'Vyin', icon, label, 'vyin');
     });
     
-    // 🔥 2. TikTok
     html = html.replace(tiktokPattern, (match) => {
         const url = match.trim();
         return createLinkHtml(url, 'TikTok', '🎵', 'Ver video en TikTok', 'tiktok');
     });
     
-    // 🔥 3. YouTube
     html = html.replace(youtubePattern, (match) => {
         const url = match.trim();
         return createLinkHtml(url, 'YouTube', '▶️', 'Ver video en YouTube', 'youtube');
     });
     
-    // 🔥 4. Instagram
     html = html.replace(instagramPattern, (match) => {
         const url = match.trim();
         return createLinkHtml(url, 'Instagram', '📸', 'Ver en Instagram', 'instagram');
     });
     
-    // 🔥 5. Twitter/X
     html = html.replace(twitterPattern, (match) => {
         const url = match.trim();
         return createLinkHtml(url, 'Twitter/X', '🐦', 'Ver en Twitter/X', 'twitter');
     });
     
-    // 🔥 6. Otros enlaces (genérico)
     html = html.replace(urlPattern, (match) => {
         if (match.includes('link-preview')) return match;
         
@@ -112,9 +104,6 @@ function detectAndRenderLinks(text) {
     return html;
 }
 
-/**
- * Escapar HTML de forma segura
- */
 function escapeHtml(text) {
     if (!text) return '';
     const div = document.createElement('div');
@@ -122,9 +111,10 @@ function escapeHtml(text) {
     return div.innerHTML;
 }
 
-/**
- * 🔥 ABRIR ENLACE DESDE EL CHAT - CORREGIDO PARA VYIN
- */
+// ============================================================
+// 🔥 ABRIR ENLACE DESDE EL CHAT - CON SOPORTE PARA PERFIL
+// ============================================================
+
 function openLinkFromChat(event) {
     const link = event.target.closest('a.link-preview');
     if (!link) return;
@@ -137,64 +127,42 @@ function openLinkFromChat(event) {
     
     console.log(`🔗 Abriendo enlace: ${url} (tipo: ${type})`);
     
-    // 🔥 Si es un enlace de Vyin, intentar abrir dentro de la app
     if (type === 'vyin' || url.includes('vyin-social.onrender.com')) {
         try {
             const urlObj = new URL(url);
             const pathname = urlObj.pathname;
             
-            // 🔥 DETECTAR STORY ID DESDE LA URL
-            // Patrones: /story/123, /feed.html?storyId=123, /story/123?...
             let storyId = null;
-            
-            // Buscar en el pathname: /story/ID
             const storyMatch = pathname.match(/\/story\/([a-zA-Z0-9_-]+)/);
             if (storyMatch) {
                 storyId = storyMatch[1];
             }
             
-            // Buscar en query params: ?storyId=ID
             if (!storyId) {
-                const params = new URLSearchParams(urlObj.search);
-                storyId = params.get('storyId');
-            }
-            
-            // Si es feed con storyId
-            if (!storyId && pathname.includes('feed.html')) {
                 const params = new URLSearchParams(urlObj.search);
                 storyId = params.get('storyId');
             }
             
             if (storyId) {
                 console.log(`📖 Abriendo historia: ${storyId}`);
-                
-                // 🔥 IMPORTAR Y ABRIR STORY MODAL
                 import('./story-modal.js').then(({ openStoryModal }) => {
                     openStoryModal(storyId);
                 }).catch((err) => {
                     console.error('❌ Error cargando story-modal:', err);
-                    // Fallback: abrir en nueva pestaña
                     window.open(url, '_blank');
                 });
                 return;
             }
             
-            // Detectar perfil
+            // 🔥 DETECTAR PERFIL Y ABRIR CON PROFILE MODAL
             const profileMatch = pathname.match(/\/profile\/([a-zA-Z0-9_-]+)/);
             if (profileMatch) {
                 const userId = profileMatch[1];
                 console.log(`👤 Abriendo perfil: ${userId}`);
-                
-                import('./profile-modal.js').then(({ openProfileModal }) => {
-                    openProfileModal(userId);
-                }).catch((err) => {
-                    console.error('❌ Error cargando profile-modal:', err);
-                    window.open(url, '_blank');
-                });
+                openProfileModal(userId);
                 return;
             }
             
-            // Si no se detectó nada, abrir en nueva pestaña
             window.open(url, '_blank');
             
         } catch (e) {
@@ -204,9 +172,27 @@ function openLinkFromChat(event) {
         return;
     }
     
-    // Para enlaces externos, abrir en nueva pestaña
     window.open(url, '_blank');
 }
+
+// ============================================================
+// 🔥 ABRIR PERFIL DEL USUARIO DE LA CONVERSACIÓN ACTUAL
+// ============================================================
+
+window.openProfileFromChat = function() {
+    if (!currentConversation) {
+        showToast('No hay usuario seleccionado', true);
+        return;
+    }
+    
+    const userId = currentConversation.id;
+    const fullName = currentConversation.fullName || 'Usuario';
+    console.log(`👤 Abriendo perfil de ${fullName} (${userId}) desde chat`);
+    
+    // Cerrar el panel de mensajes y abrir el perfil
+    messagesPanelEl.classList.remove('active');
+    openProfileModal(userId);
+};
 
 // ============================================================
 // CONFIGURAR EVENT DELEGATION PARA ENLACES
@@ -918,7 +904,7 @@ function handleScroll() {
 }
 
 // ============================================================
-// SELECCIONAR CONVERSACIÓN
+// 🔥 SELECCIONAR CONVERSACIÓN - CORREGIDO
 // ============================================================
 window.selectConversation = async function(userIdOrObject) {
     let userId, userData;
@@ -934,6 +920,7 @@ window.selectConversation = async function(userIdOrObject) {
         userId = userData.id;
     }
 
+    // Guardar estado del chat actual antes de cambiar
     if (currentConversation && messages.length > 0) {
         saveChatState(currentConversation.id);
     }
@@ -955,6 +942,9 @@ window.selectConversation = async function(userIdOrObject) {
     updateChatHeaderStatus(userId);
 };
 
+// ============================================================
+// 🔥 MOSTRAR PANEL DE MENSAJES - CON BOTÓN DE PERFIL
+// ============================================================
 function showMessagesPanel() {
     if (!messagesPanelEl) return;
     messagesPanelEl.classList.add('active');
@@ -969,13 +959,43 @@ function showMessagesPanel() {
             this.src = 'https://ui-avatars.com/api/?name=' + encodeURIComponent(currentConversation?.fullName || 'U') + '&background=7c3aed&color=fff';
         };
     }
-    if (name) name.textContent = currentConversation?.fullName || currentConversation?.username || 'Usuario';
+    if (name) {
+        name.textContent = currentConversation?.fullName || currentConversation?.username || 'Usuario';
+        // 🔥 AÑADIR CLICK PARA ABRIR PERFIL
+        name.style.cursor = 'pointer';
+        name.onclick = function(e) {
+            e.stopPropagation();
+            window.openProfileFromChat();
+        };
+    }
+    
+    // 🔥 HACER CLICK EN EL AVATAR PARA ABRIR PERFIL
+    if (avatar) {
+        avatar.style.cursor = 'pointer';
+        avatar.onclick = function(e) {
+            e.stopPropagation();
+            window.openProfileFromChat();
+        };
+    }
+    
     if (backBtn) {
         backBtn.onclick = function() {
+            // 🔥 LIMPIAR CONVERSACIÓN ACTUAL AL SALIR
             if (currentConversation) {
                 saveChatState(currentConversation.id);
             }
+            // 🔥 DESELECCIONAR LA CONVERSACIÓN
+            currentConversation = null;
             messagesPanelEl.classList.remove('active');
+            // 🔥 LIMPIAR EL CONTENEDOR DE MENSAJES
+            messagesContainerEl.innerHTML = `
+                <div class="empty-state-chat">
+                    <i class="fas fa-comment-dots"></i>
+                    <h3>No hay mensajes</h3>
+                    <p>Selecciona una conversación</p>
+                </div>
+            `;
+            renderConversations();
             loadConversations();
         };
     }
@@ -1254,7 +1274,7 @@ async function init() {
     }
 
     setupLinkDelegation();
-    console.log('📱 Chat mobile optimizado - con detección de enlaces corregida');
+    console.log('📱 Chat mobile optimizado - con detección de enlaces corregida y perfil');
 }
 
 // Exponer funciones globales
@@ -1265,5 +1285,6 @@ window.switchChatTab = window.switchChatTab;
 window.acceptChatRequest = window.acceptChatRequest;
 window.rejectChatRequest = window.rejectChatRequest;
 window.openLinkFromChat = openLinkFromChat;
+window.openProfileFromChat = openProfileFromChat;
 
 document.addEventListener('DOMContentLoaded', init);
