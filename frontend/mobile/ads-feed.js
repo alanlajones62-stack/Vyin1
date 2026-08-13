@@ -25,25 +25,6 @@ const ADS_DATE_KEY = 'vyin_ads_date';
 const ADS_TOTAL_KEY = 'vyin_ads_total_today';
 
 // ============================================================
-// ESTRUCTURA DE DATOS PARA HISTORIAL DE PUBLICIDADES
-// ============================================================
-
-/*
-{
-  "adId_123": {
-    "views": 3,           // Veces que se ha mostrado hoy
-    "lastView": "2024-01-15T14:30:00.000Z",
-    "cooldownUntil": "2024-01-15T14:45:00.000Z"
-  },
-  "adId_456": {
-    "views": 1,
-    "lastView": "2024-01-15T14:25:00.000Z",
-    "cooldownUntil": null
-  }
-}
-*/
-
-// ============================================================
 // INICIALIZAR SOCKET
 // ============================================================
 
@@ -78,7 +59,7 @@ export function initAdsSocket(socketInstance) {
 }
 
 // ============================================================
-// 🔥 GESTIÓN DE HISTORIAL DE PUBLICIDADES
+// GESTIÓN DE HISTORIAL DE PUBLICIDADES
 // ============================================================
 
 function getTodayDate() {
@@ -89,7 +70,6 @@ function loadAdHistory() {
     const today = getTodayDate();
     const savedDate = localStorage.getItem(ADS_DATE_KEY);
     
-    // Si es un nuevo día, resetear todo
     if (savedDate !== today) {
         localStorage.setItem(ADS_DATE_KEY, today);
         localStorage.setItem(ADS_HISTORY_KEY, JSON.stringify({}));
@@ -119,7 +99,6 @@ function canShowAd(adId, history) {
     const today = getTodayDate();
     const savedDate = localStorage.getItem(ADS_DATE_KEY);
     
-    // Si es un nuevo día, resetear
     if (savedDate !== today) {
         localStorage.setItem(ADS_DATE_KEY, today);
         localStorage.setItem(ADS_HISTORY_KEY, JSON.stringify({}));
@@ -129,18 +108,17 @@ function canShowAd(adId, history) {
     
     const adHistory = history[adId];
     
-    // Si no hay historial, se puede mostrar
     if (!adHistory) {
         return true;
     }
     
-    // 🔥 LÍMITE: Máximo 3 veces por día por publicidad
+    // Límite: Máximo 3 veces por día por publicidad
     if (adHistory.views >= 3) {
         console.log(`⛔ Publicidad ${adId} ya vista 3 veces hoy`);
         return false;
     }
     
-    // 🔥 COOLDOWN: No repetir inmediatamente (5 minutos entre misma publicidad)
+    // Cooldown: 5 minutos entre misma publicidad
     if (adHistory.cooldownUntil) {
         const cooldownTime = new Date(adHistory.cooldownUntil);
         if (new Date() < cooldownTime) {
@@ -149,7 +127,7 @@ function canShowAd(adId, history) {
         }
     }
     
-    // 🔥 LÍMITE TOTAL: Máximo 40 publicidades por día
+    // Límite total: Máximo 40 publicidades por día
     const totalViews = Object.values(history).reduce((sum, h) => sum + (h.views || 0), 0);
     if (totalViews >= 40) {
         console.log(`⛔ Límite de 40 publicidades por día alcanzado`);
@@ -173,7 +151,6 @@ function registerAdViewToday(adId, history) {
     history[adId].views = (history[adId].views || 0) + 1;
     history[adId].lastView = new Date().toISOString();
     
-    // 🔥 COOLDOWN: 5 minutos antes de poder mostrar la misma publicidad
     const cooldownMinutes = 5;
     const cooldownTime = new Date(Date.now() + cooldownMinutes * 60 * 1000);
     history[adId].cooldownUntil = cooldownTime.toISOString();
@@ -214,10 +191,8 @@ export async function loadActiveAds() {
         const data = await res.json();
         cachedAds = data.ads || [];
         
-        // 🔥 MEZCLAR PUBLICIDADES (DESORDENADAS)
         cachedAds = shuffleArray(cachedAds);
         
-        // 🔥 FILTRAR PUBLICIDADES QUE YA NO SE PUEDEN MOSTRAR
         const history = loadAdHistory();
         const availableAds = cachedAds.filter(ad => canShowAd(ad.id, history));
         
@@ -232,7 +207,7 @@ export async function loadActiveAds() {
 }
 
 // ============================================================
-// 🔥 FUNCIÓN PARA MEZCLAR ARRAY
+// FUNCIÓN PARA MEZCLAR ARRAY
 // ============================================================
 
 function shuffleArray(array) {
@@ -245,13 +220,12 @@ function shuffleArray(array) {
 }
 
 // ============================================================
-// 🔥 OBTENER SIGUIENTE PUBLICIDAD (CON COOLDOWN)
+// OBTENER SIGUIENTE PUBLICIDAD
 // ============================================================
 
-export function getNextAd() {
+function getNextAd() {
     const history = loadAdHistory();
     
-    // Filtrar publicidades disponibles
     const availableAds = cachedAds.filter(ad => canShowAd(ad.id, history));
     
     if (availableAds.length === 0) {
@@ -259,17 +233,13 @@ export function getNextAd() {
         return null;
     }
     
-    // 🔥 PRIORIZAR PUBLICIDADES CON MENOS VISTAS
     availableAds.sort((a, b) => {
         const aViews = history[a.id]?.views || 0;
         const bViews = history[b.id]?.views || 0;
         return aViews - bViews;
     });
     
-    // Tomar la primera (la que menos veces se ha visto)
     const ad = availableAds[0];
-    
-    // Registrar vista
     registerAdViewToday(ad.id, history);
     
     return ad;
@@ -281,11 +251,10 @@ export function getNextAd() {
 
 export async function registerAdView(adId) {
     const token = getToken();
-    if (!token) return;
+    if (!token) return false;
 
     const history = loadAdHistory();
     
-    // 🔥 VERIFICAR SI SE PUEDE MOSTRAR
     if (!canShowAd(adId, history)) {
         console.log(`⛔ No se puede mostrar publicidad ${adId}`);
         return false;
@@ -302,18 +271,10 @@ export async function registerAdView(adId) {
 
         if (res.ok) {
             const data = await res.json();
-            
-            // 🔥 REGISTRAR VISTA EN EL HISTORIAL
             registerAdViewToday(adId, history);
-            
             console.log(`✅ Vista registrada para publicidad ${adId}`);
-            
-            // Actualizar vista localmente
             updateAdStats(adId, { views: data.views });
-            
-            // 🔥 INICIAR TEMPORIZADOR DE 15 SEGUNDOS
             startAdTimer(adId);
-            
             return true;
         }
     } catch (error) {
@@ -323,22 +284,19 @@ export async function registerAdView(adId) {
 }
 
 // ============================================================
-// 🔥 TEMPORIZADOR DE 15 SEGUNDOS PARA PUBLICIDAD
+// TEMPORIZADOR DE 15 SEGUNDOS
 // ============================================================
 
 function startAdTimer(adId) {
-    // Limpiar temporizador anterior si existe
     if (adTimers[adId]) {
         clearInterval(adTimers[adId].interval);
         clearTimeout(adTimers[adId].timeout);
         delete adTimers[adId];
     }
     
-    // Buscar el elemento de la publicidad
     const card = document.querySelector(`.ad-card[data-ad-id="${adId}"]`);
     if (!card) return;
     
-    // Crear o actualizar indicador de tiempo
     let timerIndicator = card.querySelector('.ad-timer');
     if (!timerIndicator) {
         timerIndicator = document.createElement('div');
@@ -361,15 +319,12 @@ function startAdTimer(adId) {
     
     const progressCircle = timerIndicator.querySelector('.ad-timer-progress');
     const textSpan = timerIndicator.querySelector('.ad-timer-text');
-    const labelSpan = timerIndicator.querySelector('.ad-timer-label');
     let seconds = 15;
-    const circumference = 106.8; // 2 * PI * 17
+    const circumference = 106.8;
     
-    // Mostrar indicador
     timerIndicator.style.display = 'block';
     timerIndicator.classList.add('active');
     
-    // Animar
     const interval = setInterval(() => {
         seconds--;
         const progress = ((15 - seconds) / 15) * 100;
@@ -387,12 +342,10 @@ function startAdTimer(adId) {
             timerIndicator.classList.remove('active');
             timerIndicator.style.display = 'none';
             
-            // 🔥 EMITIR EVENTO DE PUBLICIDAD VISTA COMPLETA
             if (socket && socket.connected) {
                 socket.emit('ad_watched', { adId });
             }
             
-            // 🔥 CARGAR SIGUIENTE PUBLICIDAD
             setTimeout(() => {
                 loadNextAd();
             }, 1000);
@@ -401,7 +354,6 @@ function startAdTimer(adId) {
         }
     }, 1000);
     
-    // Guardar referencia
     adTimers[adId] = {
         interval: interval,
         timeout: setTimeout(() => {
@@ -411,7 +363,7 @@ function startAdTimer(adId) {
 }
 
 // ============================================================
-// 🔥 CARGAR SIGUIENTE PUBLICIDAD
+// CARGAR SIGUIENTE PUBLICIDAD
 // ============================================================
 
 function loadNextAd() {
@@ -421,7 +373,6 @@ function loadNextAd() {
     const nextAd = getNextAd();
     
     if (!nextAd) {
-        // No hay más publicidades disponibles
         const container = document.getElementById('feedContainer');
         if (container) {
             const adContainer = container.querySelector('.ad-container');
@@ -442,7 +393,6 @@ function loadNextAd() {
         return;
     }
     
-    // Renderizar la siguiente publicidad
     renderSingleAd(nextAd);
     
     setTimeout(() => {
@@ -451,7 +401,7 @@ function loadNextAd() {
 }
 
 // ============================================================
-// 🔥 RENDERIZAR UNA SOLA PUBLICIDAD
+// RENDERIZAR UNA SOLA PUBLICIDAD
 // ============================================================
 
 function renderSingleAd(ad) {
@@ -467,7 +417,6 @@ function renderSingleAd(ad) {
     const adViews = history[ad.id]?.views || 0;
     const totalViews = Object.values(history).reduce((sum, h) => sum + (h.views || 0), 0);
     
-    // Buscar o crear contenedor de publicidad
     let adContainer = container.querySelector('.ad-container');
     if (!adContainer) {
         adContainer = document.createElement('div');
@@ -541,12 +490,10 @@ function renderSingleAd(ad) {
         </div>
     `;
     
-    // 🔥 INICIAR TEMPORIZADOR
     setTimeout(() => {
         registerAdView(ad.id);
     }, 500);
     
-    // Configurar eventos
     setTimeout(() => {
         const card = adContainer.querySelector('.ad-card');
         if (!card) return;
@@ -582,7 +529,6 @@ function renderSingleAd(ad) {
 // ============================================================
 
 function updateAdStats(adId, data) {
-    // Actualizar en caché
     const ad = cachedAds.find(a => a.id === adId);
     if (ad) {
         if (data.likes !== undefined) ad.likes = data.likes;
@@ -590,7 +536,6 @@ function updateAdStats(adId, data) {
         if (data.views !== undefined) ad.views = data.views;
     }
 
-    // Actualizar en el DOM
     const card = document.querySelector(`.ad-card[data-ad-id="${adId}"]`);
     if (!card) return;
 
@@ -650,7 +595,7 @@ export async function registerAdClick(adId) {
 }
 
 // ============================================================
-// 🔥 RENDER PUBLICIDADES EN EL FEED - PUNTO DE ENTRADA
+// RENDER PUBLICIDADES EN EL FEED - PUNTO DE ENTRADA
 // ============================================================
 
 export function renderAds(ads, container) {
@@ -658,14 +603,11 @@ export function renderAds(ads, container) {
         return '';
     }
 
-    // Guardar callback para actualizar
     window._renderAdsCallback = renderAds;
     
-    // 🔥 CARGAR HISTORIAL
     const history = loadAdHistory();
     const totalViews = Object.values(history).reduce((sum, h) => sum + (h.views || 0), 0);
     
-    // 🔥 VERIFICAR SI YA SE ALCANZÓ EL LÍMITE
     if (totalViews >= 40) {
         return `
             <div class="ad-limit-message">
@@ -679,20 +621,15 @@ export function renderAds(ads, container) {
         `;
     }
     
-    // 🔥 ACTUALIZAR CACHÉ
     cachedAds = ads;
-    
-    // 🔥 INICIAR COLA DE PUBLICIDADES
     adQueue = [];
     isAdPlaying = false;
     
-    // 🔥 CARGAR PRIMERA PUBLICIDAD
     setTimeout(() => {
         const nextAd = getNextAd();
         if (nextAd) {
             renderSingleAd(nextAd);
         } else {
-            // Mostrar mensaje de no disponibles
             const containerEl = document.getElementById('feedContainer');
             if (containerEl) {
                 let adContainer = containerEl.querySelector('.ad-container');
@@ -781,7 +718,16 @@ loadAdHistory();
 console.log('📢 Sistema de publicidad inicializado (40 por día, 3 por anuncio, 15 segundos)');
 
 // ============================================================
-// EXPORTAR
+// 🔥 EXPORTAR - SOLO UNA VEZ
 // ============================================================
 
-export { loadAdHistory, canShowAd, registerAdViewToday, getNextAd };
+export { 
+    initAdsSocket,
+    loadActiveAds,
+    registerAdView,
+    registerAdClick,
+    renderAds,
+    loadAdHistory,
+    canShowAd,
+    registerAdViewToday
+};
