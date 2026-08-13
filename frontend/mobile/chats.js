@@ -39,7 +39,6 @@ function detectAndRenderLinks(text) {
     
     let html = text;
     
-    // 🔥 PATRONES DE ENLACES - Más precisos
     const vyinPattern = /(https?:\/\/[^\s]*vyin-social\.onrender\.com\/(?:story|feed|profile)\/[a-zA-Z0-9_-]+)/gi;
     const tiktokPattern = /(https?:\/\/[^\s]*(?:vm\.tiktok\.com|tiktok\.com)[^\s]*)/gi;
     const youtubePattern = /(https?:\/\/[^\s]*(?:youtube\.com|youtu\.be)[^\s]*)/gi;
@@ -54,7 +53,6 @@ function detectAndRenderLinks(text) {
         </a>`;
     }
     
-    // 🔥 1. Enlaces de Vyin (prioridad)
     html = html.replace(vyinPattern, (match) => {
         const url = match.trim();
         const type = url.includes('/story/') ? 'story' : 
@@ -67,31 +65,26 @@ function detectAndRenderLinks(text) {
         return createLinkHtml(url, 'Vyin', icon, label, 'vyin');
     });
     
-    // 🔥 2. TikTok
     html = html.replace(tiktokPattern, (match) => {
         const url = match.trim();
         return createLinkHtml(url, 'TikTok', '🎵', 'Ver video en TikTok', 'tiktok');
     });
     
-    // 🔥 3. YouTube
     html = html.replace(youtubePattern, (match) => {
         const url = match.trim();
         return createLinkHtml(url, 'YouTube', '▶️', 'Ver video en YouTube', 'youtube');
     });
     
-    // 🔥 4. Instagram
     html = html.replace(instagramPattern, (match) => {
         const url = match.trim();
         return createLinkHtml(url, 'Instagram', '📸', 'Ver en Instagram', 'instagram');
     });
     
-    // 🔥 5. Twitter/X
     html = html.replace(twitterPattern, (match) => {
         const url = match.trim();
         return createLinkHtml(url, 'Twitter/X', '🐦', 'Ver en Twitter/X', 'twitter');
     });
     
-    // 🔥 6. Otros enlaces (genérico) - Solo mostrar como enlace simple
     html = html.replace(urlPattern, (match) => {
         if (match.includes('link-preview')) return match;
         
@@ -132,13 +125,11 @@ function openLinkFromChat(event) {
     
     console.log(`🔗 Abriendo enlace: ${url} (tipo: ${type})`);
     
-    // 🔥 ENLACES DE VYIN
     if (type === 'vyin' || url.includes('vyin-social.onrender.com')) {
         try {
             const urlObj = new URL(url);
             const pathname = urlObj.pathname;
             
-            // Detectar historia
             let storyId = null;
             const storyMatch = pathname.match(/\/story\/([a-zA-Z0-9_-]+)/);
             if (storyMatch) {
@@ -159,7 +150,6 @@ function openLinkFromChat(event) {
                 return;
             }
             
-            // Detectar perfil
             const profileMatch = pathname.match(/\/profile\/([a-zA-Z0-9_-]+)/);
             if (profileMatch) {
                 const userId = profileMatch[1];
@@ -168,7 +158,6 @@ function openLinkFromChat(event) {
                 return;
             }
             
-            // Si no se detectó nada, abrir en nueva pestaña
             window.open(url, '_blank');
             
         } catch (e) {
@@ -178,12 +167,11 @@ function openLinkFromChat(event) {
         return;
     }
     
-    // 🔥 ENLACES EXTERNOS - Siempre abrir en nueva pestaña
     window.open(url, '_blank');
 }
 
 // ============================================================
-// 🔥 ABRIR PERFIL DEL USUARIO DE LA CONVERSACIÓN ACTUAL
+// 🔥 ABRIR PERFIL DEL USUARIO DE LA CONVERSACIÓN ACTUAL - CORREGIDO
 // ============================================================
 
 window.openProfileFromChat = function() {
@@ -196,10 +184,57 @@ window.openProfileFromChat = function() {
     const fullName = currentConversation.fullName || 'Usuario';
     console.log(`👤 Abriendo perfil de ${fullName} (${userId}) desde chat`);
     
-    if (messagesPanelEl) {
-        messagesPanelEl.classList.remove('active');
-    }
+    // 🔥 GUARDAR EL ESTADO ACTUAL DEL CHAT
+    const currentConversationBackup = { ...currentConversation };
+    const messagesBackup = [...messages];
+    const scrollPosition = messagesContainerEl?.scrollTop || 0;
+    
+    // 🔥 Guardar en variable global para restaurar después
+    window._chatContext = {
+        conversation: currentConversationBackup,
+        messages: messagesBackup,
+        scrollPosition: scrollPosition,
+        isChatOpen: true
+    };
+    
+    // Abrir el perfil (NO cerramos el chat)
     openProfileModal(userId);
+};
+
+// ============================================================
+// 🔥 RESTAURAR CHAT DESDE PERFIL
+// ============================================================
+
+window.restoreChatFromProfile = function() {
+    if (window._chatContext && window._chatContext.isChatOpen) {
+        console.log('🔄 Restaurando chat desde perfil');
+        
+        // Restaurar la conversación
+        currentConversation = window._chatContext.conversation;
+        messages = window._chatContext.messages;
+        
+        // Asegurar que el panel de mensajes esté visible
+        if (messagesPanelEl) {
+            messagesPanelEl.classList.add('active');
+        }
+        
+        // Renderizar mensajes y restaurar scroll
+        renderMessages();
+        if (window._chatContext.scrollPosition) {
+            setTimeout(() => {
+                messagesContainerEl.scrollTop = window._chatContext.scrollPosition;
+            }, 50);
+        }
+        
+        // Actualizar header del chat
+        updateChatHeaderStatus(currentConversation.id);
+        
+        // Limpiar el contexto
+        window._chatContext = null;
+        
+        // Re-renderizar conversaciones para actualizar el estado activo
+        renderConversations();
+    }
 };
 
 // ============================================================
@@ -223,14 +258,14 @@ function ensureScrollAtBottom() {
 }
 
 // ============================================================
-// 📦 PERSISTENCIA EN LOCALSTORAGE - Para evitar re-renderizados
+// 📦 PERSISTENCIA EN LOCALSTORAGE
 // ============================================================
 
 function saveChatState(userId) {
     if (!userId) return;
     try {
         const state = {
-            messages: messages.slice(-50), // Solo guardar últimos 50 mensajes
+            messages: messages.slice(-50),
             scrollPosition: messagesContainerEl?.scrollTop || 0,
             timestamp: Date.now(),
             conversationStatus: currentConversation?.status || 'active'
@@ -457,7 +492,7 @@ async function loadConversations() {
 }
 
 // ============================================================
-// RENDERIZAR CONVERSACIONES - OPTIMIZADO
+// RENDERIZAR CONVERSACIONES
 // ============================================================
 function renderConversations() {
     if (!conversationsListEl) return;
@@ -513,7 +548,6 @@ function renderConversations() {
             `;
         }
         
-        // 🔥 INICIALES DEL NOMBRE PARA EL AVATAR (cuando no hay foto)
         const initials = conv.user.fullName 
             ? conv.user.fullName.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)
             : 'U';
@@ -599,7 +633,7 @@ window.rejectChatRequest = async function(userId) {
 };
 
 // ============================================================
-// CARGAR MENSAJES - CON CACHÉ LOCAL
+// CARGAR MENSAJES
 // ============================================================
 async function loadMessages(userId, loadMore = false, offset = 0) {
     const token = getToken();
@@ -699,7 +733,7 @@ async function refreshMessagesInBackground(userId) {
 }
 
 // ============================================================
-// 📝 RENDERIZAR MENSAJES - CON DETECCIÓN DE ENLACES
+// 📝 RENDERIZAR MENSAJES
 // ============================================================
 function renderMessages() {
     if (isRendering) return;
@@ -785,7 +819,7 @@ function renderMessages() {
 }
 
 // ============================================================
-// ➕ AÑADIR UN SOLO MENSAJE SIN RE-RENDERIZAR TODO
+// ➕ AÑADIR UN SOLO MENSAJE
 // ============================================================
 function appendSingleMessage(msg) {
     if (!messagesContainerEl || isRendering) return;
@@ -928,7 +962,7 @@ function handleScroll() {
 }
 
 // ============================================================
-// 🔥 SELECCIONAR CONVERSACIÓN - SIN SALTO FEO
+// 🔥 SELECCIONAR CONVERSACIÓN
 // ============================================================
 window.selectConversation = async function(userIdOrObject) {
     let userId, userData;
@@ -944,7 +978,6 @@ window.selectConversation = async function(userIdOrObject) {
         userId = userData.id;
     }
 
-    // Guardar estado del chat actual antes de cambiar
     if (currentConversation && messages.length > 0) {
         saveChatState(currentConversation.id);
     }
@@ -967,7 +1000,7 @@ window.selectConversation = async function(userIdOrObject) {
 };
 
 // ============================================================
-// 🔥 MOSTRAR PANEL DE MENSAJES - CON BOTÓN DE PERFIL
+// 🔥 MOSTRAR PANEL DE MENSAJES
 // ============================================================
 function showMessagesPanel() {
     if (!messagesPanelEl) return;
@@ -977,10 +1010,16 @@ function showMessagesPanel() {
     const name = document.getElementById('chatName');
     const backBtn = document.getElementById('backChatBtn');
 
-    // 🔥 INICIALES PARA EL AVATAR DEL HEADER
     const initials = currentConversation?.fullName 
         ? currentConversation.fullName.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)
         : 'U';
+
+    // Limpiar avatar anterior
+    const avatarContainer = avatar?.parentElement;
+    if (avatarContainer) {
+        const oldInitials = avatarContainer.querySelector('.avatar-initials');
+        if (oldInitials) oldInitials.remove();
+    }
 
     if (avatar) {
         if (currentConversation?.avatar) {
@@ -988,11 +1027,11 @@ function showMessagesPanel() {
             avatar.style.display = 'block';
             avatar.onerror = function() {
                 this.style.display = 'none';
-                this.parentElement.querySelector('.avatar-initials').style.display = 'flex';
+                const initialsEl = this.parentElement.querySelector('.avatar-initials');
+                if (initialsEl) initialsEl.style.display = 'flex';
             };
         } else {
             avatar.style.display = 'none';
-            // Crear iniciales si no existen
             let initialsEl = avatar.parentElement.querySelector('.avatar-initials');
             if (!initialsEl) {
                 initialsEl = document.createElement('div');
@@ -1029,6 +1068,7 @@ function showMessagesPanel() {
             }
             // 🔥 LIMPIAR CONVERSACIÓN ACTUAL
             currentConversation = null;
+            window._chatContext = null;
             messagesPanelEl.classList.remove('active');
             messagesContainerEl.innerHTML = `
                 <div class="empty-state-chat">
@@ -1336,5 +1376,6 @@ window.acceptChatRequest = window.acceptChatRequest;
 window.rejectChatRequest = window.rejectChatRequest;
 window.openLinkFromChat = openLinkFromChat;
 window.openProfileFromChat = openProfileFromChat;
+window.restoreChatFromProfile = restoreChatFromProfile;
 
 document.addEventListener('DOMContentLoaded', init);

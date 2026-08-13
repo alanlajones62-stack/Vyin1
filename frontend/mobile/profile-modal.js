@@ -4,6 +4,7 @@
 // 🔥 CORREGIDO: Renderizado de historias (petición separada)
 // 🔥 MODIFICADO: Restaura correctamente el estado de explore-modal
 // 🔥 AÑADIDO: Botón para enviar mensaje
+// 🔥 MODIFICADO: Soporte para restaurar chat al cerrar perfil
 
 import {
     getToken, getCurrentUser, showToast,
@@ -956,7 +957,7 @@ function bringProfileToFront() {
 }
 
 // ============================================================
-// 🔥 CERRAR MODAL DE PERFIL - CORREGIDO CON RESTAURACIÓN DE EXPLORE
+// 🔥 CERRAR MODAL DE PERFIL - CORREGIDO CON RESTAURACIÓN DE CHAT
 // ============================================================
 
 function closeProfileModalInternal(restoreFromStack = true) {
@@ -985,6 +986,24 @@ function closeProfileModal() {
     console.log(`📊 Pila actual: ${navigationStack.length} elementos`);
     console.log(`📊 _fromExploreModal: ${window._fromExploreModal}`);
     console.log(`📊 _followersContextData:`, window._followersContextData);
+    
+    // 🔥 VERIFICAR SI VENIMOS DEL CHAT (NUEVO)
+    if (window._chatContext && window._chatContext.isChatOpen) {
+        console.log('📱 Cerrando perfil desde chat, restaurando conversación...');
+        // No cerrar el chat, solo el perfil
+        const overlay = document.getElementById('profileModalOverlay');
+        if (overlay) {
+            overlay.classList.remove('active');
+            overlay.style.display = 'none';
+        }
+        document.body.style.overflow = '';
+        
+        // Restaurar el chat usando la función de chats.js
+        if (typeof window.restoreChatFromProfile === 'function') {
+            window.restoreChatFromProfile();
+        }
+        return;
+    }
     
     if (isEditMode) {
         if (typeof window.closeEditProfileModal === 'function') {
