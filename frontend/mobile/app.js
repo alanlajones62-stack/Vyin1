@@ -34,7 +34,8 @@ import {
     showLoginScreen, 
     checkSessionAndLoad, 
     updateHeaderUI, 
-    initLoginModule 
+    initLoginModule,
+    openLoginModal
 } from './login-module.js';
 
 const API_URL = window.location.origin;
@@ -1001,28 +1002,35 @@ function applyFilter(filter) {
     const token = getToken();
     
     if (!token) {
-        console.log('🔒 Sin sesión - Redirigiendo a login');
+        console.log('🔒 Sin sesión - Abriendo modal de login');
         showToast('Inicia sesión para ver historias', true);
-        setTimeout(() => {
-            window.location.href = '/login.html';
-        }, 500);
+        // 🔥 ABRIR MODAL DE LOGIN EN VEZ DE REDIRIGIR
+        openLoginModal();
         return;
     }
 
     console.log(`📂 Aplicando filtro: ${filter}`);
     
-    currentFilter = filter;
-    displayedStories = [];
-    feedCursor = null;
-    hasMoreStories = true;
-    totalRemaining = 0;
-    
     // 🔥 GUARDAR EL FILTRO EN LOCALSTORAGE
     saveFilterState(filter);
     
-    // 🔥 ACTUALIZAR LA UI DE LOS FILTROS (CORREGIDO)
+    // 🔥 ACTUALIZAR currentFilter
+    currentFilter = filter;
+    
+    // 🔥 ACTUALIZAR LA UI DE LOS FILTROS (CORREGIDO - SIEMPRE ACTUALIZA)
     document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
-    const activeBtn = document.querySelector(`.filter-btn[data-filter="${filter}"]`);
+    
+    let activeBtn = null;
+    
+    // Mapeo de filtros a IDs
+    if (filter === 'ranked') {
+        activeBtn = document.getElementById('filterRanked');
+    } else if (filter === 'recent') {
+        activeBtn = document.getElementById('filterRecent');
+    } else if (filter === 'ads') {
+        activeBtn = document.getElementById('filterTrending');
+    }
+    
     if (activeBtn) {
         activeBtn.classList.add('active');
         console.log(`✅ Filtro activado en UI: ${filter}`);
@@ -1033,6 +1041,12 @@ function applyFilter(filter) {
     if (filter !== 'recent') {
         hideNewStoriesBadge();
     }
+
+    // 🔥 LIMPIAR ESTADOS ANTERIORES
+    displayedStories = [];
+    feedCursor = null;
+    hasMoreStories = true;
+    totalRemaining = 0;
 
     if (filter === 'ads') {
         // 🔥 Si es publicidad, mostrar anuncios
@@ -1392,10 +1406,8 @@ async function registerView(storyId) {
 
     const token = getToken();
     if (!token) {
-        console.log('🔒 Sin sesión - Redirigiendo a login');
-        setTimeout(() => {
-            window.location.href = '/login.html';
-        }, 500);
+        console.log('🔒 Sin sesión - Abriendo modal de login');
+        openLoginModal();
         return;
     }
 
@@ -1449,6 +1461,7 @@ window.translateStory = async function(storyId) {
     const token = getToken();
     if (!token) {
         showToast('Inicia sesión para traducir', true);
+        openLoginModal();
         return;
     }
 
@@ -1641,6 +1654,7 @@ async function handleLike(storyId, btn) {
     const token = getToken();
     if (!token) {
         showToast('Inicia sesión para dar like', true);
+        openLoginModal();
         return;
     }
 
@@ -1697,9 +1711,7 @@ async function refreshFeed() {
     const token = getToken();
     if (!token) {
         showToast('Inicia sesión para actualizar', true);
-        setTimeout(() => {
-            window.location.href = '/login.html';
-        }, 500);
+        openLoginModal();
         return;
     }
     
@@ -1770,6 +1782,7 @@ window.handleAdLike = async function(adId, btn) {
     const token = getToken();
     if (!token) {
         showToast('Inicia sesión para dar like', true);
+        openLoginModal();
         return;
     }
 
@@ -1839,9 +1852,7 @@ function setupEvents() {
         const token = getToken();
         if (!token) {
             showToast('Inicia sesión para configurar', true);
-            setTimeout(() => {
-                window.location.href = '/login.html';
-            }, 500);
+            openLoginModal();
             return;
         }
         const user = getCurrentUser();
@@ -1853,6 +1864,7 @@ function setupEvents() {
             }
         } else {
             showToast('Inicia sesión para configurar', true);
+            openLoginModal();
         }
     });
 
@@ -1870,9 +1882,7 @@ function setupEvents() {
             showProfileNative(user.id);
         } else {
             showToast('Inicia sesión', true);
-            setTimeout(() => {
-                window.location.href = '/login.html';
-            }, 500);
+            openLoginModal();
         }
     });
 
@@ -1893,9 +1903,7 @@ function setupEvents() {
             showProfileNative(user.id);
         } else {
             showToast('Inicia sesión', true);
-            setTimeout(() => {
-                window.location.href = '/login.html';
-            }, 500);
+            openLoginModal();
         }
     });
 
@@ -1907,9 +1915,7 @@ function setupEvents() {
         const token = getToken();
         if (!token) {
             showToast('Inicia sesión para crear contenido', true);
-            setTimeout(() => {
-                window.location.href = '/login.html';
-            }, 500);
+            openLoginModal();
             return;
         }
         
@@ -1923,14 +1929,12 @@ function setupEvents() {
         }
     });
 
-    // 🔥 FILTROS - CORREGIDO PARA MANTENER SELECCIÓN VISUAL
+    // 🔥 FILTROS - CORREGIDO
     document.getElementById('filterRanked')?.addEventListener('click', () => {
         const token = getToken();
         if (!token) {
             showToast('Inicia sesión para ver historias', true);
-            setTimeout(() => {
-                window.location.href = '/login.html';
-            }, 500);
+            openLoginModal();
             return;
         }
         
@@ -1942,9 +1946,7 @@ function setupEvents() {
         const token = getToken();
         if (!token) {
             showToast('Inicia sesión para ver historias', true);
-            setTimeout(() => {
-                window.location.href = '/login.html';
-            }, 500);
+            openLoginModal();
             return;
         }
         
@@ -1958,9 +1960,7 @@ function setupEvents() {
         const token = getToken();
         if (!token) {
             showToast('Inicia sesión para ver publicidades', true);
-            setTimeout(() => {
-                window.location.href = '/login.html';
-            }, 500);
+            openLoginModal();
             return;
         }
         
@@ -1973,9 +1973,7 @@ function setupEvents() {
         const token = getToken();
         if (!token) {
             showToast('Inicia sesión para ver el feed', true);
-            setTimeout(() => {
-                window.location.href = '/login.html';
-            }, 500);
+            openLoginModal();
             return;
         }
         
@@ -2008,9 +2006,7 @@ function setupEvents() {
         const token = getToken();
         if (!token) {
             showToast('Inicia sesión para explorar', true);
-            setTimeout(() => {
-                window.location.href = '/login.html';
-            }, 500);
+            openLoginModal();
             return;
         }
         
@@ -2038,9 +2034,7 @@ function setupEvents() {
         const token = getToken();
         if (!token) {
             showToast('Inicia sesión para ver notificaciones', true);
-            setTimeout(() => {
-                window.location.href = '/login.html';
-            }, 500);
+            openLoginModal();
             return;
         }
         
