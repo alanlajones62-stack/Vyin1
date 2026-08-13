@@ -1,6 +1,7 @@
-// backend/server.js - COMPLETO CON TODOS LOS MÓDULOS (VERIFICACIÓN, VYIN PAY, ASIGNACIÓN, MODERACIÓN, VYIN IA, BLOQUEOS, PUBLICIDAD, INTERESES, TRADUCCIÓN)
+// backend/server.js - COMPLETO CON TODOS LOS MÓDULOS (VERIFICACIÓN, VYIN PAY, ASIGNACIÓN, MODERACIÓN, VYIN IA, BLOQUEOS, PUBLICIDAD, INTERESES, TRADUCCIÓN, CLASIFICACIÓN)
 // 🔥 CORREGIDO: Rutas de login, register y chat
 // 🔥 CORREGIDO: Ruta /api/categories con idioma del usuario
+// 🔥 NUEVO: Rutas /api/vyin/classify y /api/vyin/classify-story
 
 const express = require('express');
 const cors = require('cors');
@@ -1186,6 +1187,107 @@ try {
 }
 
 // ============================================================
+// 🔥🔥🔥 RUTAS DE CLASIFICACIÓN PARA EL EXPLORADOR
+// ============================================================
+
+// ============================================================
+// 🔥 RUTA: CLASIFICAR TEXTO PARA BÚSQUEDA
+// ============================================================
+app.post('/api/vyin/classify', auth, async (req, res) => {
+    try {
+        const { text, targetLanguage = 'es' } = req.body;
+        
+        if (!text) {
+            return res.status(400).json({ error: 'Texto requerido' });
+        }
+        
+        const { getContentClassifier } = require('./classifiers');
+        const classifier = getContentClassifier();
+        
+        const results = await classifier.classify(text, targetLanguage);
+        
+        res.json({
+            success: true,
+            categories: results,
+            text: text,
+            language: targetLanguage
+        });
+    } catch (error) {
+        console.error('❌ Error clasificando texto:', error);
+        res.status(500).json({ error: 'Error interno del servidor' });
+    }
+});
+
+// ============================================================
+// 🔥 RUTA: CLASIFICAR UNA HISTORIA POR ID
+// ============================================================
+app.post('/api/vyin/classify-story', auth, async (req, res) => {
+    try {
+        const { storyId, targetLanguage = 'es' } = req.body;
+        
+        if (!storyId) {
+            return res.status(400).json({ error: 'storyId requerido' });
+        }
+        
+        const stories = read('stories.json');
+        const story = stories.find(s => s.id === storyId);
+        
+        if (!story) {
+            return res.status(404).json({ error: 'Historia no encontrada' });
+        }
+        
+        const { getContentClassifier } = require('./classifiers');
+        const classifier = getContentClassifier();
+        
+        const result = await classifier.classifyStory(story, targetLanguage);
+        
+        res.json({
+            success: true,
+            ...result,
+            language: targetLanguage
+        });
+    } catch (error) {
+        console.error('❌ Error clasificando historia:', error);
+        res.status(500).json({ error: 'Error interno del servidor' });
+    }
+});
+
+// ============================================================
+// 🔥 RUTA: CLASIFICAR MÚLTIPLES HISTORIAS (BATCH)
+// ============================================================
+app.post('/api/vyin/classify-stories', auth, async (req, res) => {
+    try {
+        const { storyIds, targetLanguage = 'es' } = req.body;
+        
+        if (!storyIds || !Array.isArray(storyIds) || storyIds.length === 0) {
+            return res.status(400).json({ error: 'Array de storyIds requerido' });
+        }
+        
+        const stories = read('stories.json');
+        const { getContentClassifier } = require('./classifiers');
+        const classifier = getContentClassifier();
+        
+        const results = [];
+        for (const storyId of storyIds) {
+            const story = stories.find(s => s.id === storyId);
+            if (story) {
+                const result = await classifier.classifyStory(story, targetLanguage);
+                results.push(result);
+            }
+        }
+        
+        res.json({
+            success: true,
+            results: results,
+            language: targetLanguage
+        });
+    } catch (error) {
+        console.error('❌ Error clasificando historias batch:', error);
+        res.status(500).json({ error: 'Error interno del servidor' });
+    }
+});
+
+// ============================================================
 // 🔥 RUTA PARA ANALIZAR IMAGEN CON IA
 // ============================================================
 
@@ -1357,7 +1459,18 @@ app.get('/health', (req, res) => {
             }
         },
         // 🔥 ESTADO DE TRADUCCIÓN
-        translation: getTranslationStatus()
+        translation: getTranslationStatus(),
+        // 🔥 CLASIFICACIÓN
+        classification: {
+            enabled: true,
+            endpoints: {
+                classify: '/api/vyin/classify',
+                classifyStory: '/api/vyin/classify-story',
+                classifyStories: '/api/vyin/classify-stories'
+            },
+            categories: 15,
+            translationSupported: isTranslationAvailable()
+        }
     };
     
     try {
@@ -1919,6 +2032,12 @@ server.listen(PORT, HOST, () => {
        ✅ Porcentaje dinámico: 5%-20% del feed
        🌐 Traducción: ${isTranslationAvailable() ? '✅ ACTIVADA' : '⏳ INACTIVA (fallback a español)'}
     
+    🔍 SISTEMA DE CLASIFICACIÓN: ACTIVADO
+       ✅ Clasificación de texto para búsquedas
+       ✅ Clasificación de historias por categorías
+       ✅ 15 categorías disponibles
+       ✅ Compatible con traducción automática
+    
     🔥 ========================================
     
     🔄 TAREAS EN SEGUNDO PLANO:
@@ -1933,6 +2052,11 @@ server.listen(PORT, HOST, () => {
        ✅ /register.html - Página de registro
        ✅ /chat.html - Chat principal (renombrado de chats.html)
        ✅ /chats.html - Redirige a /chat.html
+    
+    📌 NUEVAS RUTAS:
+       ✅ POST /api/vyin/classify - Clasificar texto
+       ✅ POST /api/vyin/classify-story - Clasificar historia por ID
+       ✅ POST /api/vyin/classify-stories - Clasificar múltiples historias
     `);
 });
 
