@@ -25,12 +25,12 @@ const ADS_DATE_KEY = 'vyin_ads_date';
 const ADS_TOTAL_KEY = 'vyin_ads_total_today';
 
 // ============================================================
-// INICIALIZAR SOCKET
+// INICIALIZAR SOCKET (SIN export)
 // ============================================================
 
-export function initAdsSocket(socketInstance) {
+function initAdsSocket(socketInstance) {
     socket = socketInstance;
-    
+
     if (!socket) return;
 
     socket.on('ad_liked', (data) => {
@@ -69,14 +69,14 @@ function getTodayDate() {
 function loadAdHistory() {
     const today = getTodayDate();
     const savedDate = localStorage.getItem(ADS_DATE_KEY);
-    
+
     if (savedDate !== today) {
         localStorage.setItem(ADS_DATE_KEY, today);
         localStorage.setItem(ADS_HISTORY_KEY, JSON.stringify({}));
         localStorage.setItem(ADS_TOTAL_KEY, '0');
         return {};
     }
-    
+
     try {
         const history = JSON.parse(localStorage.getItem(ADS_HISTORY_KEY) || '{}');
         const total = parseInt(localStorage.getItem(ADS_TOTAL_KEY) || '0');
@@ -98,26 +98,26 @@ function saveAdHistory(history) {
 function canShowAd(adId, history) {
     const today = getTodayDate();
     const savedDate = localStorage.getItem(ADS_DATE_KEY);
-    
+
     if (savedDate !== today) {
         localStorage.setItem(ADS_DATE_KEY, today);
         localStorage.setItem(ADS_HISTORY_KEY, JSON.stringify({}));
         localStorage.setItem(ADS_TOTAL_KEY, '0');
         return true;
     }
-    
+
     const adHistory = history[adId];
-    
+
     if (!adHistory) {
         return true;
     }
-    
+
     // Límite: Máximo 3 veces por día por publicidad
     if (adHistory.views >= 3) {
         console.log(`⛔ Publicidad ${adId} ya vista 3 veces hoy`);
         return false;
     }
-    
+
     // Cooldown: 5 minutos entre misma publicidad
     if (adHistory.cooldownUntil) {
         const cooldownTime = new Date(adHistory.cooldownUntil);
@@ -126,20 +126,20 @@ function canShowAd(adId, history) {
             return false;
         }
     }
-    
+
     // Límite total: Máximo 40 publicidades por día
     const totalViews = Object.values(history).reduce((sum, h) => sum + (h.views || 0), 0);
     if (totalViews >= 40) {
         console.log(`⛔ Límite de 40 publicidades por día alcanzado`);
         return false;
     }
-    
+
     return true;
 }
 
 function registerAdViewToday(adId, history) {
     const today = getTodayDate();
-    
+
     if (!history[adId]) {
         history[adId] = {
             views: 0,
@@ -147,19 +147,19 @@ function registerAdViewToday(adId, history) {
             cooldownUntil: null
         };
     }
-    
+
     history[adId].views = (history[adId].views || 0) + 1;
     history[adId].lastView = new Date().toISOString();
-    
+
     const cooldownMinutes = 5;
     const cooldownTime = new Date(Date.now() + cooldownMinutes * 60 * 1000);
     history[adId].cooldownUntil = cooldownTime.toISOString();
-    
+
     saveAdHistory(history);
-    
+
     const totalViews = Object.values(history).reduce((sum, h) => sum + (h.views || 0), 0);
     console.log(`👁️ Publicidad ${adId} registrada (${history[adId].views}/3, total: ${totalViews}/40)`);
-    
+
     return history;
 }
 
@@ -167,7 +167,7 @@ function registerAdViewToday(adId, history) {
 // CARGAR PUBLICIDADES ACTIVAS
 // ============================================================
 
-export async function loadActiveAds() {
+async function loadActiveAds() {
     const token = getToken();
     if (!token) {
         console.log('🔒 Sin sesión, no se pueden cargar publicidades');
@@ -190,12 +190,12 @@ export async function loadActiveAds() {
 
         const data = await res.json();
         cachedAds = data.ads || [];
-        
+
         cachedAds = shuffleArray(cachedAds);
-        
+
         const history = loadAdHistory();
         const availableAds = cachedAds.filter(ad => canShowAd(ad.id, history));
-        
+
         console.log(`📢 ${cachedAds.length} publicidades cargadas, ${availableAds.length} disponibles`);
         return availableAds;
     } catch (error) {
@@ -225,23 +225,23 @@ function shuffleArray(array) {
 
 function getNextAd() {
     const history = loadAdHistory();
-    
+
     const availableAds = cachedAds.filter(ad => canShowAd(ad.id, history));
-    
+
     if (availableAds.length === 0) {
         console.log('📭 No hay publicidades disponibles');
         return null;
     }
-    
+
     availableAds.sort((a, b) => {
         const aViews = history[a.id]?.views || 0;
         const bViews = history[b.id]?.views || 0;
         return aViews - bViews;
     });
-    
+
     const ad = availableAds[0];
     registerAdViewToday(ad.id, history);
-    
+
     return ad;
 }
 
@@ -249,12 +249,12 @@ function getNextAd() {
 // REGISTRAR VISTA DE PUBLICIDAD
 // ============================================================
 
-export async function registerAdView(adId) {
+async function registerAdView(adId) {
     const token = getToken();
     if (!token) return false;
 
     const history = loadAdHistory();
-    
+
     if (!canShowAd(adId, history)) {
         console.log(`⛔ No se puede mostrar publicidad ${adId}`);
         return false;
@@ -293,10 +293,10 @@ function startAdTimer(adId) {
         clearTimeout(adTimers[adId].timeout);
         delete adTimers[adId];
     }
-    
+
     const card = document.querySelector(`.ad-card[data-ad-id="${adId}"]`);
     if (!card) return;
-    
+
     let timerIndicator = card.querySelector('.ad-timer');
     if (!timerIndicator) {
         timerIndicator = document.createElement('div');
@@ -316,44 +316,44 @@ function startAdTimer(adId) {
             actionsBox.parentNode.insertBefore(timerIndicator, actionsBox);
         }
     }
-    
+
     const progressCircle = timerIndicator.querySelector('.ad-timer-progress');
     const textSpan = timerIndicator.querySelector('.ad-timer-text');
     let seconds = 15;
     const circumference = 106.8;
-    
+
     timerIndicator.style.display = 'block';
     timerIndicator.classList.add('active');
-    
+
     const interval = setInterval(() => {
         seconds--;
         const progress = ((15 - seconds) / 15) * 100;
         const offset = circumference - (progress / 100) * circumference;
-        
+
         if (progressCircle) {
             progressCircle.style.strokeDashoffset = offset;
         }
         if (textSpan) {
             textSpan.textContent = seconds;
         }
-        
+
         if (seconds <= 0) {
             clearInterval(interval);
             timerIndicator.classList.remove('active');
             timerIndicator.style.display = 'none';
-            
+
             if (socket && socket.connected) {
                 socket.emit('ad_watched', { adId });
             }
-            
+
             setTimeout(() => {
                 loadNextAd();
             }, 1000);
-            
+
             delete adTimers[adId];
         }
     }, 1000);
-    
+
     adTimers[adId] = {
         interval: interval,
         timeout: setTimeout(() => {
@@ -369,9 +369,9 @@ function startAdTimer(adId) {
 function loadNextAd() {
     if (isAdPlaying) return;
     isAdPlaying = true;
-    
+
     const nextAd = getNextAd();
-    
+
     if (!nextAd) {
         const container = document.getElementById('feedContainer');
         if (container) {
@@ -392,9 +392,9 @@ function loadNextAd() {
         isAdPlaying = false;
         return;
     }
-    
+
     renderSingleAd(nextAd);
-    
+
     setTimeout(() => {
         isAdPlaying = false;
     }, 100);
@@ -407,7 +407,7 @@ function loadNextAd() {
 function renderSingleAd(ad) {
     const container = document.getElementById('feedContainer');
     if (!container) return;
-    
+
     const currentUser = JSON.parse(localStorage.getItem('user') || '{}');
     const userId = currentUser?.id;
     const isLiked = ad.likes?.includes(userId) || false;
@@ -416,14 +416,14 @@ function renderSingleAd(ad) {
     const history = loadAdHistory();
     const adViews = history[ad.id]?.views || 0;
     const totalViews = Object.values(history).reduce((sum, h) => sum + (h.views || 0), 0);
-    
+
     let adContainer = container.querySelector('.ad-container');
     if (!adContainer) {
         adContainer = document.createElement('div');
         adContainer.className = 'ad-container';
         container.prepend(adContainer);
     }
-    
+
     adContainer.innerHTML = `
         <div class="ad-progress-info">
             <span class="ad-progress-text">
@@ -433,7 +433,7 @@ function renderSingleAd(ad) {
                 <div class="ad-progress-fill" style="width: ${((adViews + 1) / 3) * 100}%"></div>
             </div>
         </div>
-        
+
         <div class="story-card ad-card" data-ad-id="${ad.id}" data-index="ad-current">
             <div class="card-header ad-header">
                 <div class="ad-badge">
@@ -446,7 +446,7 @@ function renderSingleAd(ad) {
                     ${ad.isVerified ? '<i class="fas fa-check-circle" style="color:#c084fc;font-size:12px;"></i>' : ''}
                 </div>
             </div>
-            
+
             <div class="card-media ad-media" onclick="window.handleAdClick('${ad.id}')">
                 ${ad.imageUrl ? `<img src="${ad.imageUrl}" loading="lazy" decoding="async" onerror="this.src='https://placehold.co/800x800/1a1a2e/fbbf24?text=Publicidad'" />` : `
                     <div class="text-placeholder" style="background:linear-gradient(135deg,#1a1a2e,#2d1b3d);">
@@ -458,11 +458,11 @@ function renderSingleAd(ad) {
                     <span class="ad-click-text"><i class="fas fa-external-link-alt"></i> Ver más</span>
                 </div>
             </div>
-            
+
             <div class="card-actions-center ad-actions-center">
                 <div class="ad-title">${escapeHtml(ad.title)}</div>
                 <div class="ad-description">${escapeHtml(ad.description)}</div>
-                
+
                 <div class="actions-box">
                     <div class="actions">
                         <div class="ad-stats">
@@ -485,20 +485,20 @@ function renderSingleAd(ad) {
                     ` : ''}
                 </div>
             </div>
-            
+
             <div class="card-footer"></div>
         </div>
     `;
-    
+
     setTimeout(() => {
         registerAdView(ad.id);
     }, 500);
-    
+
     setTimeout(() => {
         const card = adContainer.querySelector('.ad-card');
         if (!card) return;
         const adId = card.dataset.adId;
-        
+
         const likeBtn = card.querySelector('.ad-like-btn');
         if (likeBtn) {
             likeBtn.addEventListener('click', (e) => {
@@ -506,7 +506,7 @@ function renderSingleAd(ad) {
                 window.handleAdLike(adId, likeBtn);
             });
         }
-        
+
         const shareBtn = card.querySelector('.ad-share-btn');
         if (shareBtn) {
             shareBtn.addEventListener('click', (e) => {
@@ -570,7 +570,7 @@ function updateAdStats(adId, data) {
 // REGISTRAR CLICK EN PUBLICIDAD
 // ============================================================
 
-export async function registerAdClick(adId) {
+async function registerAdClick(adId) {
     const token = getToken();
     if (!token) return;
 
@@ -598,16 +598,16 @@ export async function registerAdClick(adId) {
 // RENDER PUBLICIDADES EN EL FEED - PUNTO DE ENTRADA
 // ============================================================
 
-export function renderAds(ads, container) {
+function renderAds(ads, container) {
     if (!ads || ads.length === 0) {
         return '';
     }
 
     window._renderAdsCallback = renderAds;
-    
+
     const history = loadAdHistory();
     const totalViews = Object.values(history).reduce((sum, h) => sum + (h.views || 0), 0);
-    
+
     if (totalViews >= 40) {
         return `
             <div class="ad-limit-message">
@@ -620,11 +620,11 @@ export function renderAds(ads, container) {
             </div>
         `;
     }
-    
+
     cachedAds = ads;
     adQueue = [];
     isAdPlaying = false;
-    
+
     setTimeout(() => {
         const nextAd = getNextAd();
         if (nextAd) {
@@ -651,7 +651,7 @@ export function renderAds(ads, container) {
             }
         }
     }, 300);
-    
+
     return '';
 }
 
@@ -684,10 +684,10 @@ window.handleAdLike = async function(adId, btn) {
 
         if (res.ok) {
             const data = await res.json();
-            
+
             btn.classList.toggle('liked');
             btn.innerHTML = data.liked ? '<i class="fas fa-heart"></i> Quitar' : '<i class="fas fa-heart"></i> Like';
-            
+
             const card = btn.closest('.ad-card');
             if (card) {
                 const likeSpan = card.querySelector('.stat-likes');
@@ -701,7 +701,7 @@ window.handleAdLike = async function(adId, btn) {
                 ad.likes = data.likes;
                 ad.likesCount = data.likesCount;
             }
-            
+
             showToast(data.liked ? '❤️ Like guardado' : '💔 Like eliminado');
         }
     } catch (error) {
@@ -718,7 +718,7 @@ loadAdHistory();
 console.log('📢 Sistema de publicidad inicializado (40 por día, 3 por anuncio, 15 segundos)');
 
 // ============================================================
-// 🔥 EXPORTAR - SOLO UNA VEZ
+// 🔥 EXPORTAR - SOLO UNA VEZ (TODAS LAS FUNCIONES AQUÍ)
 // ============================================================
 
 export { 
