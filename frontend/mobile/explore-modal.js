@@ -1,7 +1,8 @@
 // explore-modal.js - BÚSQUEDA HÍBRIDA CON CLASIFICACIÓN POR CATEGORÍAS
-// Y SUPERPOSICIÓN DE MODALES - VERSIÓN COMPLETA
+// Y SUPERPOSICIÓN DE MODALES - VERSIÓN COMPLETA ACTUALIZADA
 // 🔥 CORREGIDO: Persistencia de resultados de búsqueda
-// 🔥 NUEVO: Clasificación por categorías (Animales, Música, Deportes, etc.)
+// 🔥 NUEVO: Clasificación por categorías usando ContentClassifier
+// 🔥 NUEVO: Soporte para /api/vyin/classify y /api/vyin/classify-story
 
 import { getToken, getCurrentUser, showToast, getAvatar } from './auth.js';
 import { formatNumber } from './utils.js';
@@ -733,10 +734,11 @@ async function performSmartSearch(query) {
     `;
 
     try {
-        // 🔥 1. DETECTAR CATEGORÍA DE LA BÚSQUEDA
+        // 🔥 1. DETECTAR CATEGORÍA DE LA BÚSQUEDA USANDO /api/vyin/classify
         let detectedCategory = null;
         let detectedCategoryName = null;
         let detectedCategoryEmoji = null;
+        let detectedCategoryScore = 0;
         
         try {
             const classifyRes = await fetch(`${API_URL}/api/vyin/classify`, {
@@ -754,11 +756,15 @@ async function performSmartSearch(query) {
             if (classifyRes.ok) {
                 const classifyData = await classifyRes.json();
                 if (classifyData.categories && classifyData.categories.length > 0) {
-                    detectedCategory = classifyData.categories[0].category;
-                    detectedCategoryName = classifyData.categories[0].name;
-                    detectedCategoryEmoji = classifyData.categories[0].emoji;
-                    console.log(`📂 Categoría detectada: ${detectedCategoryName} (${detectedCategory})`);
+                    const topCategory = classifyData.categories[0];
+                    detectedCategory = topCategory.category;
+                    detectedCategoryName = topCategory.name;
+                    detectedCategoryEmoji = topCategory.emoji || '📌';
+                    detectedCategoryScore = topCategory.score || 0;
+                    console.log(`📂 Categoría detectada: ${detectedCategoryName} (${detectedCategory}) con ${Math.round(detectedCategoryScore * 100)}%`);
                 }
+            } else {
+                console.warn('⚠️ Error en /api/vyin/classify:', classifyRes.status);
             }
         } catch (classifyError) {
             console.warn('⚠️ Error clasificando búsqueda:', classifyError.message);
@@ -776,7 +782,7 @@ async function performSmartSearch(query) {
             console.log(`👥 Usuarios encontrados (públicos): ${users.length}`);
         }
 
-        // 🔥 3. BÚSQUEDA HÍBRIDA
+        // 🔥 3. BÚSQUEDA HÍBRIDA - EL BACKEND YA USA ContentClassifier
         const hybridRes = await fetch(`${API_URL}/api/stories/search/hybrid?q=${encodeURIComponent(query)}&limit=50`, {
             headers: { 'Authorization': `Bearer ${token}` }
         });
@@ -789,66 +795,82 @@ async function performSmartSearch(query) {
             let allStories = result.data || [];
             meta = result.meta || {};
             
-            // 🔥 4. FILTRAR POR CATEGORÍA DETECTADA
+            console.log(`📊 Búsqueda híbrida: ${allStories.length} historias encontradas`);
+            
+            // 🔥 4. FILTRAR POR CATEGORÍA DETECTADA (si el backend no lo hizo)
             if (detectedCategory && allStories.length > 0) {
-                console.log(`🔍 Filtrando por categoría: ${detectedCategoryName}`);
+                console.log(`🔍 Aplicando filtro de categoría en frontend: ${detectedCategoryName}`);
                 
-                // Clasificar cada historia para verificar categoría
-                const classifiedStories = [];
-                const batchSize = 5;
+                // Verificar si el backend ya filtró por categoría
+                const alreadyFiltered = meta.detectedCategory === detectedCategory;
                 
-                for (let i = 0; i < allStories.length; i += batchSize) {
-                    const batch = allStories.slice(i, i + batchSize);
-                    const batchPromises = batch.map(async (story) => {
-                        try {
-                            const classifyStoryRes = await fetch(`${API_URL}/api/vyin/classify-story`, {
-                                method: 'POST',
-                                headers: {
-                                    'Authorization': `Bearer ${token}`,
-                                    'Content-Type': 'application/json'
-                                },
-                                body: JSON.stringify({ 
-                                    storyId: story.id,
-                                    targetLanguage: 'es'
-                                })
-                            });
-                            
-                            if (classifyStoryRes.ok) {
-                                const storyClass = await classifyStoryRes.json();
-                                const categories = storyClass.categories || [];
-                                const hasCategory = categories.some(c => c.category === detectedCategory);
+                if (!alreadyFiltered) {
+                    // Clasificar cada historia para verificar categoría
+                    const classifiedStories = [];
+                    const batchSize = 5;
+                    
+                    for (let i = 0; i < allStories.length; i += batchSize) {
+                        const batch = allStories.slice(i, i + batchSize);
+                        const batchPromises = batch.map(async (story) => {
+                            try {
+                                const classifyStoryRes = await fetch(`${API_URL}/api/vyin/classify-story`, {
+                                    method: 'POST',
+                                    headers: {
+                                        'Authorization': `Bearer ${token}`,
+                                        'Content-Type': 'application/json'
+                                    },
+                                    body: JSON.stringify({ 
+                                        storyId: story.id,
+                                        targetLanguage: 'es'
+                                    })
+                                });
                                 
-                                if (hasCategory) {
-                                    // 🔥 BONUS POR COINCIDENCIA DE CATEGORÍA
-                                    story.categoryMatch = true;
-                                    story.categoryName = detectedCategoryName;
-                                    story.categoryEmoji = detectedCategoryEmoji;
-                                    story.relevanceScore = (story.relevanceScore || 0) + 40;
-                                    return story;
+                                if (classifyStoryRes.ok) {
+                                    const storyClass = await classifyStoryRes.json();
+                                    const categories = storyClass.categories || [];
+                                    const hasCategory = categories.some(c => c.category === detectedCategory);
+                                    
+                                    if (hasCategory) {
+                                        // 🔥 BONUS POR COINCIDENCIA DE CATEGORÍA
+                                        story.categoryMatch = true;
+                                        story.categoryName = detectedCategoryName;
+                                        story.categoryEmoji = detectedCategoryEmoji;
+                                        story.relevanceScore = (story.relevanceScore || 0) + 40;
+                                        return story;
+                                    }
                                 }
+                                // Si falla o no coincide, incluir pero con menor prioridad
+                                story.categoryMatch = false;
+                                return story;
+                            } catch (e) {
+                                story.categoryMatch = false;
+                                return story;
                             }
-                            // Si falla o no coincide, incluir pero con menor prioridad
-                            story.categoryMatch = false;
-                            return story;
-                        } catch (e) {
-                            story.categoryMatch = false;
-                            return story;
-                        }
+                        });
+                        
+                        const batchResults = await Promise.all(batchPromises);
+                        classifiedStories.push(...batchResults);
+                    }
+                    
+                    // Ordenar: primero las que coinciden con categoría
+                    classifiedStories.sort((a, b) => {
+                        if (a.categoryMatch && !b.categoryMatch) return -1;
+                        if (!a.categoryMatch && b.categoryMatch) return 1;
+                        return (b.relevanceScore || 0) - (a.relevanceScore || 0);
                     });
                     
-                    const batchResults = await Promise.all(batchPromises);
-                    classifiedStories.push(...batchResults);
+                    allStories = classifiedStories;
+                    
+                    // Actualizar meta
+                    meta.detectedCategory = detectedCategory;
+                    meta.detectedCategoryName = detectedCategoryName;
+                    meta.detectedCategoryEmoji = detectedCategoryEmoji;
+                    meta.categoryFilterApplied = true;
+                    
+                    console.log(`📸 Historias en categoría "${detectedCategoryName}": ${allStories.filter(s => s.categoryMatch).length}`);
+                } else {
+                    console.log(`✅ El backend ya aplicó filtro de categoría: ${detectedCategoryName}`);
                 }
-                
-                // Ordenar: primero las que coinciden con categoría
-                classifiedStories.sort((a, b) => {
-                    if (a.categoryMatch && !b.categoryMatch) return -1;
-                    if (!a.categoryMatch && b.categoryMatch) return 1;
-                    return (b.relevanceScore || 0) - (a.relevanceScore || 0);
-                });
-                
-                allStories = classifiedStories;
-                console.log(`📸 Historias en categoría "${detectedCategoryName}": ${allStories.filter(s => s.categoryMatch).length}`);
             }
             
             // Filtrar por relevancia mínima
@@ -856,6 +878,32 @@ async function performSmartSearch(query) {
                 const relevance = s.relevanceScore || 0;
                 return relevance > 15;
             });
+            
+            // 🔥 SI EL USUARIO TIENE INTERESES, APLICAR FILTRO ADICIONAL
+            const currentUser = getCurrentUser();
+            const userInterests = currentUser?.interests || [];
+            
+            if (userInterests.length > 0 && stories.length > 0) {
+                // Dar prioridad a historias que coinciden con intereses del usuario
+                stories = stories.map(story => {
+                    const storyCategories = story.storyCategories || [];
+                    const matches = userInterests.filter(interest => 
+                        storyCategories.includes(interest)
+                    );
+                    if (matches.length > 0) {
+                        story.interestMatch = true;
+                        story.interestMatchCount = matches.length;
+                        story.relevanceScore = (story.relevanceScore || 0) + (matches.length * 10);
+                    }
+                    return story;
+                });
+                
+                stories.sort((a, b) => {
+                    if (a.interestMatch && !b.interestMatch) return -1;
+                    if (!a.interestMatch && b.interestMatch) return 1;
+                    return (b.relevanceScore || 0) - (a.relevanceScore || 0);
+                });
+            }
             
             stories = filterPublicStories(stories);
             console.log(`📸 Historias relevantes (públicas): ${stories.length}`);
@@ -866,13 +914,13 @@ async function performSmartSearch(query) {
                 <div class="explore-empty">
                     <i class="fas fa-search"></i>
                     <h3>No se encontraron resultados para "${query}"</h3>
-                    ${detectedCategory ? `<p>No hay contenido en la categoría "${detectedCategoryName}"</p>` : '<p>Prueba con otras palabras clave</p>'}
+                    ${detectedCategoryName ? `<p>No hay contenido en la categoría "${detectedCategoryName}"</p>` : '<p>Prueba con otras palabras clave</p>'}
                     <div style="margin-top:16px;display:flex;gap:8px;flex-wrap:wrap;justify-content:center;">
                         ${getRelatedSuggestions(query).map(s => `
                             <span class="trending-hashtag" onclick="window.performSmartSearch('${s}')">#${s}</span>
                         `).join('')}
                     </div>
-                    ${detectedCategory ? `
+                    ${detectedCategoryName ? `
                         <div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap;justify-content:center;">
                             <span class="trending-hashtag" style="border-color:#c084fc;color:#c084fc;">
                                 ${detectedCategoryEmoji || '📂'} ${detectedCategoryName}
@@ -892,6 +940,7 @@ async function performSmartSearch(query) {
         currentMeta.detectedCategory = detectedCategory;
         currentMeta.detectedCategoryName = detectedCategoryName;
         currentMeta.detectedCategoryEmoji = detectedCategoryEmoji;
+        currentMeta.detectedCategoryScore = Math.round(detectedCategoryScore * 100);
         
         const combinedResults = [...stories, ...users.map(u => ({ ...u, type: 'user' }))];
         currentSearchResults = combinedResults;
@@ -1206,15 +1255,24 @@ function renderSearchResults(query, stories, users, meta, detectedCategoryName =
         return;
     }
 
+    // 🔥 OBTENER INFO DEL META (para mostrar estadísticas de clasificación)
+    const classificationInfo = meta?.detectedCategory ? 
+        `🔍 Clasificado como: ${meta.detectedCategoryName || detectedCategoryName || 'N/A'}` : '';
+    const classificationScore = meta?.detectedCategoryScore ? 
+        ` (${meta.detectedCategoryScore}%)` : '';
+    const categoryApplied = meta?.categoryFilterApplied ? 
+        ' ✅ Filtrado por categoría' : '';
+
     let html = `
         <div class="explore-section">
             <div class="section-title">
                 🔍 Resultados para "${query}"
                 ${detectedCategoryName ? `<span style="font-size:11px;color:#c084fc;margin-left:8px;background:rgba(192,132,252,0.1);padding:2px 10px;border-radius:12px;">
-                    ${detectedCategoryEmoji || '📂'} ${detectedCategoryName}
+                    ${detectedCategoryEmoji || '📂'} ${detectedCategoryName}${classificationScore}
                 </span>` : ''}
                 <span style="font-size:10px;color:rgba(255,255,255,0.1);margin-left:8px;">
                     ${validStories.length} historias · ${validUsers.length} usuarios
+                    ${classificationInfo ? `<span style="margin-left:8px;font-size:9px;color:rgba(255,255,255,0.08);">${classificationInfo}${categoryApplied}</span>` : ''}
                 </span>
             </div>
     `;
@@ -1258,6 +1316,7 @@ function renderSearchResults(query, stories, users, meta, detectedCategoryName =
                 <div style="font-size:12px;color:rgba(255,255,255,0.3);margin-bottom:8px;font-weight:600;letter-spacing:0.5px;border-bottom:1px solid rgba(255,255,255,0.04);padding-bottom:6px;">
                     📸 Historias relacionadas (${validStories.length})
                     ${meta?.algorithm ? `<span style="font-size:9px;color:rgba(255,255,255,0.08);margin-left:8px;font-weight:400;">${meta.algorithm}</span>` : ''}
+                    ${meta?.classifierVersion ? `<span style="font-size:9px;color:rgba(255,255,255,0.06);margin-left:8px;">${meta.classifierVersion}</span>` : ''}
                     ${detectedCategoryName ? `<span style="font-size:9px;color:#c084fc;margin-left:8px;">📂 ${detectedCategoryName}</span>` : ''}
                 </div>
                 <div class="explore-grid">
@@ -1307,6 +1366,16 @@ function renderSearchResults(query, stories, users, meta, detectedCategoryName =
                             `;
                         }
 
+                        // 🔥 MOSTRAR BADGE DE INTERÉS DEL USUARIO
+                        let interestBadge = '';
+                        if (story.interestMatch) {
+                            interestBadge = `
+                                <span class="interest-match-badge" style="position:absolute;bottom:8px;left:8px;z-index:5;background:rgba(251,191,36,0.15);padding:2px 8px;border-radius:10px;font-size:7px;color:#fbbf24;border:1px solid rgba(251,191,36,0.1);">
+                                    ⭐ Interés ${story.interestMatchCount || ''}
+                                </span>
+                            `;
+                        }
+
                         const sources = story.sources || [];
                         const sourceBadges = sources.slice(0, 3).map(source => {
                             let label = source;
@@ -1315,6 +1384,7 @@ function renderSearchResults(query, stories, users, meta, detectedCategoryName =
                             if (source.includes('Descripción')) label = '📝 Descripción';
                             if (source.includes('Hashtag')) label = '# Hashtag';
                             if (source.includes('Texto')) label = '📄 Texto';
+                            if (source.includes('Categoría')) label = `📂 ${detectedCategoryName || ''}`;
                             return `<span class="source-badge" style="font-size:7px;background:rgba(255,255,255,0.05);padding:1px 6px;border-radius:8px;margin-right:2px;color:rgba(255,255,255,0.3);">${label}</span>`;
                         }).join('');
 
@@ -1329,6 +1399,7 @@ function renderSearchResults(query, stories, users, meta, detectedCategoryName =
                                 ${story.hasSubtitles ? '<span class="subtitles-badge" style="position:absolute;top:8px;right:8px;z-index:5;background:rgba(192,132,252,0.15);padding:2px 6px;border-radius:4px;font-size:7px;color:#c084fc;">CC</span>' : ''}
                                 ${relevanceBadge}
                                 ${categoryBadge}
+                                ${interestBadge}
                                 ${langBadge}
                                 <div class="overlay">
                                     <div class="likes">
