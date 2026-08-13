@@ -75,6 +75,9 @@ const LIKED_STORIES_KEY = 'vyn_mobile_liked_stories';
 const TRANSLATION_CACHE_KEY = 'vyn_translation_cache';
 const VIEWED_IN_RECENT_KEY = 'vyn_viewed_in_recent';
 
+// 🔥 CLAVE PARA GUARDAR EL FILTRO ACTUAL
+const FILTER_STATE_KEY = 'vyn_current_filter';
+
 // ============================================================
 // ESTADO GLOBAL
 // ============================================================
@@ -114,6 +117,32 @@ let isAdsLoaded = false;
 // ============================================================
 
 const TEN_MINUTES = 10 * 60 * 1000; // 10 minutos en milisegundos
+
+// ============================================================
+// 🔥 FUNCIONES PARA GUARDAR/RESTAURAR FILTRO
+// ============================================================
+
+function saveFilterState(filter) {
+    try {
+        localStorage.setItem(FILTER_STATE_KEY, filter);
+        console.log(`💾 Filtro guardado: ${filter}`);
+    } catch (e) {
+        console.warn('Error guardando filtro:', e);
+    }
+}
+
+function restoreFilterState() {
+    try {
+        const saved = localStorage.getItem(FILTER_STATE_KEY);
+        if (saved) {
+            console.log(`📂 Filtro restaurado: ${saved}`);
+            return saved;
+        }
+    } catch (e) {
+        console.warn('Error restaurando filtro:', e);
+    }
+    return 'ranked';
+}
 
 // ============================================================
 // CARGAR CACHÉ DE TRADUCCIONES
@@ -336,6 +365,13 @@ async function init() {
 
     loadPersistedData();
 
+    // 🔥 RESTAURAR FILTRO GUARDADO
+    const savedFilter = restoreFilterState();
+    if (savedFilter && savedFilter !== 'ranked') {
+        currentFilter = savedFilter;
+        console.log(`📂 Filtro restaurado: ${savedFilter}`);
+    }
+
     // 🔥 INICIALIZAR MÓDULO DE LOGIN
     initLoginModule({
         onSuccess: async (user) => {
@@ -351,8 +387,9 @@ async function init() {
             
             feedCursor = restoreFeedCursor();
             
-            await fetchFeedByCursor('ranked', feedCursor);
-            document.querySelector('.filter-btn[data-filter="ranked"]')?.classList.add('active');
+            // 🔥 ACTIVAR EL FILTRO GUARDADO EN LA UI
+            const filterToApply = savedFilter || 'ranked';
+            await applyFilter(filterToApply);
             
             loadAdsInBackground();
             
@@ -393,17 +430,6 @@ async function loadAdsInBackground() {
     } catch (error) {
         console.error('Error cargando publicidades:', error);
     }
-}
-
-// ============================================================
-// 🔥 UPDATE HEADER UI - Ahora usa la del módulo
-// ============================================================
-
-// Esta función ahora se importa desde login-module.js
-// Pero mantenemos una referencia local para compatibilidad
-function updateHeaderUILocal(user) {
-    // Delegar al módulo
-    updateHeaderUI(user);
 }
 
 // ============================================================
@@ -968,7 +994,7 @@ function refreshFeedInBackground() {
 }
 
 // ============================================================
-// 🔥 APLICAR FILTRO
+// 🔥 APLICAR FILTRO - CORREGIDO CON PERSISTENCIA
 // ============================================================
 
 function applyFilter(filter) {
@@ -983,15 +1009,26 @@ function applyFilter(filter) {
         return;
     }
 
+    console.log(`📂 Aplicando filtro: ${filter}`);
+    
     currentFilter = filter;
     displayedStories = [];
     feedCursor = null;
     hasMoreStories = true;
     totalRemaining = 0;
     
+    // 🔥 GUARDAR EL FILTRO EN LOCALSTORAGE
+    saveFilterState(filter);
+    
+    // 🔥 ACTUALIZAR LA UI DE LOS FILTROS
     document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
     const activeBtn = document.querySelector(`.filter-btn[data-filter="${filter}"]`);
-    if (activeBtn) activeBtn.classList.add('active');
+    if (activeBtn) {
+        activeBtn.classList.add('active');
+        console.log(`✅ Filtro activado en UI: ${filter}`);
+    } else {
+        console.warn(`⚠️ No se encontró botón para filtro: ${filter}`);
+    }
 
     if (filter !== 'recent') {
         hideNewStoriesBadge();
@@ -1897,8 +1934,6 @@ function setupEvents() {
         }
         
         hideNewStoriesBadge();
-        document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
-        document.getElementById('filterRanked').classList.add('active');
         applyFilter('ranked');
     });
 
@@ -1912,8 +1947,6 @@ function setupEvents() {
             return;
         }
         
-        document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
-        document.getElementById('filterRecent').classList.add('active');
         if (pendingNewStories > 0) {
             showNewStoriesBadge();
         }
@@ -1931,19 +1964,16 @@ function setupEvents() {
             return;
         }
         
-        document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
-        document.getElementById('filterTrending').classList.add('active');
         hideNewStoriesBadge();
         
         // Cargar publicidades si no están cargadas
         if (activeAds.length === 0) {
             loadAdsInBackground().then(() => {
-                renderAdsFeed(activeAds);
+                applyFilter('ads');
             });
         } else {
-            renderAdsFeed(activeAds);
+            applyFilter('ads');
         }
-        currentFilter = 'ads';
     });
 
     // BOTTOM NAV
@@ -1973,7 +2003,13 @@ function setupEvents() {
         document.querySelectorAll('.bottom-nav button').forEach(b => b.classList.remove('active'));
         document.getElementById('navFeed').classList.add('active');
         
-        applyFilter(currentFilter || 'ranked');
+        // 🔥 RESTAURAR EL FILTRO GUARDADO
+        const savedFilter = restoreFilterState();
+        if (savedFilter) {
+            applyFilter(savedFilter);
+        } else {
+            applyFilter('ranked');
+        }
     });
 
     document.getElementById('navExplore')?.addEventListener('click', () => {
