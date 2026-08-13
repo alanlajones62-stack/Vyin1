@@ -486,7 +486,7 @@ function setupLoginModalEvents() {
 // 🔥 ABRIR MODAL DE LOGIN
 // ============================================================
 
-export function openLoginModal() {
+function openLoginModal() {
     console.log('🔐 Abriendo modal de login...');
 
     const overlay = document.getElementById('loginModalOverlay');
@@ -526,7 +526,7 @@ export function openLoginModal() {
 // 🔥 CERRAR MODAL DE LOGIN
 // ============================================================
 
-export function closeLoginModal() {
+function closeLoginModal() {
     console.log('🔐 Cerrando modal de login...');
 
     const overlay = document.getElementById('loginModalOverlay');
@@ -883,7 +883,7 @@ function initLoginModule(options = {}) {
 }
 
 // ============================================================
-// 🔥 EXPORTAR
+// 🔥 EXPORTAR (SOLO UNA VEZ)
 // ============================================================
 
 export {
