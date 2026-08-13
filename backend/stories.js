@@ -1,4 +1,4 @@
-// backend/stories.js - VERSIÓN COMPLETA CON CLOUDINARY, SISTEMA DE BLOQUEOS Y RECOMENDACIONES
+// backend/stories.js - VERSIÓN COMPLETA CON CLOUDINARY, SISTEMA DE BLOQUEOS, RECOMENDACIONES Y CLASIFICADOR
 
 const auth = require('./middleware/auth');
 const multer = require('multer');
@@ -2058,7 +2058,7 @@ module.exports = function(read, write, io, processHashtags, isProfileVisible, ar
     });
 
     // ============================================================
-    // 🔥🔥🔥 RUTA: BÚSQUEDA HÍBRIDA COMPLETA - CON FILTRO DE BLOQUEOS
+    // 🔥🔥🔥 RUTA: BÚSQUEDA HÍBRIDA COMPLETA - CON FILTRO DE BLOQUEOS Y CONTENTCLASSIFIER
     // ============================================================
 
     router.get('/search/hybrid', auth, async (req, res) => {
@@ -2088,6 +2088,34 @@ module.exports = function(read, write, io, processHashtags, isProfileVisible, ar
             const blockedIds = currentUser.blocked || [];
             const blockedByIds = currentUser.blockedBy || [];
 
+            // 🔥🔥🔥 OBTENER IDIOMA DEL USUARIO
+            const userLanguage = currentUser.language || 'es';
+
+            // 🔥🔥🔥 CLASIFICAR LA BÚSQUEDA CON ContentClassifier (NUEVO SISTEMA)
+            let detectedCategory = null;
+            let detectedCategoryName = null;
+            let detectedCategoryEmoji = null;
+            let detectedCategoryScore = 0;
+
+            try {
+                const { getContentClassifier } = require('./classifiers');
+                const classifier = getContentClassifier();
+                
+                // Clasificar el texto de búsqueda con el sistema nuevo
+                const classificationResults = await classifier.classify(query, userLanguage);
+                
+                if (classificationResults && classificationResults.length > 0) {
+                    const topCategory = classificationResults[0];
+                    detectedCategory = topCategory.category;
+                    detectedCategoryName = topCategory.name || topCategory.category;
+                    detectedCategoryEmoji = topCategory.emoji || '📌';
+                    detectedCategoryScore = topCategory.score || 0;
+                    console.log(`📂 Categoría detectada (NUEVO sistema ContentClassifier): ${detectedCategoryName} (${detectedCategory}) con ${Math.round(detectedCategoryScore * 100)}%`);
+                }
+            } catch (error) {
+                console.warn('⚠️ Error clasificando búsqueda con ContentClassifier:', error.message);
+            }
+
             const stories = read('stories.json');
             const now = Date.now();
 
@@ -2105,21 +2133,21 @@ module.exports = function(read, write, io, processHashtags, isProfileVisible, ar
             let literalIds = new Set();
             let maxScore = 0;
 
-            stories.forEach(s => {
-                if (!s.expiresAt) return;
-                if (new Date(s.expiresAt).getTime() <= now) return;
-                if (s.hidden) return;
-                if (s.userId === userId) return;
+            for (const s of stories) {
+                if (!s.expiresAt) continue;
+                if (new Date(s.expiresAt).getTime() <= now) continue;
+                if (s.hidden) continue;
+                if (s.userId === userId) continue;
 
                 const storyOwner = userMap[s.userId];
-                if (!storyOwner) return;
+                if (!storyOwner) continue;
                 
                 // 🔥 FILTRAR BLOQUEADOS
-                if (blockedIds.includes(storyOwner.id)) return;
-                if (blockedByIds.includes(storyOwner.id)) return;
+                if (blockedIds.includes(storyOwner.id)) continue;
+                if (blockedByIds.includes(storyOwner.id)) continue;
                 
                 if (typeof areStoriesVisible === 'function') {
-                    if (!areStoriesVisible(storyOwner, userId)) return;
+                    if (!areStoriesVisible(storyOwner, userId)) continue;
                 }
 
                 const subtitles = (s.subtitles || '').toLowerCase();
@@ -2185,7 +2213,7 @@ module.exports = function(read, write, io, processHashtags, isProfileVisible, ar
                         }
                     });
                 }
-            });
+            }
 
             console.log(`📝 Resultados literales: ${literalResults.length} (max score: ${maxScore})`);
 
@@ -2256,7 +2284,7 @@ module.exports = function(read, write, io, processHashtags, isProfileVisible, ar
             
             const combinedMap = new Map();
 
-            literalResults.forEach(s => {
+            for (const s of literalResults) {
                 combinedMap.set(s.id, {
                     ...s,
                     searchType: 'literal',
@@ -2264,9 +2292,9 @@ module.exports = function(read, write, io, processHashtags, isProfileVisible, ar
                     matchSources: s.matchSources || [],
                     sources: s.sources || {}
                 });
-            });
+            }
 
-            semanticResults.forEach(s => {
+            for (const s of semanticResults) {
                 if (!combinedMap.has(s.id)) {
                     combinedMap.set(s.id, {
                         ...s,
@@ -2285,23 +2313,68 @@ module.exports = function(read, write, io, processHashtags, isProfileVisible, ar
                     }
                     combinedMap.set(s.id, existing);
                 }
+            }
+
+            // 🔥🔥🔥 FILTRAR POR CATEGORÍA DETECTADA (USANDO ContentClassifier)
+            let combinedStories = Array.from(combinedMap.values());
+
+            // Aplicar filtro de relevancia
+            combinedStories = combinedStories.filter(s => {
+                if (s.searchType === 'literal') {
+                    return s.relevanceScore >= 15;
+                }
+                if (s.searchType === 'semantic') {
+                    return s.relevanceScore >= 35;
+                }
+                return false;
             });
 
-            let combinedStories = Array.from(combinedMap.values())
-                .filter(s => {
-                    if (s.searchType === 'literal') {
-                        return s.relevanceScore >= 15;
+            console.log(`📊 Resultados después de relevancia: ${combinedStories.length} (de ${combinedMap.size} totales)`);
+
+            if (detectedCategory && combinedStories.length > 0) {
+                console.log(`🔍 Aplicando filtro de categoría (ContentClassifier): ${detectedCategoryName}`);
+                
+                const { getContentClassifier } = require('./classifiers');
+                const classifier = getContentClassifier();
+                
+                const classifiedResults = [];
+                for (const story of combinedStories) {
+                    try {
+                        const classification = await classifier.classifyStory(story, userLanguage);
+                        const categories = classification.categories || [];
+                        const hasCategory = categories.some(c => c.category === detectedCategory);
+                        
+                        if (hasCategory) {
+                            // 🔥 BONUS POR COINCIDENCIA DE CATEGORÍA
+                            story.categoryMatch = true;
+                            story.categoryName = detectedCategoryName;
+                            story.categoryEmoji = detectedCategoryEmoji;
+                            story.relevanceScore = (story.relevanceScore || 0) + 40;
+                            classifiedResults.push(story);
+                            console.log(`✅ Historia ${story.id} coincide con categoría ${detectedCategoryName}`);
+                        } else {
+                            story.categoryMatch = false;
+                            classifiedResults.push(story);
+                        }
+                    } catch (error) {
+                        console.warn(`⚠️ Error clasificando historia ${story.id}:`, error.message);
+                        story.categoryMatch = false;
+                        classifiedResults.push(story);
                     }
-                    if (s.searchType === 'semantic') {
-                        return s.relevanceScore >= 35;
-                    }
-                    return false;
-                })
-                .sort((a, b) => {
+                }
+                
+                // Ordenar: primero las que coinciden con categoría
+                classifiedResults.sort((a, b) => {
+                    if (a.categoryMatch && !b.categoryMatch) return -1;
+                    if (!a.categoryMatch && b.categoryMatch) return 1;
                     return (b.relevanceScore || 0) - (a.relevanceScore || 0);
                 });
+                
+                combinedStories = classifiedResults;
+                console.log(`📸 Historias en categoría "${detectedCategoryName}": ${combinedStories.filter(s => s.categoryMatch).length}`);
+            }
 
-            console.log(`📊 Resultados filtrados: ${combinedStories.length} (de ${combinedMap.size} totales)`);
+            console.log(`📊 Resultados finales: ${combinedStories.length} historias`);
 
             // ============================================================
             // 🔥 4. ENRIQUECER CON DATOS DE USUARIO
@@ -2316,6 +2389,7 @@ module.exports = function(read, write, io, processHashtags, isProfileVisible, ar
                 if (sources.hashtags) sourceLabels.push('# Hashtag');
                 if (sources.text) sourceLabels.push('📄 Texto');
                 if (sources.semantic) sourceLabels.push('🔍 Semántico');
+                if (s.categoryMatch) sourceLabels.push(`📂 ${detectedCategoryName || 'Categoría'}`);
 
                 return {
                     ...s,
@@ -2331,6 +2405,9 @@ module.exports = function(read, write, io, processHashtags, isProfileVisible, ar
                     relevanceScore: s.relevanceScore || 0,
                     matchSources: s.matchSources || [],
                     sources: sourceLabels,
+                    categoryMatch: s.categoryMatch || false,
+                    categoryName: s.categoryName || null,
+                    categoryEmoji: s.categoryEmoji || null,
                     hasSubtitles: s.hasSubtitles || false,
                     subtitles: s.subtitles || null,
                     language: s.language || 'es',
@@ -2349,12 +2426,17 @@ module.exports = function(read, write, io, processHashtags, isProfileVisible, ar
                 semanticCount: semanticResults.length,
                 uniqueCount: combinedMap.size,
                 filteredCount: combinedStories.length,
+                categoryMatchCount: enrichedStories.filter(s => s.categoryMatch).length,
+                detectedCategory: detectedCategory,
+                detectedCategoryName: detectedCategoryName,
+                detectedCategoryScore: Math.round(detectedCategoryScore * 100),
                 sources: {
                     subtitles: paginated.filter(s => s.sources?.includes('🎤 Subtítulos')).length,
                     caption: paginated.filter(s => s.sources?.includes('📝 Descripción')).length,
                     hashtags: paginated.filter(s => s.sources?.includes('# Hashtag')).length,
                     text: paginated.filter(s => s.sources?.includes('📄 Texto')).length,
-                    semantic: paginated.filter(s => s.sources?.includes('🔍 Semántico')).length
+                    semantic: paginated.filter(s => s.sources?.includes('🔍 Semántico')).length,
+                    category: paginated.filter(s => s.sources?.includes(`📂 ${detectedCategoryName || 'Categoría'}`)).length
                 }
             };
 
@@ -2371,10 +2453,16 @@ module.exports = function(read, write, io, processHashtags, isProfileVisible, ar
                 meta: {
                     query: query,
                     userId: userId,
-                    algorithm: 'hybrid_filtered',
+                    algorithm: 'hybrid_with_contentclassifier',
+                    detectedCategory: detectedCategory,
+                    detectedCategoryName: detectedCategoryName,
+                    detectedCategoryEmoji: detectedCategoryEmoji,
+                    detectedCategoryScore: Math.round(detectedCategoryScore * 100),
                     timestamp: new Date().toISOString(),
                     stats: stats,
-                    relevanceThreshold: 15
+                    relevanceThreshold: 15,
+                    classifierVersion: 'ContentClassifier_v2',
+                    language: userLanguage
                 }
             });
 
