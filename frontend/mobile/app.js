@@ -1,4 +1,4 @@
-// app.js - VERSIÓN COMPLETA CON FILTRO PUBLICIDAD, LOGIN MODULAR Y PREFERENCIAS
+// app.js - VERSIÓN COMPLETA CON FILTRO PUBLICIDAD, LOGIN MODULAR, PREFERENCIAS Y TRADUCCIÓN
 // ============================================================
 
 import {
@@ -105,6 +105,36 @@ function markPreferencesDone() {
     }
 }
 
+// 🔥 VERIFICAR ESTADO DE TRADUCCIÓN
+async function checkTranslationStatus() {
+    const token = getToken();
+    if (!token) return null;
+
+    try {
+        const res = await fetch(`${API_URL}/api/vyin/translate`, {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ text: 'Hola', targetLanguage: 'en' })
+        });
+
+        if (res.ok) {
+            const data = await res.json();
+            return {
+                available: true,
+                engine: data.engine || 'NLLB/M2M100',
+                license: data.license || 'MIT'
+            };
+        }
+        return { available: false };
+    } catch (error) {
+        console.warn('⚠️ Servicio de traducción no disponible:', error.message);
+        return { available: false };
+    }
+}
+
 // Cargar categorías desde el servidor
 async function loadCategoriesFromServer() {
     const token = getToken();
@@ -124,7 +154,20 @@ async function loadCategoriesFromServer() {
 
         if (res.ok) {
             const data = await res.json();
-            return data.categories || [];
+            
+            // 🔥 LOG DEL ESTADO DE TRADUCCIÓN
+            if (data.translation) {
+                console.log(`🌐 Estado de traducción: ${data.translation.message}`);
+                console.log(`   Idiomas: ${data.translation.languages}`);
+                console.log(`   Motor: ${data.translation.engine}`);
+            }
+            
+            // 🔥 CONTAR CATEGORÍAS TRADUCIDAS
+            const categories = data.categories || [];
+            const translatedCount = categories.filter(c => c.isTranslated).length;
+            console.log(`📂 Categorías cargadas: ${categories.length} (${translatedCount} traducidas)`);
+            
+            return categories;
         }
         return [];
     } catch (error) {
@@ -142,6 +185,29 @@ async function showPreferencesScreen() {
     const categories = await loadCategoriesFromServer();
     const grid = document.getElementById('prefGrid');
 
+    // 🔥 MOSTRAR INDICADOR DE IDIOMA Y TRADUCCIÓN
+    const headerSub = screen.querySelector('.pref-sub');
+    if (headerSub) {
+        const user = getCurrentUser();
+        const lang = user?.language || 'es';
+        const langInfo = getLanguageInfo(lang);
+        
+        // Verificar si hay categorías traducidas
+        const hasTranslation = categories.some(c => c.isTranslated === true);
+        const translationEnabled = categories.some(c => c.translationAvailable === true);
+        
+        if (hasTranslation && translationEnabled) {
+            headerSub.textContent = `🌐 Categorías en ${langInfo?.name || lang} · ${categories.length} temas disponibles`;
+            headerSub.style.color = 'rgba(34,197,94,0.6)';
+        } else if (translationEnabled && !hasTranslation && lang !== 'es') {
+            headerSub.textContent = `📌 Categorías en español · ${categories.length} temas disponibles (traducción disponible pero no aplicada)`;
+            headerSub.style.color = 'rgba(255,255,255,0.15)';
+        } else {
+            headerSub.textContent = `📌 Categorías en español · ${categories.length} temas disponibles`;
+            headerSub.style.color = 'rgba(255,255,255,0.15)';
+        }
+    }
+
     if (!categories || categories.length === 0) {
         grid.innerHTML = `
             <div style="grid-column:1/-1;text-align:center;color:rgba(255,255,255,0.2);padding:20px 0;">
@@ -155,14 +221,19 @@ async function showPreferencesScreen() {
         return;
     }
 
+    // 🔥 MOSTRAR INDICADOR DE TRADUCCIÓN EN CADA CATEGORÍA
     const displayCategories = categories.slice(0, 12);
-    grid.innerHTML = displayCategories.map(cat => `
-        <div class="pref-option" data-category="${cat.id || cat.name}" data-emoji="${cat.emoji || '📌'}">
-            <span class="pref-emoji">${cat.emoji || '📌'}</span>
-            <span class="pref-label">${cat.name || cat.displayName || cat.id}</span>
-            <span class="pref-check"><i class="fas fa-check"></i></span>
-        </div>
-    `).join('');
+    grid.innerHTML = displayCategories.map(cat => {
+        const isTranslated = cat.isTranslated || false;
+        const translationBadge = isTranslated ? ' 🌐' : '';
+        return `
+            <div class="pref-option" data-category="${cat.id || cat.name}" data-emoji="${cat.emoji || '📌'}">
+                <span class="pref-emoji">${cat.emoji || '📌'}</span>
+                <span class="pref-label">${cat.name || cat.displayName || cat.id}${translationBadge}</span>
+                <span class="pref-check"><i class="fas fa-check"></i></span>
+            </div>
+        `;
+    }).join('');
 
     let selected = [];
 
@@ -290,7 +361,7 @@ function closePreferencesScreen() {
 }
 
 // Exportar funciones de preferencias
-export { showPreferencesScreen, closePreferencesScreen, hasPreferencesDone, markPreferencesDone };
+export { showPreferencesScreen, closePreferencesScreen, hasPreferencesDone, markPreferencesDone, checkTranslationStatus };
 
 // ============================================================
 // ESTADO GLOBAL

@@ -1,5 +1,5 @@
 // backend/classifiers/index.js
-// SISTEMA DE CLASIFICACIÓN CON TRADUCCIÓN AUTOMÁTICA
+// SISTEMA DE CLASIFICACIÓN CON TRADUCCIÓN AUTOMÁTICA - CON FALLBACK
 
 const fs = require('fs');
 const path = require('path');
@@ -261,13 +261,38 @@ class ContentClassifier {
     }
 
     /**
-     * OBTIENE TODAS LAS CATEGORÍAS DISPONIBLES (TRADUCIDAS)
+     * 🔥 OBTIENE TODAS LAS CATEGORÍAS DISPONIBLES (TRADUCIDAS CON FALLBACK)
+     * VERSIÓN CORREGIDA CON INDICADOR DE TRADUCCIÓN
      */
     async getCategories(targetLanguage = 'es') {
         const result = [];
+        const translationAvailable = this.vyinService && this.vyinService.isEnabled();
+        
         for (const [name, category] of this.categories) {
-            const translatedName = await this._translateKeyword(category.name, targetLanguage);
-            const translatedDesc = category.description ? await this._translateKeyword(category.description, targetLanguage) : '';
+            let translatedName = category.name;
+            let translatedDesc = category.description || '';
+            let isTranslated = false;
+            
+            // 🔥 SOLO TRADUCIR SI EL SERVICIO ESTÁ DISPONIBLE Y NO ES ESPAÑOL
+            if (translationAvailable && targetLanguage !== 'es') {
+                try {
+                    translatedName = await this._translateKeyword(category.name, targetLanguage);
+                    if (category.description) {
+                        translatedDesc = await this._translateKeyword(category.description, targetLanguage);
+                    }
+                    isTranslated = true;
+                } catch (error) {
+                    console.warn(`⚠️ Error traduciendo categoría ${category.name}:`, error.message);
+                    // Fallback: usar el nombre original
+                    translatedName = category.name;
+                    isTranslated = false;
+                }
+            } else if (!translationAvailable && targetLanguage !== 'es') {
+                // 🔥 SIN TRADUCCIÓN: USAR NOMBRE ORIGINAL CON INDICADOR
+                translatedName = `${category.name} 🌐`;
+                translatedDesc = category.description || '';
+                isTranslated = false;
+            }
             
             result.push({
                 name: name,
@@ -275,7 +300,11 @@ class ContentClassifier {
                 emoji: category.emoji,
                 description: translatedDesc,
                 keywordCount: category.keywords.length,
-                weight: this.categoryWeights[name] || category.weight || 1
+                weight: this.categoryWeights[name] || category.weight || 1,
+                // 🔥 INDICAR SI ESTÁ TRADUCIDO
+                isTranslated: isTranslated,
+                // 🔥 INDICAR SI HAY TRADUCCIÓN DISPONIBLE
+                translationAvailable: translationAvailable
             });
         }
         return result;

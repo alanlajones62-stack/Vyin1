@@ -1,5 +1,6 @@
-// backend/server.js - COMPLETO CON TODOS LOS MÓDULOS (VERIFICACIÓN, VYIN PAY, ASIGNACIÓN, MODERACIÓN, VYIN IA, BLOQUEOS, PUBLICIDAD, INTERESES)
+// backend/server.js - COMPLETO CON TODOS LOS MÓDULOS (VERIFICACIÓN, VYIN PAY, ASIGNACIÓN, MODERACIÓN, VYIN IA, BLOQUEOS, PUBLICIDAD, INTERESES, TRADUCCIÓN)
 // 🔥 CORREGIDO: Rutas de login, register y chat
+// 🔥 CORREGIDO: Ruta /api/categories con idioma del usuario
 
 const express = require('express');
 const cors = require('cors');
@@ -40,6 +41,32 @@ const adminConfig = require('./config/admin-config');
 // ============================================================
 
 const { setupVyinRoutes } = require('./config/vyin-config');
+
+// ============================================================
+// 🔥 ESTADO DE TRADUCCIÓN
+// ============================================================
+
+function isTranslationAvailable() {
+    try {
+        const { getVyinService } = require('./services/vyin-ia.service');
+        const vyinService = getVyinService();
+        return vyinService && vyinService.isEnabled();
+    } catch (error) {
+        return false;
+    }
+}
+
+function getTranslationStatus() {
+    const available = isTranslationAvailable();
+    return {
+        enabled: available,
+        message: available 
+            ? '✅ Traducción activa (NLLB/M2M100)' 
+            : '⏳ Traducción inactiva (fallback a español)',
+        languages: available ? 33 : 1,
+        engine: available ? 'NLLB-200/M2M100' : 'Fallback'
+    };
+}
 
 const app = express();
 const server = http.createServer(app);
@@ -911,32 +938,55 @@ try {
 }
 
 // ============================================================
-// 🔥🔥🔥 RUTA DE CATEGORÍAS (PARA INTERESES)
+// 🔥🔥🔥 RUTA DE CATEGORÍAS (PARA INTERESES) - CON IDIOMA DEL USUARIO
 // ============================================================
 try {
     app.get('/api/categories', async (req, res) => {
         try {
+            // 🔥 OBTENER IDIOMA DEL USUARIO DESDE EL TOKEN
+            let userLanguage = 'es';
+            const token = req.headers.authorization?.split(' ')[1];
+            
+            if (token) {
+                try {
+                    const decoded = jwt.verify(token, JWT_SECRET);
+                    const users = read('users.json');
+                    const user = users.find(u => u.id === decoded.userId);
+                    if (user && user.language) {
+                        userLanguage = user.language;
+                    }
+                } catch (e) {
+                    // Token inválido, usar español por defecto
+                    console.warn('⚠️ Token inválido al obtener categorías, usando español');
+                }
+            }
+
             const { getContentClassifier } = require('./classifiers');
             const classifier = getContentClassifier();
             
-            // Obtener categorías en español (por defecto)
-            const categories = await classifier.getCategories('es');
+            // 🔥 PASAR EL IDIOMA DEL USUARIO
+            const categories = await classifier.getCategories(userLanguage);
             
             // Formatear para el frontend
             const formatted = categories.map(c => ({
                 id: c.name,
-                name: c.displayName,
+                name: c.displayName,  // ← YA ESTÁ TRADUCIDO POR getCategories()
                 emoji: c.emoji,
                 description: c.description || '',
-                keywordCount: c.keywordCount || 0
+                keywordCount: c.keywordCount || 0,
+                isTranslated: c.isTranslated || false
             }));
+            
+            // 🔥 OBTENER ESTADO DE TRADUCCIÓN
+            const translationStatus = getTranslationStatus();
             
             res.json({
                 success: true,
                 categories: formatted,
                 total: formatted.length,
                 maxSelection: 6,
-                language: 'es'
+                language: userLanguage,
+                translation: translationStatus
             });
         } catch (error) {
             console.error('❌ Error obteniendo categorías:', error);
@@ -948,6 +998,7 @@ try {
     console.log('   ✅ Selección de intereses para nuevos usuarios');
     console.log('   ✅ Máximo 6 intereses');
     console.log('   ✅ Porcentaje dinámico: 5%-20% del feed');
+    console.log(`   🌐 Traducción: ${isTranslationAvailable() ? '✅ ACTIVADA' : '⏳ INACTIVA (fallback a español)'}`);
 } catch (error) {
     logger.error('❌ Error cargando categories:', { error: error.message });
     console.error('❌ Error cargando sistema de categorías:', error.message);
@@ -1304,7 +1355,9 @@ app.get('/health', (req, res) => {
                 5: 15,
                 6: 20
             }
-        }
+        },
+        // 🔥 ESTADO DE TRADUCCIÓN
+        translation: getTranslationStatus()
     };
     
     try {
@@ -1864,6 +1917,7 @@ server.listen(PORT, HOST, () => {
        ✅ Selección de intereses para nuevos usuarios
        ✅ Máximo 6 intereses
        ✅ Porcentaje dinámico: 5%-20% del feed
+       🌐 Traducción: ${isTranslationAvailable() ? '✅ ACTIVADA' : '⏳ INACTIVA (fallback a español)'}
     
     🔥 ========================================
     
