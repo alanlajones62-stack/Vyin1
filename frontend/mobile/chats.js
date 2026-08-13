@@ -4,7 +4,6 @@
 // ============================================================
 
 import { getToken, getCurrentUser, showToast as authShowToast } from './auth.js';
-// 🔥 IMPORTAR PROFILE MODAL PARA ABRIR PERFIL DESDE CHAT
 import { openProfileModal } from './profile-modal.js';
 
 const API_URL = window.location.origin;
@@ -21,7 +20,6 @@ let nextOffset = 0;
 const MESSAGES_PER_PAGE = 30;
 let currentTab = 'active';
 let isRendering = false;
-let isScrollingToBottom = false;
 
 let conversationsListEl = document.getElementById('conversationsList');
 let messagesContainerEl = document.getElementById('messagesContainer');
@@ -33,7 +31,7 @@ let scrollTimeout = null;
 let isInitialLoad = true;
 
 // ============================================================
-// 🔗 DETECCIÓN Y APERTURA DE ENLACES
+// 🔗 DETECCIÓN Y APERTURA DE ENLACES - CORREGIDO
 // ============================================================
 
 function detectAndRenderLinks(text) {
@@ -41,6 +39,7 @@ function detectAndRenderLinks(text) {
     
     let html = text;
     
+    // 🔥 PATRONES DE ENLACES - Más precisos
     const vyinPattern = /(https?:\/\/[^\s]*vyin-social\.onrender\.com\/(?:story|feed|profile)\/[a-zA-Z0-9_-]+)/gi;
     const tiktokPattern = /(https?:\/\/[^\s]*(?:vm\.tiktok\.com|tiktok\.com)[^\s]*)/gi;
     const youtubePattern = /(https?:\/\/[^\s]*(?:youtube\.com|youtu\.be)[^\s]*)/gi;
@@ -55,6 +54,7 @@ function detectAndRenderLinks(text) {
         </a>`;
     }
     
+    // 🔥 1. Enlaces de Vyin (prioridad)
     html = html.replace(vyinPattern, (match) => {
         const url = match.trim();
         const type = url.includes('/story/') ? 'story' : 
@@ -67,26 +67,31 @@ function detectAndRenderLinks(text) {
         return createLinkHtml(url, 'Vyin', icon, label, 'vyin');
     });
     
+    // 🔥 2. TikTok
     html = html.replace(tiktokPattern, (match) => {
         const url = match.trim();
         return createLinkHtml(url, 'TikTok', '🎵', 'Ver video en TikTok', 'tiktok');
     });
     
+    // 🔥 3. YouTube
     html = html.replace(youtubePattern, (match) => {
         const url = match.trim();
         return createLinkHtml(url, 'YouTube', '▶️', 'Ver video en YouTube', 'youtube');
     });
     
+    // 🔥 4. Instagram
     html = html.replace(instagramPattern, (match) => {
         const url = match.trim();
         return createLinkHtml(url, 'Instagram', '📸', 'Ver en Instagram', 'instagram');
     });
     
+    // 🔥 5. Twitter/X
     html = html.replace(twitterPattern, (match) => {
         const url = match.trim();
         return createLinkHtml(url, 'Twitter/X', '🐦', 'Ver en Twitter/X', 'twitter');
     });
     
+    // 🔥 6. Otros enlaces (genérico) - Solo mostrar como enlace simple
     html = html.replace(urlPattern, (match) => {
         if (match.includes('link-preview')) return match;
         
@@ -112,7 +117,7 @@ function escapeHtml(text) {
 }
 
 // ============================================================
-// 🔥 ABRIR ENLACE DESDE EL CHAT - CON SOPORTE PARA PERFIL
+// 🔥 ABRIR ENLACE DESDE EL CHAT - CON SOPORTE PARA PERFIL E HISTORIA
 // ============================================================
 
 function openLinkFromChat(event) {
@@ -127,22 +132,22 @@ function openLinkFromChat(event) {
     
     console.log(`🔗 Abriendo enlace: ${url} (tipo: ${type})`);
     
+    // 🔥 ENLACES DE VYIN
     if (type === 'vyin' || url.includes('vyin-social.onrender.com')) {
         try {
             const urlObj = new URL(url);
             const pathname = urlObj.pathname;
             
+            // Detectar historia
             let storyId = null;
             const storyMatch = pathname.match(/\/story\/([a-zA-Z0-9_-]+)/);
             if (storyMatch) {
                 storyId = storyMatch[1];
             }
-            
             if (!storyId) {
                 const params = new URLSearchParams(urlObj.search);
                 storyId = params.get('storyId');
             }
-            
             if (storyId) {
                 console.log(`📖 Abriendo historia: ${storyId}`);
                 import('./story-modal.js').then(({ openStoryModal }) => {
@@ -154,7 +159,7 @@ function openLinkFromChat(event) {
                 return;
             }
             
-            // 🔥 DETECTAR PERFIL Y ABRIR CON PROFILE MODAL
+            // Detectar perfil
             const profileMatch = pathname.match(/\/profile\/([a-zA-Z0-9_-]+)/);
             if (profileMatch) {
                 const userId = profileMatch[1];
@@ -163,6 +168,7 @@ function openLinkFromChat(event) {
                 return;
             }
             
+            // Si no se detectó nada, abrir en nueva pestaña
             window.open(url, '_blank');
             
         } catch (e) {
@@ -172,6 +178,7 @@ function openLinkFromChat(event) {
         return;
     }
     
+    // 🔥 ENLACES EXTERNOS - Siempre abrir en nueva pestaña
     window.open(url, '_blank');
 }
 
@@ -189,8 +196,9 @@ window.openProfileFromChat = function() {
     const fullName = currentConversation.fullName || 'Usuario';
     console.log(`👤 Abriendo perfil de ${fullName} (${userId}) desde chat`);
     
-    // Cerrar el panel de mensajes y abrir el perfil
-    messagesPanelEl.classList.remove('active');
+    if (messagesPanelEl) {
+        messagesPanelEl.classList.remove('active');
+    }
     openProfileModal(userId);
 };
 
@@ -215,13 +223,14 @@ function ensureScrollAtBottom() {
 }
 
 // ============================================================
-// PERSISTENCIA EN LOCALSTORAGE
+// 📦 PERSISTENCIA EN LOCALSTORAGE - Para evitar re-renderizados
 // ============================================================
+
 function saveChatState(userId) {
-    if (!userId || messages.length === 0) return;
+    if (!userId) return;
     try {
         const state = {
-            messages: messages,
+            messages: messages.slice(-50), // Solo guardar últimos 50 mensajes
             scrollPosition: messagesContainerEl?.scrollTop || 0,
             timestamp: Date.now(),
             conversationStatus: currentConversation?.status || 'active'
@@ -244,6 +253,12 @@ function loadChatState(userId) {
     } catch (error) {
         console.error('Error cargando estado del chat:', error);
         return null;
+    }
+}
+
+function clearChatState(userId) {
+    if (userId) {
+        localStorage.removeItem(`chat_state_${userId}`);
     }
 }
 
@@ -441,6 +456,9 @@ async function loadConversations() {
     }
 }
 
+// ============================================================
+// RENDERIZAR CONVERSACIONES - OPTIMIZADO
+// ============================================================
 function renderConversations() {
     if (!conversationsListEl) return;
     
@@ -495,11 +513,17 @@ function renderConversations() {
             `;
         }
         
+        // 🔥 INICIALES DEL NOMBRE PARA EL AVATAR (cuando no hay foto)
+        const initials = conv.user.fullName 
+            ? conv.user.fullName.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)
+            : 'U';
+        
         return `
         <div class="conversation-item ${isActive ? 'active' : ''}" onclick="window.selectConversation('${conv.user.id}')">
             <div class="conversation-avatar-wrapper">
-                <img class="conversation-avatar" src="${conv.user.avatar || 'https://ui-avatars.com/api/?name=' + encodeURIComponent(conv.user.fullName || 'U') + '&background=7c3aed&color=fff'}"
-                     onerror="this.src='https://ui-avatars.com/api/?name=' + encodeURIComponent('${conv.user.fullName || 'U'}') + '&background=7c3aed&color=fff'" loading="lazy" />
+                <div class="conversation-avatar" style="display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,#7c3aed,#db2777);color:#fff;font-weight:700;font-size:18px;">
+                    ${conv.user.avatar ? `<img src="${conv.user.avatar}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;" onerror="this.style.display='none';this.parentElement.textContent='${initials}'" />` : initials}
+                </div>
                 <span class="status-dot ${statusClass}"></span>
             </div>
             <div class="conversation-info">
@@ -727,7 +751,7 @@ function renderMessages() {
         }
 
         const messageId = msg.id || `temp_${Date.now()}_${Math.random()}`;
-        const processedContent = detectAndRenderLinks(msg.content);
+        const processedContent = detectAndRenderLinks(escapeHtml(msg.content));
         
         messagesHtml += `
             <div class="message ${msg.isOwn ? 'message-own' : 'message-other'}" data-message-id="${messageId}">
@@ -761,7 +785,7 @@ function renderMessages() {
 }
 
 // ============================================================
-// ➕ AÑADIR UN SOLO MENSAJE CON DETECCIÓN DE ENLACES
+// ➕ AÑADIR UN SOLO MENSAJE SIN RE-RENDERIZAR TODO
 // ============================================================
 function appendSingleMessage(msg) {
     if (!messagesContainerEl || isRendering) return;
@@ -791,7 +815,7 @@ function appendSingleMessage(msg) {
     }
 
     const messageId = msg.id || `temp_${Date.now()}_${Math.random()}`;
-    const processedContent = detectAndRenderLinks(msg.content);
+    const processedContent = detectAndRenderLinks(escapeHtml(msg.content));
     
     html += `
         <div class="message ${msg.isOwn ? 'message-own' : 'message-other'}" data-message-id="${messageId}" style="animation: messageIn 0.3s ease;">
@@ -820,7 +844,7 @@ function updateSingleMessage(tempId, realMessage) {
         const contentEl = msgEl.querySelector('.message-content');
         const timeEl = msgEl.querySelector('.message-time');
         if (contentEl) {
-            const processedContent = detectAndRenderLinks(realMessage.content);
+            const processedContent = detectAndRenderLinks(escapeHtml(realMessage.content));
             contentEl.innerHTML = processedContent;
         }
         if (timeEl) {
@@ -904,7 +928,7 @@ function handleScroll() {
 }
 
 // ============================================================
-// 🔥 SELECCIONAR CONVERSACIÓN - CORREGIDO
+// 🔥 SELECCIONAR CONVERSACIÓN - SIN SALTO FEO
 // ============================================================
 window.selectConversation = async function(userIdOrObject) {
     let userId, userData;
@@ -953,15 +977,36 @@ function showMessagesPanel() {
     const name = document.getElementById('chatName');
     const backBtn = document.getElementById('backChatBtn');
 
+    // 🔥 INICIALES PARA EL AVATAR DEL HEADER
+    const initials = currentConversation?.fullName 
+        ? currentConversation.fullName.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)
+        : 'U';
+
     if (avatar) {
-        avatar.src = currentConversation?.avatar || 'https://ui-avatars.com/api/?name=' + encodeURIComponent(currentConversation?.fullName || 'U') + '&background=7c3aed&color=fff';
-        avatar.onerror = function() {
-            this.src = 'https://ui-avatars.com/api/?name=' + encodeURIComponent(currentConversation?.fullName || 'U') + '&background=7c3aed&color=fff';
-        };
+        if (currentConversation?.avatar) {
+            avatar.src = currentConversation.avatar;
+            avatar.style.display = 'block';
+            avatar.onerror = function() {
+                this.style.display = 'none';
+                this.parentElement.querySelector('.avatar-initials').style.display = 'flex';
+            };
+        } else {
+            avatar.style.display = 'none';
+            // Crear iniciales si no existen
+            let initialsEl = avatar.parentElement.querySelector('.avatar-initials');
+            if (!initialsEl) {
+                initialsEl = document.createElement('div');
+                initialsEl.className = 'avatar-initials';
+                initialsEl.style.cssText = 'width:44px;height:44px;border-radius:50%;background:linear-gradient(135deg,#7c3aed,#db2777);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:18px;flex-shrink:0;';
+                avatar.parentElement.insertBefore(initialsEl, avatar);
+            }
+            initialsEl.textContent = initials;
+            initialsEl.style.display = 'flex';
+        }
     }
+    
     if (name) {
         name.textContent = currentConversation?.fullName || currentConversation?.username || 'Usuario';
-        // 🔥 AÑADIR CLICK PARA ABRIR PERFIL
         name.style.cursor = 'pointer';
         name.onclick = function(e) {
             e.stopPropagation();
@@ -969,7 +1014,6 @@ function showMessagesPanel() {
         };
     }
     
-    // 🔥 HACER CLICK EN EL AVATAR PARA ABRIR PERFIL
     if (avatar) {
         avatar.style.cursor = 'pointer';
         avatar.onclick = function(e) {
@@ -980,14 +1024,12 @@ function showMessagesPanel() {
     
     if (backBtn) {
         backBtn.onclick = function() {
-            // 🔥 LIMPIAR CONVERSACIÓN ACTUAL AL SALIR
             if (currentConversation) {
                 saveChatState(currentConversation.id);
             }
-            // 🔥 DESELECCIONAR LA CONVERSACIÓN
+            // 🔥 LIMPIAR CONVERSACIÓN ACTUAL
             currentConversation = null;
             messagesPanelEl.classList.remove('active');
-            // 🔥 LIMPIAR EL CONTENEDOR DE MENSAJES
             messagesContainerEl.innerHTML = `
                 <div class="empty-state-chat">
                     <i class="fas fa-comment-dots"></i>
@@ -995,6 +1037,14 @@ function showMessagesPanel() {
                     <p>Selecciona una conversación</p>
                 </div>
             `;
+            // Limpiar avatar del header
+            const avatarEl = document.getElementById('chatAvatar');
+            if (avatarEl) {
+                avatarEl.src = '';
+                avatarEl.style.display = 'block';
+                const initialsEl = avatarEl.parentElement.querySelector('.avatar-initials');
+                if (initialsEl) initialsEl.style.display = 'none';
+            }
             renderConversations();
             loadConversations();
         };
