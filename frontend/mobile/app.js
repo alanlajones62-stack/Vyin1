@@ -389,7 +389,7 @@ async function init() {
             
             // 🔥 ACTIVAR EL FILTRO GUARDADO EN LA UI
             const filterToApply = savedFilter || 'ranked';
-            await applyFilter(filterToApply);
+            applyFilter(filterToApply);
             
             loadAdsInBackground();
             
@@ -994,7 +994,7 @@ function refreshFeedInBackground() {
 }
 
 // ============================================================
-// 🔥 APLICAR FILTRO - CORREGIDO CON PERSISTENCIA
+// 🔥 APLICAR FILTRO - CON SELECCIÓN VISUAL CORREGIDA
 // ============================================================
 
 function applyFilter(filter) {
@@ -1020,7 +1020,7 @@ function applyFilter(filter) {
     // 🔥 GUARDAR EL FILTRO EN LOCALSTORAGE
     saveFilterState(filter);
     
-    // 🔥 ACTUALIZAR LA UI DE LOS FILTROS
+    // 🔥 ACTUALIZAR LA UI DE LOS FILTROS (CORREGIDO)
     document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
     const activeBtn = document.querySelector(`.filter-btn[data-filter="${filter}"]`);
     if (activeBtn) {
@@ -1923,6 +1923,7 @@ function setupEvents() {
         }
     });
 
+    // 🔥 FILTROS - CORREGIDO PARA MANTENER SELECCIÓN VISUAL
     document.getElementById('filterRanked')?.addEventListener('click', () => {
         const token = getToken();
         if (!token) {
@@ -1953,7 +1954,6 @@ function setupEvents() {
         applyFilter('recent');
     });
 
-    // 🔥 NUEVO FILTRO PUBLICIDAD
     document.getElementById('filterTrending')?.addEventListener('click', () => {
         const token = getToken();
         if (!token) {
@@ -1965,15 +1965,7 @@ function setupEvents() {
         }
         
         hideNewStoriesBadge();
-        
-        // Cargar publicidades si no están cargadas
-        if (activeAds.length === 0) {
-            loadAdsInBackground().then(() => {
-                applyFilter('ads');
-            });
-        } else {
-            applyFilter('ads');
-        }
+        applyFilter('ads');
     });
 
     // BOTTOM NAV
@@ -2003,7 +1995,7 @@ function setupEvents() {
         document.querySelectorAll('.bottom-nav button').forEach(b => b.classList.remove('active'));
         document.getElementById('navFeed').classList.add('active');
         
-        // 🔥 RESTAURAR EL FILTRO GUARDADO
+        // 🔥 RESTAURAR EL FILTRO GUARDADO AL VOLVER AL FEED
         const savedFilter = restoreFilterState();
         if (savedFilter) {
             applyFilter(savedFilter);

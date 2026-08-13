@@ -1,4 +1,5 @@
 // backend/server.js - COMPLETO CON TODOS LOS MÓDULOS (VERIFICACIÓN, VYIN PAY, ASIGNACIÓN, MODERACIÓN, VYIN IA, BLOQUEOS, PUBLICIDAD)
+// 🔥 CORREGIDO: Rutas de login, register y chat
 
 const express = require('express');
 const cors = require('cors');
@@ -749,7 +750,7 @@ function migrateAllData() {
         'users.json', 'stories.json', 'messages.json', 'hashtags.json', 
         'notifications.json', 'reports.json', 'wallets.json', 'transactions.json', 
         'business-requests.json', 'report-assignments.json', 'moderation-log.json',
-        'ads.json' // 🔥 NUEVO: Archivo para anuncios
+        'ads.json'
     ];
     initFiles.forEach(f => {
         const filePath = path.join(DATA_DIR, f);
@@ -1244,7 +1245,7 @@ app.get('/health', (req, res) => {
 });
 
 // ============================================================
-// 🔥 RUTAS DEL FRONTEND PARA RENDER
+// 🔥 RUTAS DEL FRONTEND PARA RENDER - CORREGIDO
 // ============================================================
 
 const FRONTEND_PATH = path.join(__dirname, '../frontend');
@@ -1258,24 +1259,91 @@ app.use(express.static(FRONTEND_PATH));
 app.use('/mobile', express.static(MOBILE_PATH));
 app.use('/uploads', express.static(path.join(FRONTEND_PATH, 'uploads')));
 
-// Ruta principal - App móvil
+// 🔥 RUTA PRINCIPAL - App móvil
 app.get('/', (req, res) => {
     res.sendFile(path.join(MOBILE_PATH, 'index.html'));
 });
 
-// Feed - App móvil
+// 🔥 FEED - App móvil
 app.get('/feed.html', (req, res) => {
     res.sendFile(path.join(MOBILE_PATH, 'index.html'));
 });
 
-// Login
+// 🔥 LOGIN - RUTA ESPECÍFICA (CORREGIDO)
 app.get('/login.html', (req, res) => {
-    res.sendFile(path.join(FRONTEND_PATH, 'login.html'));
+    const loginPath = path.join(FRONTEND_PATH, 'login.html');
+    if (fs.existsSync(loginPath)) {
+        res.sendFile(loginPath);
+    } else {
+        // Fallback: si no existe login.html, redirigir al feed
+        res.redirect('/feed.html');
+    }
 });
 
-// Cualquier otra ruta no API - App móvil (SPA)
+// 🔥 REGISTER - RUTA ESPECÍFICA
+app.get('/register.html', (req, res) => {
+    const registerPath = path.join(FRONTEND_PATH, 'register.html');
+    if (fs.existsSync(registerPath)) {
+        res.sendFile(registerPath);
+    } else {
+        res.redirect('/login.html');
+    }
+});
+
+// 🔥 CHAT - RUTA ESPECÍFICA (RENOMBRADA de chats.html a chat.html)
+app.get('/chat.html', (req, res) => {
+    const chatPath = path.join(MOBILE_PATH, 'chat.html');
+    // Si existe chat.html, usarlo
+    if (fs.existsSync(chatPath)) {
+        res.sendFile(chatPath);
+    } else {
+        // Fallback: si no existe, buscar chats.html
+        const chatsPath = path.join(MOBILE_PATH, 'chats.html');
+        if (fs.existsSync(chatsPath)) {
+            res.sendFile(chatsPath);
+        } else {
+            res.redirect('/feed.html');
+        }
+    }
+});
+
+// 🔥 CHATS - RUTA ANTIGUA (REDIRECCIÓN)
+app.get('/chats.html', (req, res) => {
+    // Redirigir de chats.html a chat.html
+    const query = req.url.includes('?') ? req.url.substring(req.url.indexOf('?')) : '';
+    res.redirect(`/chat.html${query}`);
+});
+
+// 🔥 MOBILE CHATS - RUTA DIRECTA
+app.get('/mobile/chats.html', (req, res) => {
+    // Redirigir a la nueva ruta
+    const query = req.url.includes('?') ? req.url.substring(req.url.indexOf('?')) : '';
+    res.redirect(`/chat.html${query}`);
+});
+
+// 🔥 MOBILE CHAT - RUTA DIRECTA
+app.get('/mobile/chat.html', (req, res) => {
+    const chatPath = path.join(MOBILE_PATH, 'chat.html');
+    if (fs.existsSync(chatPath)) {
+        res.sendFile(chatPath);
+    } else {
+        const chatsPath = path.join(MOBILE_PATH, 'chats.html');
+        if (fs.existsSync(chatsPath)) {
+            res.sendFile(chatsPath);
+        } else {
+            res.redirect('/feed.html');
+        }
+    }
+});
+
+// 🔥 Cualquier otra ruta no API - App móvil (SPA)
 app.get('*', (req, res) => {
     if (!req.path.startsWith('/api')) {
+        // Excluir rutas de archivos estáticos
+        const staticExtensions = ['.js', '.css', '.png', '.jpg', '.jpeg', '.gif', '.svg', '.ico', '.webp', '.woff', '.woff2', '.ttf', '.eot', '.otf', '.json'];
+        if (staticExtensions.some(ext => req.path.endsWith(ext))) {
+            return res.status(404).send('Archivo no encontrado');
+        }
         res.sendFile(path.join(MOBILE_PATH, 'index.html'));
     }
 });
@@ -1726,6 +1794,12 @@ server.listen(PORT, HOST, () => {
        ✅ Reasignación de denuncias (cada hora)
        ✅ Limpieza de suspensiones (cada hora)
        ✅ Limpieza de anuncios expirados (cada hora)
+    
+    📌 RUTAS CORREGIDAS:
+       ✅ /login.html - Página de inicio de sesión
+       ✅ /register.html - Página de registro
+       ✅ /chat.html - Chat principal (renombrado de chats.html)
+       ✅ /chats.html - Redirige a /chat.html
     `);
 });
 
