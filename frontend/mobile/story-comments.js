@@ -2,6 +2,7 @@
 // story-comments.js - Sistema de comentarios para historias
 // 🔥 VERSIÓN REFACTORIZADA CON ACTUALIZACIÓN PARCIAL DEL DOM
 // 🔥 NUEVO: Modal de vista previa para archivos (PDF, imágenes, etc.)
+// 🔥 CORREGIDO: Apertura de PDFs y documentos con URL completa
 // ============================================================
 
 import { getToken, getCurrentUser, showToast, getAvatar, formatDate, escapeHtml } from './auth.js';
@@ -81,12 +82,13 @@ function isAudioFile(mimetype) {
 }
 
 // ============================================================
-// 🔥 MODAL DE VISTA PREVIA PARA ARCHIVOS
+// 🔥 MODAL DE VISTA PREVIA PARA ARCHIVOS (VERSIÓN MEJORADA)
 // ============================================================
 
 /**
  * Abre un modal de vista previa para archivos
  * Soporta: PDF, imágenes, videos, documentos
+ * 🔥 CORREGIDO: Usa URL completa para archivos
  */
 function openFilePreview(fileUrl, filename = 'Archivo', mimetype = null) {
     // Verificar si ya existe un modal abierto
@@ -100,6 +102,12 @@ function openFilePreview(fileUrl, filename = 'Archivo', mimetype = null) {
     const isVideo = isVideoFile(mimetype);
     const isAudio = isAudioFile(mimetype);
     const isDoc = isDocumentFile(mimetype);
+
+    // 🔥 CONSTRUIR URL COMPLETA SI ES RELATIVA
+    let fullUrl = fileUrl;
+    if (fileUrl.startsWith('/')) {
+        fullUrl = window.location.origin + fileUrl;
+    }
 
     // Crear el overlay del modal
     const overlay = document.createElement('div');
@@ -123,7 +131,7 @@ function openFilePreview(fileUrl, filename = 'Archivo', mimetype = null) {
         // Vista previa de imagen
         contentHtml = `
             <div style="position:relative;max-width:95%;max-height:95%;">
-                <img src="${fileUrl}" alt="${escapeHtml(filename)}" 
+                <img src="${fullUrl}" alt="${escapeHtml(filename)}" 
                      style="max-width:100%;max-height:90vh;object-fit:contain;border-radius:8px;box-shadow:0 20px 60px rgba(0,0,0,0.5);" />
                 <div style="position:absolute;bottom:20px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,0.7);padding:8px 16px;border-radius:20px;color:#fff;font-size:12px;backdrop-filter:blur(10px);">
                     <i class="fas fa-image"></i> ${escapeHtml(filename)}
@@ -131,25 +139,45 @@ function openFilePreview(fileUrl, filename = 'Archivo', mimetype = null) {
             </div>
         `;
     } else if (isPdf) {
-        // Vista previa de PDF usando iframe
+        // 🔥 PDF - Usar embed con opción de abrir en nueva ventana
         contentHtml = `
-            <div style="position:relative;width:95%;height:90vh;max-width:1200px;">
-                <div style="position:absolute;top:-40px;left:0;right:0;display:flex;justify-content:space-between;align-items:center;padding:0 10px;color:rgba(255,255,255,0.6);font-size:13px;">
-                    <span><i class="fas fa-file-pdf" style="color:#ff6b6b;"></i> ${escapeHtml(filename)}</span>
-                    <div style="display:flex;gap:12px;">
-                        <button onclick="document.getElementById('pdfViewer').contentWindow.print()" 
-                                style="background:rgba(255,255,255,0.1);border:none;color:#fff;padding:4px 12px;border-radius:4px;cursor:pointer;font-size:12px;">
-                            <i class="fas fa-print"></i> Imprimir
+            <div style="position:relative;width:95%;height:90vh;max-width:1200px;display:flex;flex-direction:column;">
+                <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 12px;background:rgba(0,0,0,0.6);border-radius:8px 8px 0 0;backdrop-filter:blur(10px);flex-shrink:0;">
+                    <span style="color:rgba(255,255,255,0.8);font-size:13px;">
+                        <i class="fas fa-file-pdf" style="color:#ff6b6b;"></i> ${escapeHtml(filename)}
+                    </span>
+                    <div style="display:flex;gap:8px;">
+                        <button onclick="window.open('${fullUrl}', '_blank')" 
+                                style="background:rgba(255,255,255,0.1);border:1px solid rgba(255,255,255,0.15);color:#fff;padding:4px 12px;border-radius:4px;cursor:pointer;font-size:12px;transition:all 0.2s;"
+                                onmouseover="this.style.background='rgba(255,255,255,0.2)'" 
+                                onmouseout="this.style.background='rgba(255,255,255,0.1)'">
+                            <i class="fas fa-external-link-alt"></i> Nueva pestaña
                         </button>
-                        <a href="${fileUrl}" download style="background:rgba(255,255,255,0.1);border:none;color:#fff;padding:4px 12px;border-radius:4px;cursor:pointer;font-size:12px;text-decoration:none;">
+                        <a href="${fullUrl}" download 
+                           style="background:rgba(255,255,255,0.1);border:1px solid rgba(255,255,255,0.15);color:#fff;padding:4px 12px;border-radius:4px;cursor:pointer;font-size:12px;text-decoration:none;transition:all 0.2s;"
+                           onmouseover="this.style.background='rgba(255,255,255,0.2)'" 
+                           onmouseout="this.style.background='rgba(255,255,255,0.1)'">
                             <i class="fas fa-download"></i> Descargar
                         </a>
                     </div>
                 </div>
-                <iframe id="pdfViewer" src="${fileUrl}#toolbar=1&navpanes=1" 
-                        style="width:100%;height:100%;border:none;border-radius:8px;background:#fff;"
-                        sandbox="allow-scripts allow-same-origin allow-modals">
-                </iframe>
+                <div style="flex:1;background:#fff;border-radius:0 0 8px 8px;overflow:hidden;position:relative;min-height:400px;">
+                    <object data="${fullUrl}#toolbar=1&navpanes=1&scrollbar=1" 
+                            type="application/pdf"
+                            style="width:100%;height:100%;border:none;min-height:500px;">
+                        <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;padding:40px;text-align:center;">
+                            <i class="fas fa-file-pdf" style="font-size:48px;color:#ff6b6b;margin-bottom:16px;"></i>
+                            <p style="color:#333;font-size:14px;">No se pudo cargar la vista previa del PDF</p>
+                            <a href="${fullUrl}" target="_blank" 
+                               style="margin-top:12px;background:#ff6b6b;color:#fff;padding:8px 20px;border-radius:6px;text-decoration:none;">
+                                <i class="fas fa-external-link-alt"></i> Abrir PDF
+                            </a>
+                        </div>
+                    </object>
+                    <div style="position:absolute;bottom:12px;right:12px;background:rgba(0,0,0,0.6);color:rgba(255,255,255,0.4);padding:4px 10px;border-radius:12px;font-size:10px;backdrop-filter:blur(5px);">
+                        <i class="fas fa-info-circle"></i> PDF
+                    </div>
+                </div>
             </div>
         `;
     } else if (isVideo) {
@@ -157,7 +185,7 @@ function openFilePreview(fileUrl, filename = 'Archivo', mimetype = null) {
         contentHtml = `
             <div style="position:relative;max-width:95%;max-height:95%;">
                 <video controls autoplay style="max-width:100%;max-height:90vh;border-radius:8px;box-shadow:0 20px 60px rgba(0,0,0,0.5);">
-                    <source src="${fileUrl}" type="${mimetype || 'video/mp4'}">
+                    <source src="${fullUrl}" type="${mimetype || 'video/mp4'}">
                     Tu navegador no soporta reproducción de video.
                 </video>
                 <div style="position:absolute;bottom:20px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,0.7);padding:8px 16px;border-radius:20px;color:#fff;font-size:12px;backdrop-filter:blur(10px);">
@@ -174,7 +202,7 @@ function openFilePreview(fileUrl, filename = 'Archivo', mimetype = null) {
                 </div>
                 <div style="color:#fff;font-size:18px;margin-bottom:10px;">${escapeHtml(filename)}</div>
                 <audio controls autoplay style="width:100%;margin-top:16px;">
-                    <source src="${fileUrl}" type="${mimetype || 'audio/mpeg'}">
+                    <source src="${fullUrl}" type="${mimetype || 'audio/mpeg'}">
                     Tu navegador no soporta reproducción de audio.
                 </audio>
                 <div style="margin-top:12px;color:rgba(255,255,255,0.3);font-size:12px;">
@@ -183,19 +211,44 @@ function openFilePreview(fileUrl, filename = 'Archivo', mimetype = null) {
             </div>
         `;
     } else if (isDoc) {
-        // Documentos: mostrar con iframe + opción de descarga
+        // Documentos - mostrar con embed + opción de descarga
         contentHtml = `
-            <div style="position:relative;width:95%;height:90vh;max-width:1200px;">
-                <div style="position:absolute;top:-40px;left:0;right:0;display:flex;justify-content:space-between;align-items:center;padding:0 10px;color:rgba(255,255,255,0.6);font-size:13px;">
-                    <span><i class="fas fa-file-alt" style="color:#60a5fa;"></i> ${escapeHtml(filename)}</span>
-                    <a href="${fileUrl}" download style="background:rgba(255,255,255,0.1);border:none;color:#fff;padding:4px 12px;border-radius:4px;cursor:pointer;font-size:12px;text-decoration:none;">
-                        <i class="fas fa-download"></i> Descargar
-                    </a>
+            <div style="position:relative;width:95%;height:90vh;max-width:1200px;display:flex;flex-direction:column;">
+                <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 12px;background:rgba(0,0,0,0.6);border-radius:8px 8px 0 0;backdrop-filter:blur(10px);flex-shrink:0;">
+                    <span style="color:rgba(255,255,255,0.8);font-size:13px;">
+                        <i class="fas fa-file-alt" style="color:#60a5fa;"></i> ${escapeHtml(filename)}
+                    </span>
+                    <div style="display:flex;gap:8px;">
+                        <button onclick="window.open('${fullUrl}', '_blank')" 
+                                style="background:rgba(255,255,255,0.1);border:1px solid rgba(255,255,255,0.15);color:#fff;padding:4px 12px;border-radius:4px;cursor:pointer;font-size:12px;transition:all 0.2s;"
+                                onmouseover="this.style.background='rgba(255,255,255,0.2)'" 
+                                onmouseout="this.style.background='rgba(255,255,255,0.1)'">
+                            <i class="fas fa-external-link-alt"></i> Nueva pestaña
+                        </button>
+                        <a href="${fullUrl}" download 
+                           style="background:rgba(255,255,255,0.1);border:1px solid rgba(255,255,255,0.15);color:#fff;padding:4px 12px;border-radius:4px;cursor:pointer;font-size:12px;text-decoration:none;transition:all 0.2s;"
+                           onmouseover="this.style.background='rgba(255,255,255,0.2)'" 
+                           onmouseout="this.style.background='rgba(255,255,255,0.1)'">
+                            <i class="fas fa-download"></i> Descargar
+                        </a>
+                    </div>
                 </div>
-                <iframe src="${fileUrl}" 
-                        style="width:100%;height:100%;border:none;border-radius:8px;background:#fff;"
-                        sandbox="allow-scripts allow-same-origin allow-modals">
-                </iframe>
+                <div style="flex:1;background:#fff;border-radius:0 0 8px 8px;overflow:hidden;position:relative;min-height:400px;">
+                    <object data="${fullUrl}" 
+                            style="width:100%;height:100%;border:none;min-height:500px;">
+                        <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;padding:40px;text-align:center;">
+                            <i class="fas fa-file-alt" style="font-size:48px;color:#60a5fa;margin-bottom:16px;"></i>
+                            <p style="color:#333;font-size:14px;">No se pudo cargar la vista previa del documento</p>
+                            <a href="${fullUrl}" target="_blank" 
+                               style="margin-top:12px;background:#60a5fa;color:#fff;padding:8px 20px;border-radius:6px;text-decoration:none;">
+                                <i class="fas fa-external-link-alt"></i> Abrir documento
+                            </a>
+                        </div>
+                    </object>
+                    <div style="position:absolute;bottom:12px;right:12px;background:rgba(0,0,0,0.6);color:rgba(255,255,255,0.4);padding:4px 10px;border-radius:12px;font-size:10px;backdrop-filter:blur(5px);">
+                        <i class="fas fa-info-circle"></i> Documento
+                    </div>
+                </div>
             </div>
         `;
     } else {
@@ -209,16 +262,23 @@ function openFilePreview(fileUrl, filename = 'Archivo', mimetype = null) {
                 <div style="color:rgba(255,255,255,0.3);font-size:12px;margin-bottom:20px;">
                     Tipo: ${mimetype || 'Desconocido'}
                 </div>
-                <a href="${fileUrl}" download style="display:inline-block;background:rgba(192,132,252,0.2);color:#c084fc;padding:10px 24px;border-radius:8px;text-decoration:none;border:1px solid rgba(192,132,252,0.3);">
+                <a href="${fullUrl}" download 
+                   style="display:inline-block;background:rgba(192,132,252,0.2);color:#c084fc;padding:10px 24px;border-radius:8px;text-decoration:none;border:1px solid rgba(192,132,252,0.3);">
                     <i class="fas fa-download"></i> Descargar archivo
                 </a>
+                <button onclick="window.open('${fullUrl}', '_blank')" 
+                        style="display:inline-block;background:rgba(255,255,255,0.05);color:rgba(255,255,255,0.6);padding:10px 24px;border-radius:8px;border:1px solid rgba(255,255,255,0.1);cursor:pointer;margin-left:8px;"
+                        onmouseover="this.style.background='rgba(255,255,255,0.1)'" 
+                        onmouseout="this.style.background='rgba(255,255,255,0.05)'">
+                    <i class="fas fa-external-link-alt"></i> Abrir
+                </button>
             </div>
         `;
     }
 
     // Botón de cerrar
     const closeBtn = `
-        <button onclick="closeFilePreview()" style="
+        <button onclick="window.closeFilePreview()" style="
             position:fixed;
             top:20px;
             right:20px;
@@ -249,12 +309,12 @@ function openFilePreview(fileUrl, filename = 'Archivo', mimetype = null) {
     // Cerrar al hacer clic en el fondo
     overlay.addEventListener('click', (e) => {
         if (e.target === overlay) {
-            closeFilePreview();
+            window.closeFilePreview();
         }
     });
 
     // Cerrar con Escape
-    document.addEventListener('keydown', handleFilePreviewKeydown);
+    document.addEventListener('keydown', window._handleFilePreviewKeydown);
 
     // Agregar estilos si no existen
     if (!document.getElementById('file-preview-styles')) {
@@ -272,6 +332,7 @@ function openFilePreview(fileUrl, filename = 'Archivo', mimetype = null) {
             #filePreviewModal {
                 animation: fadeIn 0.25s ease;
             }
+            #filePreviewModal object,
             #filePreviewModal iframe {
                 animation: slideUp 0.3s ease;
             }
@@ -291,7 +352,7 @@ function closeFilePreview() {
     const modal = document.getElementById('filePreviewModal');
     if (modal) {
         modal.remove();
-        document.removeEventListener('keydown', handleFilePreviewKeydown);
+        document.removeEventListener('keydown', window._handleFilePreviewKeydown);
     }
 }
 
@@ -307,6 +368,7 @@ function handleFilePreviewKeydown(e) {
 // Exponer funciones globalmente
 window.openFilePreview = openFilePreview;
 window.closeFilePreview = closeFilePreview;
+window._handleFilePreviewKeydown = handleFilePreviewKeydown;
 
 // ============================================================
 // FUNCIÓN PARA RENDERIZAR ARCHIVO EN COMENTARIO (MODIFICADA)
@@ -322,19 +384,23 @@ function renderCommentFile(comment) {
     const filename = comment.originalName || comment.filename || 'Archivo';
     const fileUrl = comment.fileUrl;
     
+    // 🔥 ESCAPAR URL PARA EVITAR PROBLEMAS CON CARACTERES ESPECIALES
+    const escapedUrl = fileUrl.replace(/'/g, "\\'");
+    const escapedFilename = escapeHtml(filename);
+    
     // Determinar la acción al hacer clic
-    let clickAction = `window.openFilePreview('${fileUrl}', '${escapeHtml(filename)}', '${comment.mimetype || ''}')`;
+    let clickAction = `window.openFilePreview('${escapedUrl}', '${escapedFilename}', '${comment.mimetype || ''}')`;
     
     // Si es imagen, también permitir vista previa con clic
     if (isImage) {
         return `
             <div class="comment-file" style="margin-top:6px;">
-                <img src="${comment.fileUrl}" alt="Adjunto" 
+                <img src="${fileUrl}" alt="Adjunto" 
                      style="max-width:200px;max-height:200px;border-radius:8px;cursor:pointer;border:1px solid rgba(255,255,255,0.05);transition:all 0.2s;"
                      onclick="event.stopPropagation(); ${clickAction}"
                      onmouseover="this.style.borderColor='rgba(192,132,252,0.3)'" 
                      onmouseout="this.style.borderColor='rgba(255,255,255,0.05)'" />
-                <div style="font-size:10px;color:rgba(255,255,255,0.2);margin-top:4px;">${escapeHtml(filename)}</div>
+                <div style="font-size:10px;color:rgba(255,255,255,0.2);margin-top:4px;">${escapedFilename}</div>
             </div>
         `;
     }
@@ -343,10 +409,10 @@ function renderCommentFile(comment) {
     if (isPdf || isDocumentFile(comment.mimetype)) {
         return `
             <div class="comment-file" style="margin-top:6px;">
-                <div style="display:flex;align-items:center;gap:10px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.06);border-radius:10px;padding:8px 12px;max-width:280px;transition:all 0.2s;">
+                <div style="display:flex;align-items:center;gap:10px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.06);border-radius:10px;padding:8px 12px;max-width:300px;transition:all 0.2s;">
                     <span class="file-icon" style="font-size:22px;color:#ff6b6b;">${icon}</span>
                     <span class="file-info" style="flex:1;min-width:0;">
-                        <span class="file-name" style="font-size:12px;font-weight:500;display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:rgba(255,255,255,0.8);">${escapeHtml(filename)}</span>
+                        <span class="file-name" style="font-size:12px;font-weight:500;display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:rgba(255,255,255,0.8);">${escapedFilename}</span>
                         <span class="file-size" style="font-size:9px;color:rgba(255,255,255,0.2);">${size}</span>
                     </span>
                     <div style="display:flex;gap:4px;">
@@ -374,7 +440,7 @@ function renderCommentFile(comment) {
             <div style="display:flex;align-items:center;gap:10px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.06);border-radius:10px;padding:8px 12px;max-width:280px;transition:all 0.2s;">
                 <span class="file-icon" style="font-size:22px;color:#c084fc;">${icon}</span>
                 <span class="file-info" style="flex:1;min-width:0;">
-                    <span class="file-name" style="font-size:12px;font-weight:500;display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:rgba(255,255,255,0.8);">${escapeHtml(filename)}</span>
+                    <span class="file-name" style="font-size:12px;font-weight:500;display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:rgba(255,255,255,0.8);">${escapedFilename}</span>
                     <span class="file-size" style="font-size:9px;color:rgba(255,255,255,0.2);">${size}</span>
                 </span>
                 <button onclick="event.stopPropagation(); ${clickAction}" 
