@@ -3,9 +3,9 @@
 const cloudinary = require('cloudinary').v2;
 const fs = require('fs');
 
-// 🔥 CREDENCIALES CORRECTAS
+// 🔥 CREDENCIALES CORREGIDAS
 cloudinary.config({
-    cloud_name: 'mediaflows_29aff746-0f4d-43cd-a0b1-f84d9bbd62b1',
+    cloud_name: 'ddgnjxeka',  // ← CORREGIDO: este es tu cloud_name real
     api_key: '252662336671461',
     api_secret: 'PMpBvWpxz49UiHjixemVpO6LL40'
 });
@@ -23,7 +23,7 @@ const uploadFile = async (filePath, options = {}) => {
             ...options
         });
 
-        // Eliminar archivo local después de subir
+        // Eliminar archivo local después de subir (opcional)
         try { 
             if (fs.existsSync(filePath)) {
                 fs.unlinkSync(filePath); 
