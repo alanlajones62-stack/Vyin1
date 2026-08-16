@@ -3,6 +3,7 @@
 // (VERSIÓN CORREGIDA - CON ACTUALIZACIÓN PARCIAL DE COMENTARIOS)
 // 🔥 NUEVO: SOPORTE PARA SUBIR ARCHIVOS EN COMENTARIOS (SOLO DUEÑO)
 // 🔥 CORREGIDO: Re-renderización completa, parpadeo y pérdida de foco
+// 🔥 NUEVO: Caché unificado para comentarios y traducciones
 // ============================================================
 
 import {
@@ -26,6 +27,9 @@ import {
     findCommentById
 } from './story-comments.js';
 
+// 🔥 IMPORTAR CACHÉ UNIFICADO
+import { getCache } from './services/cache.service.js';
+
 const API_URL = window.location.origin;
 let currentStoryId = null;
 let currentStoryData = null;
@@ -35,6 +39,9 @@ let currentStoryIndex = 0;
 let isNavigating = false;
 let userLanguage = 'es';
 let isTranslating = false;
+
+// 🔥 INSTANCIA DEL CACHÉ UNIFICADO
+const unifiedCache = getCache();
 
 // Caché de traducciones en memoria
 let translationCache = {};
@@ -1430,7 +1437,7 @@ async function handleSurveyVote(storyId, optionId) {
 }
 
 // ============================================================
-// CARGAR DATOS DE LA HISTORIA
+// CARGAR DATOS DE LA HISTORIA - CON CACHÉ UNIFICADO
 // ============================================================
 
 async function loadStoryData(storyId, isNavigation = false) {
@@ -1442,6 +1449,28 @@ async function loadStoryData(storyId, isNavigation = false) {
     }
 
     try {
+        // 🔥 VERIFICAR SI TENEMOS LA HISTORIA EN CACHÉ
+        const cachedStory = currentStoriesList.find(s => s.id === storyId);
+        if (cachedStory && !isNavigation && currentStoryData?.id === storyId) {
+            console.log('📦 [STORY-MODAL] Usando historia del caché local');
+            currentStoryData = cachedStory;
+            updateModalUI(currentStoryData);
+            updateProgress();
+            
+            const highlightCommentId = window._activityCommentId || null;
+            // 🔥 NO FORZAR RECARGA - usar caché
+            await initComments(storyId, 'commentsList', highlightCommentId, false);
+            
+            setTimeout(() => updateTranslateButton(), 50);
+            return;
+        }
+
+        // 🔥 VERIFICAR SI LA HISTORIA ESTÁ EN CACHÉ UNIFICADO (para comentarios)
+        const cachedComments = unifiedCache.getComments(storyId);
+        if (cachedComments && !isNavigation) {
+            console.log(`📦 [CACHE UNIFICADO] Comentarios de ${storyId} disponibles (${cachedComments.comments.length})`);
+        }
+
         const res = await fetch(`${API_URL}/api/stories/${storyId}/details`, {
             headers: { 'Authorization': `Bearer ${token}` }
         });
@@ -1452,7 +1481,7 @@ async function loadStoryData(storyId, isNavigation = false) {
                 updateModalUI(currentStoryData);
                 updateProgress();
                 const highlightCommentId = window._activityCommentId || null;
-                await initComments(storyId, 'commentsList', highlightCommentId, true);
+                await initComments(storyId, 'commentsList', highlightCommentId, false);
                 setTimeout(() => updateTranslateButton(), 50);
                 return;
             }
@@ -1463,7 +1492,7 @@ async function loadStoryData(storyId, isNavigation = false) {
                     updateModalUI(currentStoryData);
                     updateProgress();
                     const highlightCommentId = window._activityCommentId || null;
-                    await initComments(storyId, 'commentsList', highlightCommentId, true);
+                    await initComments(storyId, 'commentsList', highlightCommentId, false);
                     setTimeout(() => updateTranslateButton(), 50);
                     return;
                 }
@@ -1532,7 +1561,8 @@ async function loadStoryData(storyId, isNavigation = false) {
         updateProgress();
         
         const highlightCommentId = window._activityCommentId || null;
-        await initComments(storyId, 'commentsList', highlightCommentId, true);
+        // 🔥 NO FORZAR RECARGA - usar caché
+        await initComments(storyId, 'commentsList', highlightCommentId, false);
         
         setTimeout(() => updateTranslateButton(), 100);
         
