@@ -1,6 +1,8 @@
 // ============================================================
 // story-modal.js - Modal para ver historias con navegación 
-// (VERSIÓN CORREGIDA - CON BOTÓN ELIMINAR Y LIMPIEZA SEGURA)
+// (VERSIÓN CORREGIDA - SOPORTE MÚLTIPLES SOLICITUDES + ENCUESTAS)
+// 🔥 NUEVO: SOPORTE PARA SUBIR ARCHIVOS EN COMENTARIOS (SOLO DUEÑO)
+// 🔥 CORREGIDO: renderComments importado y usado correctamente
 // ============================================================
 
 import {
@@ -9,7 +11,12 @@ import {
 } from './auth.js';
 
 import { formatNumber } from './utils.js';
-import { loadComments, initComments, addCommentToCache, addReplyToCache, updateCommentLikes, updateCommentsUIWithoutReload } from './story-comments.js';
+import { 
+    loadComments, initComments, addCommentToCache, addReplyToCache, 
+    updateCommentLikes, updateCommentsUIWithoutReload,
+    uploadCommentFile, addComment,
+    renderComments  // 🔥 IMPORTAR renderComments
+} from './story-comments.js';
 
 const API_URL = window.location.origin;
 let currentStoryId = null;
@@ -19,9 +26,177 @@ let currentStoriesList = [];
 let currentStoryIndex = 0;
 let isNavigating = false;
 let userLanguage = 'es';
+let isTranslating = false;
 
-// Caché de traducciones
+// Caché de traducciones en memoria
 let translationCache = {};
+
+// 🔥 CLAVE PARA localStorage
+const TRANSLATION_STORAGE_KEY = 'vyin_translations';
+
+// ============================================================
+// 🔥 FUNCIONES DE PERSISTENCIA EN localStorage
+// ============================================================
+
+function loadTranslationsFromStorage() {
+    try {
+        const stored = localStorage.getItem(TRANSLATION_STORAGE_KEY);
+        if (stored) {
+            const parsed = JSON.parse(stored);
+            const now = Date.now();
+            const valid = {};
+            let count = 0;
+            for (const [key, value] of Object.entries(parsed)) {
+                if (value.timestamp && now - value.timestamp < 7 * 24 * 60 * 60 * 1000) {
+                    valid[key] = value;
+                    count++;
+                }
+            }
+            translationCache = valid;
+            console.log(`📦 [STORAGE] ${count} traducciones cargadas de localStorage`);
+            return valid;
+        }
+    } catch (error) {
+        console.warn('⚠️ Error cargando traducciones de localStorage:', error);
+    }
+    return {};
+}
+
+function saveTranslationsToStorage() {
+    try {
+        const serializable = {};
+        const now = Date.now();
+        let count = 0;
+        for (const [key, value] of Object.entries(translationCache)) {
+            if (value.timestamp && now - value.timestamp < 7 * 24 * 60 * 60 * 1000) {
+                serializable[key] = {
+                    translated: value.translated,
+                    original: value.original,
+                    engine: value.engine || 'M2M100',
+                    license: value.license || 'MIT',
+                    language: value.language || 'es',
+                    timestamp: value.timestamp || now
+                };
+                count++;
+            }
+        }
+        localStorage.setItem(TRANSLATION_STORAGE_KEY, JSON.stringify(serializable));
+        console.log(`💾 [STORAGE] ${count} traducciones guardadas`);
+    } catch (error) {
+        console.warn('⚠️ Error guardando traducciones:', error);
+    }
+}
+
+function getTranslationFromCache(storyId, language) {
+    const cacheKey = `${storyId}_${language}`;
+    const cached = translationCache[cacheKey];
+    if (cached && cached.translated) {
+        if (cached.timestamp && Date.now() - cached.timestamp < 7 * 24 * 60 * 60 * 1000) {
+            return cached;
+        }
+        delete translationCache[cacheKey];
+        saveTranslationsToStorage();
+    }
+    return null;
+}
+
+function saveTranslationToCache(storyId, language, translated, original, engine = 'M2M100') {
+    const cacheKey = `${storyId}_${language}`;
+    translationCache[cacheKey] = {
+        translated: translated,
+        original: original,
+        engine: engine,
+        license: 'MIT',
+        language: language,
+        timestamp: Date.now()
+    };
+    saveTranslationsToStorage();
+    console.log(`💾 [CACHE] Traducción guardada para ${storyId} (${language})`);
+}
+
+// ============================================================
+// 🔥 FUNCIÓN PARA ACTUALIZAR EL BOTÓN DE TRADUCCIÓN
+// ============================================================
+
+function updateTranslateButton() {
+    const translateBtn = document.getElementById('modalTranslateBtn');
+    if (!translateBtn) {
+        console.warn('⚠️ [TRANSLATE] Botón no encontrado');
+        return;
+    }
+
+    if (!currentStoryData || !currentStoryId) {
+        translateBtn.style.display = 'none';
+        translateBtn.innerHTML = '<i class="fas fa-language"></i> Traducir';
+        translateBtn.disabled = false;
+        return;
+    }
+
+    if (isTranslating) {
+        translateBtn.style.display = 'inline-flex';
+        translateBtn.innerHTML = '<i class="fas fa-spinner fa-pulse"></i> Traduciendo...';
+        translateBtn.disabled = true;
+        return;
+    }
+
+    let contentLanguage = currentStoryData.language || currentStoryData.originalLanguage || 'es';
+    
+    if (currentStoryData.translated === true && currentStoryData._originalLanguage) {
+        contentLanguage = currentStoryData._originalLanguage;
+    }
+    
+    if (currentStoryData.showingOriginal === true && currentStoryData._originalLanguage) {
+        contentLanguage = currentStoryData._originalLanguage;
+    }
+
+    const isDifferentLanguage = contentLanguage !== userLanguage;
+    const hasText = currentStoryData.textContent && currentStoryData.textContent.trim().length > 0;
+    const isTranslated = currentStoryData.translated === true;
+    const isShowingOriginal = currentStoryData.showingOriginal === true;
+
+    if (!isDifferentLanguage || !hasText || currentStoryData.mediaType === 'survey') {
+        translateBtn.style.display = 'none';
+        const userNameEl = document.getElementById('modalUserName');
+        if (userNameEl) {
+            const existingBadge = userNameEl.querySelector('.translation-badge-modal');
+            if (existingBadge) existingBadge.remove();
+        }
+        return;
+    }
+
+    translateBtn.style.display = 'inline-flex';
+    translateBtn.disabled = false;
+
+    let btnText, btnIcon;
+    
+    if (isTranslated && !isShowingOriginal) {
+        btnText = 'Mostrar original';
+        btnIcon = 'fa-undo';
+    } else {
+        btnText = 'Traducir';
+        btnIcon = 'fa-language';
+    }
+    
+    translateBtn.innerHTML = `<i class="fas ${btnIcon}"></i> ${btnText}`;
+    
+    const userNameEl = document.getElementById('modalUserName');
+    if (userNameEl) {
+        let existingBadge = userNameEl.querySelector('.translation-badge-modal');
+        
+        if (isTranslated && !isShowingOriginal) {
+            if (!existingBadge) {
+                const badge = document.createElement('span');
+                badge.className = 'translation-badge-modal';
+                badge.style.cssText = 'font-size:9px;color:rgba(192,132,252,0.7);margin-left:6px;';
+                const engine = currentStoryData._translationCache?.engine || 'M2M100';
+                badge.innerHTML = `<i class="fas fa-language"></i> Traducido (${engine})`;
+                userNameEl.appendChild(badge);
+            }
+        } else {
+            if (existingBadge) existingBadge.remove();
+        }
+    }
+}
 
 // ============================================================
 // ABRIR MODAL
@@ -38,13 +213,13 @@ export async function openStoryModal(storyId, storiesList = null, fromProfile = 
     const currentUser = getCurrentUser();
     userLanguage = currentUser?.language || 'es';
 
-    // 🔥 AÑADIDO: Si el modal ya está abierto con la misma historia, solo mostrarlo
     if (isModalOpen && currentStoryId === storyId) {
         const overlay = document.getElementById('storyModalOverlay');
         if (overlay) {
             overlay.style.display = 'flex';
             overlay.classList.add('active');
         }
+        setTimeout(() => updateTranslateButton(), 50);
         return;
     }
 
@@ -58,7 +233,7 @@ export async function openStoryModal(storyId, storiesList = null, fromProfile = 
         window._fromProfileModal = true;
         window._profileContextUserId = profileUserId;
     } else if (window._fromExploreModal) {
-        // Mantener contexto de explorador
+        // Mantener contexto
     } else if (window._fromActivityModal) {
         console.log('📱 [STORY-MODAL] Abriendo desde actividad');
     } else {
@@ -79,6 +254,7 @@ export async function openStoryModal(storyId, storiesList = null, fromProfile = 
 
     currentStoryId = storyId;
     isModalOpen = true;
+    isTranslating = false;
 
     const overlay = document.getElementById('storyModalOverlay');
     if (!overlay) {
@@ -105,7 +281,7 @@ export async function openStoryModal(storyId, storiesList = null, fromProfile = 
 }
 
 // ============================================================
-// CERRAR MODAL - CON LIMPIEZA DE CONTENIDO Y VERIFICACIONES
+// CERRAR MODAL
 // ============================================================
 
 export function closeStoryModal() {
@@ -117,6 +293,10 @@ export function closeStoryModal() {
     currentStoriesList = [];
     currentStoryIndex = 0;
     isNavigating = false;
+    isTranslating = false;
+
+    // Limpiar archivo pendiente
+    window._pendingCommentFile = null;
 
     const video = document.getElementById('storyVideo');
     if (video) {
@@ -137,7 +317,6 @@ export function closeStoryModal() {
         overlay.style.zIndex = '';
     }
     
-    // 🔥 LIMPIAR CONTENIDO DEL MODAL CON VERIFICACIONES DE SEGURIDAD
     const mediaContainer = document.getElementById('modalMedia');
     if (mediaContainer) {
         mediaContainer.innerHTML = `
@@ -148,7 +327,6 @@ export function closeStoryModal() {
         `;
     }
     
-    // Limpiar comentarios
     const commentsList = document.getElementById('commentsList');
     if (commentsList) {
         commentsList.innerHTML = `
@@ -159,7 +337,6 @@ export function closeStoryModal() {
         `;
     }
     
-    // 🔥 Limpiar estadísticas - CON VERIFICACIONES
     const viewsEl = document.getElementById('modalViews');
     if (viewsEl) viewsEl.textContent = '0';
     
@@ -172,18 +349,15 @@ export function closeStoryModal() {
     const commentsCountEl = document.getElementById('commentsCount');
     if (commentsCountEl) commentsCountEl.textContent = '0';
     
-    // Limpiar caption
     const caption = document.getElementById('modalCaption');
     if (caption) {
         caption.innerHTML = '';
         caption.style.display = 'none';
     }
     
-    // 🔥 Limpiar info de usuario - CON VERIFICACIONES
     const userNameEl = document.getElementById('modalUserName');
     if (userNameEl) {
         userNameEl.textContent = 'Cargando...';
-        // Limpiar badge de traducción
         const badge = userNameEl.querySelector('.translation-badge-modal');
         if (badge) badge.remove();
     }
@@ -194,7 +368,6 @@ export function closeStoryModal() {
     const avatarEl = document.getElementById('modalAvatar');
     if (avatarEl) avatarEl.src = '';
     
-    // 🔥 Limpiar botones - CON VERIFICACIONES
     const likeBtn = document.getElementById('modalLikeBtn');
     if (likeBtn) {
         likeBtn.classList.remove('liked');
@@ -209,42 +382,45 @@ export function closeStoryModal() {
     const translateBtn = document.getElementById('modalTranslateBtn');
     if (translateBtn) {
         translateBtn.style.display = 'none';
+        translateBtn.innerHTML = '<i class="fas fa-language"></i> Traducir';
+        translateBtn.disabled = false;
     }
     
-    // Limpiar input de comentario
     const commentInput = document.getElementById('commentInput');
     if (commentInput) {
         commentInput.value = '';
         commentInput.disabled = false;
+        commentInput.placeholder = 'Escribe un comentario...';
     }
     
-    // Limpiar botón de enviar
     const sendBtn = document.getElementById('sendCommentBtn');
     if (sendBtn) {
         sendBtn.disabled = false;
         sendBtn.textContent = 'Enviar';
     }
     
-    // Limpiar progreso
     const progressContainer = document.getElementById('storyProgress');
     if (progressContainer) {
         progressContainer.innerHTML = '';
         progressContainer.style.display = 'none';
     }
     
-    // Limpiar flechas de navegación
     const prevArrow = document.getElementById('navPrevArrow');
     const nextArrow = document.getElementById('navNextArrow');
     if (prevArrow) prevArrow.style.display = 'none';
     if (nextArrow) nextArrow.style.display = 'none';
     
-    // 🔥 Limpiar subtitles indicator
     const subtitlesIndicator = document.getElementById('subtitlesIndicator');
     if (subtitlesIndicator) {
         subtitlesIndicator.style.display = 'none';
     }
     
-    // Limpiar variables globales
+    // 🔥 OCULTAR BOTÓN DE ARCHIVO
+    const attachBtn = document.getElementById('commentAttachBtn');
+    if (attachBtn) {
+        attachBtn.style.display = 'none';
+    }
+    
     window._storyOwnerId = null;
     window._modalUserId = null;
     
@@ -284,6 +460,9 @@ export async function navigateStory(direction) {
     
     if (newStory) {
         console.log(`🔄 Navegando a historia ${newIndex + 1}/${currentStoriesList.length}: ${newStory.id}`);
+        isTranslating = false;
+        // Limpiar archivo pendiente al navegar
+        window._pendingCommentFile = null;
         await loadStoryData(newStory.id, true);
     }
     
@@ -381,6 +560,9 @@ function createModalHTML() {
                             </div>
                         </div>
                         <div class="comment-input-wrapper">
+                            <button class="comment-attach-btn" id="commentAttachBtn" style="display:none;" title="Adjuntar archivo">
+                                <i class="fas fa-paperclip"></i>
+                            </button>
                             <input type="text" id="commentInput" placeholder="Escribe un comentario..." maxlength="500" />
                             <button id="sendCommentBtn">Enviar</button>
                         </div>
@@ -394,6 +576,15 @@ function createModalHTML() {
     div.innerHTML = html;
     document.body.appendChild(div.firstElementChild);
     console.log('📱 [STORY-MODAL] HTML creado e insertado');
+
+    // 🔥 INPUT OCULTO PARA SUBIR ARCHIVOS
+    const fileInput = document.createElement('input');
+    fileInput.type = 'file';
+    fileInput.id = 'commentFileInput';
+    fileInput.className = 'file-input-hidden';
+    fileInput.accept = 'image/*,video/*,audio/*,.pdf,.doc,.docx,.txt';
+    fileInput.multiple = false;
+    document.body.appendChild(fileInput);
 
     document.addEventListener('keydown', (e) => {
         if (e.key === 'Escape' && isModalOpen) {
@@ -434,7 +625,7 @@ function setupModalEvents() {
         if (!currentStoryId) return;
         const url = `${window.location.origin}/story/${currentStoryId}`;
         if (navigator.share) {
-            navigator.share({ title: 'Vyin Social', url });
+            navigator.share({ title: 'Vygora - Historia', url });
         } else {
             navigator.clipboard?.writeText(url).then(() => {
                 showToast('📋 Enlace copiado');
@@ -442,22 +633,29 @@ function setupModalEvents() {
         }
     });
 
-    // 🔥 BOTÓN ELIMINAR HISTORIA
     document.getElementById('modalDeleteBtn')?.addEventListener('click', async () => {
         if (!currentStoryId) return;
         await handleDeleteStory();
     });
 
-    // BOTÓN DE TRADUCCIÓN
-    document.getElementById('modalTranslateBtn')?.addEventListener('click', async () => {
-        if (!currentStoryId) return;
-        await toggleTranslation();
-    });
+    const translateBtn = document.getElementById('modalTranslateBtn');
+    if (translateBtn) {
+        translateBtn.addEventListener('click', async (e) => {
+            e.stopPropagation();
+            if (!currentStoryId || !currentStoryData) {
+                showToast('Error: historia no cargada', true);
+                return;
+            }
+            if (isTranslating) {
+                console.log('⏳ Ya está traduciendo...');
+                return;
+            }
+            await toggleTranslation();
+        });
+    }
 
-    // 🔥 CONFIGURAR ENVÍO DE COMENTARIO - Evento directo al botón
     const sendBtn = document.getElementById('sendCommentBtn');
     if (sendBtn) {
-        // Remover listeners anteriores clonando
         const newSendBtn = sendBtn.cloneNode(true);
         sendBtn.parentNode.replaceChild(newSendBtn, sendBtn);
         newSendBtn.addEventListener('click', handleSendComment);
@@ -474,6 +672,9 @@ function setupModalEvents() {
             }
         });
     }
+
+    // 🔥 CONFIGURAR SUBIDA DE ARCHIVO
+    setupCommentFileUpload();
 
     let touchStartX = 0;
     let touchStartY = 0;
@@ -498,6 +699,80 @@ function setupModalEvents() {
                 navigateStory(-1);
             }
         }
+    });
+}
+
+// ============================================================
+// 🔥 CONFIGURAR SUBIDA DE ARCHIVO EN COMENTARIOS
+// ============================================================
+
+function setupCommentFileUpload() {
+    const attachBtn = document.getElementById('commentAttachBtn');
+    const fileInput = document.getElementById('commentFileInput');
+    
+    if (!attachBtn || !fileInput) return;
+    
+    // Determinar si el usuario actual es el dueño de la historia
+    const currentUser = getCurrentUser();
+    const isStoryOwner = currentUser?.id === currentStoryData?.userId;
+    
+    // Solo mostrar botón si es dueño de la historia
+    if (isStoryOwner && currentStoryData) {
+        attachBtn.style.display = 'flex';
+    } else {
+        attachBtn.style.display = 'none';
+        return;
+    }
+    
+    // Remover listeners antiguos
+    const newAttachBtn = attachBtn.cloneNode(true);
+    attachBtn.parentNode.replaceChild(newAttachBtn, attachBtn);
+    
+    newAttachBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        fileInput.click();
+    });
+    
+    // Manejar selección de archivo
+    const newFileInput = fileInput.cloneNode(true);
+    fileInput.parentNode.replaceChild(newFileInput, fileInput);
+    
+    newFileInput.addEventListener('change', async (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        
+        // Validar tamaño (máx 20MB)
+        if (file.size > 20 * 1024 * 1024) {
+            showToast('El archivo no puede superar los 20MB', true);
+            newFileInput.value = '';
+            return;
+        }
+        
+        showToast('📤 Subiendo archivo...');
+        
+        const result = await uploadCommentFile(currentStoryId, file);
+        
+        if (result && result.success) {
+            // Guardar datos del archivo para enviar con el comentario
+            window._pendingCommentFile = {
+                fileUrl: result.fileUrl,
+                filename: result.filename,
+                originalName: result.originalName,
+                size: result.size,
+                mimetype: result.mimetype
+            };
+            
+            // Mostrar indicador de archivo adjunto
+            showToast(`📎 ${result.originalName} adjuntado`);
+            
+            // Actualizar placeholder del input
+            const commentInput = document.getElementById('commentInput');
+            if (commentInput) {
+                commentInput.placeholder = `📎 ${result.originalName} - Escribe un comentario...`;
+            }
+        }
+        
+        newFileInput.value = '';
     });
 }
 
@@ -536,18 +811,17 @@ async function handleDeleteStory() {
         if (res.ok) {
             showToast('🗑️ Historia eliminada');
             
-            // Eliminar la historia de la lista actual
             if (currentStoriesList && currentStoriesList.length > 0) {
                 const index = currentStoriesList.findIndex(s => s.id === currentStoryId);
                 if (index !== -1) {
                     currentStoriesList.splice(index, 1);
                     
-                    // Si hay más historias, navegar a la siguiente
                     if (currentStoriesList.length > 0) {
                         const nextIndex = Math.min(index, currentStoriesList.length - 1);
                         const nextStory = currentStoriesList[nextIndex];
                         if (nextStory) {
                             currentStoryIndex = nextIndex;
+                            isTranslating = false;
                             await loadStoryData(nextStory.id, true);
                             return;
                         }
@@ -555,7 +829,6 @@ async function handleDeleteStory() {
                 }
             }
             
-            // Si no hay más historias, cerrar el modal
             closeStoryModal();
         } else {
             const data = await res.json();
@@ -568,7 +841,7 @@ async function handleDeleteStory() {
 }
 
 // ============================================================
-// 🔥 ENVIAR COMENTARIO - CORREGIDO DEFINITIVO
+// 🔥 ENVIAR COMENTARIO (CON SOPORTE PARA ARCHIVO) - CORREGIDO
 // ============================================================
 
 async function handleSendComment() {
@@ -576,8 +849,10 @@ async function handleSendComment() {
     if (!input) return;
     
     const content = input.value.trim();
-    if (!content) {
-        showToast('Escribe un comentario', true);
+    const fileData = window._pendingCommentFile || null;
+    
+    if (!content && !fileData) {
+        showToast('Escribe un comentario o adjunta un archivo', true);
         return;
     }
 
@@ -594,7 +869,6 @@ async function handleSendComment() {
 
     const sendBtn = document.getElementById('sendCommentBtn');
     
-    // 🔥 DESHABILITAR INPUT Y BOTÓN
     input.disabled = true;
     if (sendBtn) {
         sendBtn.disabled = true;
@@ -602,38 +876,30 @@ async function handleSendComment() {
     }
 
     try {
-        const res = await fetch(`${API_URL}/api/stories/${currentStoryId}/comments`, {
-            method: 'POST',
-            headers: {
-                'Authorization': `Bearer ${token}`,
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({ content })
-        });
-
-        const data = await res.json();
-
-        if (res.ok) {
+        // Usar addComment con fileData
+        const newComment = await addComment(currentStoryId, content, null, fileData);
+        
+        if (newComment) {
             input.value = '';
-            
-            // Actualizar contador
+            // Limpiar archivo pendiente
+            window._pendingCommentFile = null;
+            // Restaurar placeholder
+            input.placeholder = 'Escribe un comentario...';
             updateCommentCount(1);
             
-            // ACTUALIZAR EL CACHÉ DE COMENTARIOS
-            addCommentToCache(currentStoryId, data);
-            
-            // 🔥 ACTUALIZAR UI SIN RECARGAR EL BOTÓN
-            updateCommentsUIWithoutReload(currentStoryId);
-            
-            showToast('💬 Comentario enviado');
-        } else {
-            showToast(data.error || 'Error al enviar comentario', true);
+            // 🔥 RECARGAR COMENTARIOS Y RENDERIZAR
+            const comments = await loadComments(currentStoryId, true);
+            const currentUser = getCurrentUser();
+            const container = document.getElementById('commentsList');
+            if (container) {
+                renderComments(comments, currentStoryId, currentUser?.id, container);
+            }
+            showToast(fileData ? '📎 Comentario con archivo adjunto' : '💬 Comentario enviado');
         }
     } catch (error) {
         console.error('Error enviando comentario:', error);
         showToast('Error al enviar comentario', true);
     } finally {
-        // 🔥 REHABILITAR INPUT Y BOTÓN
         input.disabled = false;
         if (sendBtn) {
             sendBtn.disabled = false;
@@ -644,7 +910,7 @@ async function handleSendComment() {
 }
 
 // ============================================================
-// 🔥 ENVIAR RESPUESTA - CORREGIDO
+// 🔥 ENVIAR RESPUESTA
 // ============================================================
 
 async function handleSendReply(storyId, commentId) {
@@ -689,16 +955,9 @@ async function handleSendReply(storyId, commentId) {
         if (res.ok) {
             input.value = '';
             wrapper.style.display = 'none';
-
-            // Actualizar contador
             updateCommentCount(1);
-
-            // ACTUALIZAR EL CACHÉ DE COMENTARIOS
             addReplyToCache(storyId, commentId, data);
-            
-            // ACTUALIZAR UI SIN RECARGAR EL BOTÓN
             updateCommentsUIWithoutReload(storyId);
-            
             showToast('💬 Respuesta enviada');
         } else {
             showToast(data.error || 'Error al enviar respuesta', true);
@@ -707,7 +966,6 @@ async function handleSendReply(storyId, commentId) {
         console.error('Error enviando respuesta:', error);
         showToast('Error al enviar respuesta', true);
     } finally {
-        // 🔥 REHABILITAR INPUT Y BOTÓN
         input.disabled = false;
         if (sendBtn) {
             sendBtn.disabled = false;
@@ -808,7 +1066,15 @@ function formatVTTTime(seconds) {
 // ============================================================
 
 async function toggleTranslation() {
-    if (!currentStoryId || !currentStoryData) return;
+    if (!currentStoryId || !currentStoryData) {
+        showToast('Error: historia no cargada', true);
+        return;
+    }
+    
+    if (isTranslating) {
+        console.log('⏳ Ya está traduciendo...');
+        return;
+    }
     
     const token = getToken();
     if (!token) {
@@ -817,20 +1083,18 @@ async function toggleTranslation() {
     }
 
     const translateBtn = document.getElementById('modalTranslateBtn');
+    if (!translateBtn) return;
     
-    const contentLanguage = currentStoryData.language || currentStoryData.originalLanguage || 'es';
-    const isDifferentLanguage = contentLanguage !== userLanguage;
+    const originalLanguage = currentStoryData._originalLanguage || currentStoryData.language || currentStoryData.originalLanguage || 'es';
+    const isDifferentLanguage = originalLanguage !== userLanguage;
     
     if (!isDifferentLanguage) {
         showToast('📝 El contenido ya está en tu idioma');
-        if (translateBtn) {
-            translateBtn.style.display = 'none';
-        }
+        translateBtn.style.display = 'none';
         return;
     }
     
-    // Si ya está traducida, mostrar original
-    if (currentStoryData.translated && currentStoryData._originalTextContent) {
+    if (currentStoryData.translated === true && currentStoryData._originalTextContent) {
         console.log('📝 Mostrando original');
         
         const originalData = {
@@ -838,94 +1102,69 @@ async function toggleTranslation() {
             textContent: currentStoryData._originalTextContent,
             caption: currentStoryData._originalCaption || currentStoryData.caption,
             translated: false,
-            showingOriginal: true
+            showingOriginal: true,
+            language: originalLanguage,
+            _originalLanguage: originalLanguage,
+            _translationCache: currentStoryData._translationCache || null
         };
         
         currentStoryData = originalData;
-        translationCache[currentStoryId] = originalData;
         
         updateTextContentOnly(originalData);
-        
-        if (translateBtn) {
-            translateBtn.innerHTML = '<i class="fas fa-language"></i> Traducir';
-            translateBtn.style.display = 'inline-flex';
-            translateBtn.disabled = false;
-        }
-        
-        const userNameEl = document.getElementById('modalUserName');
-        if (userNameEl) {
-            const existingBadge = userNameEl.querySelector('.translation-badge-modal');
-            if (existingBadge) existingBadge.remove();
-        }
+        updateModalStats(originalData);
+        updateTranslateButton();
         
         showToast('📝 Mostrando original');
         return;
     }
 
-    // Verificar caché en memoria
-    const cacheKey = `${currentStoryId}_${userLanguage}`;
-    if (translationCache[cacheKey] && translationCache[cacheKey].translated) {
-        console.log('📦 Usando traducción desde caché');
-        const cached = translationCache[cacheKey];
+    const cached = getTranslationFromCache(currentStoryId, userLanguage);
+    
+    if (cached) {
+        console.log('📦 Usando traducción desde caché (persistente)');
         const translatedData = {
             ...currentStoryData,
             textContent: cached.translated,
-            _originalTextContent: cached.original,
+            _originalTextContent: cached.original || currentStoryData.textContent,
             _originalCaption: currentStoryData.caption,
             translated: true,
             showingOriginal: false,
-            originalLanguage: contentLanguage,
+            _originalLanguage: originalLanguage,
             language: userLanguage,
+            originalLanguage: originalLanguage,
             _translationCache: cached
         };
         
         currentStoryData = translatedData;
-        translationCache[currentStoryId] = translatedData;
         
         updateTextContentOnly(translatedData);
-        
-        if (translateBtn) {
-            translateBtn.innerHTML = '<i class="fas fa-undo"></i> Mostrar original';
-            translateBtn.style.display = 'inline-flex';
-            translateBtn.disabled = false;
-        }
-        
-        const userNameEl = document.getElementById('modalUserName');
-        if (userNameEl) {
-            const existingBadge = userNameEl.querySelector('.translation-badge-modal');
-            if (existingBadge) existingBadge.remove();
-            
-            const badge = document.createElement('span');
-            badge.className = 'translation-badge-modal';
-            badge.style.cssText = 'font-size:9px;color:rgba(192,132,252,0.7);margin-left:6px;';
-            badge.innerHTML = `<i class="fas fa-language"></i> Traducido (caché)`;
-            userNameEl.appendChild(badge);
-        }
+        updateModalStats(translatedData);
+        updateTranslateButton();
         
         showToast('✅ Traducción cargada (caché)');
         return;
     }
 
-    // Si no está en caché, traducir
-    if (translateBtn) {
-        translateBtn.innerHTML = '<i class="fas fa-spinner fa-pulse"></i> Traduciendo...';
-        translateBtn.disabled = true;
-    }
+    isTranslating = true;
+    
+    translateBtn.style.display = 'inline-flex';
+    translateBtn.innerHTML = '<i class="fas fa-spinner fa-pulse"></i> Traduciendo...';
+    translateBtn.disabled = true;
 
     try {
         let textToTranslate = currentStoryData.textContent || currentStoryData.caption || '';
         
-        if (!textToTranslate) {
+        if (!textToTranslate || textToTranslate.trim().length === 0) {
             showToast('No hay texto para traducir', true);
-            if (translateBtn) {
-                translateBtn.style.display = 'none';
-            }
+            translateBtn.style.display = 'none';
+            translateBtn.disabled = false;
+            isTranslating = false;
             return;
         }
 
         console.log('🌐 Traduciendo texto:', textToTranslate.substring(0, 50) + '...');
         console.log(`🌐 Al idioma: ${userLanguage}`);
-        console.log(`📝 Idioma del contenido: ${contentLanguage}`);
+        console.log(`📝 Idioma original: ${originalLanguage}`);
 
         const res = await fetch(`${API_URL}/api/vyin/translate`, {
             method: 'POST',
@@ -936,7 +1175,7 @@ async function toggleTranslation() {
             body: JSON.stringify({ 
                 text: textToTranslate,
                 targetLanguage: userLanguage,
-                sourceLanguage: contentLanguage
+                sourceLanguage: originalLanguage
             })
         });
 
@@ -948,65 +1187,58 @@ async function toggleTranslation() {
                            data.translated !== data.original &&
                            data.translated.trim() !== data.original.trim();
         
+        isTranslating = false;
+        translateBtn.disabled = false;
+        
         if (isDifferent) {
-            const cacheData = {
-                translated: data.translated,
-                original: data.original,
-                engine: data.engine || 'M2M100',
-                license: data.license || 'MIT',
-                language: userLanguage
-            };
-            translationCache[cacheKey] = cacheData;
+            saveTranslationToCache(
+                currentStoryId,
+                userLanguage,
+                data.translated,
+                data.original || textToTranslate,
+                data.engine || 'M2M100'
+            );
             
             const translatedData = {
                 ...currentStoryData,
                 textContent: data.translated,
-                _originalTextContent: data.original,
+                _originalTextContent: data.original || textToTranslate,
                 _originalCaption: currentStoryData.caption,
                 translated: true,
                 showingOriginal: false,
-                originalLanguage: contentLanguage,
+                _originalLanguage: originalLanguage,
                 language: userLanguage,
+                originalLanguage: originalLanguage,
                 translationEngine: data.engine || 'M2M100',
-                _translationCache: cacheData
+                _translationCache: {
+                    translated: data.translated,
+                    original: data.original || textToTranslate,
+                    engine: data.engine || 'M2M100',
+                    license: 'MIT',
+                    language: userLanguage,
+                    timestamp: Date.now()
+                }
             };
             
-            translationCache[currentStoryId] = translatedData;
             currentStoryData = translatedData;
             
             updateTextContentOnly(translatedData);
-            
-            if (translateBtn) {
-                translateBtn.innerHTML = '<i class="fas fa-undo"></i> Mostrar original';
-                translateBtn.style.display = 'inline-flex';
-                translateBtn.disabled = false;
-            }
-            
-            const userNameEl = document.getElementById('modalUserName');
-            if (userNameEl) {
-                const existingBadge = userNameEl.querySelector('.translation-badge-modal');
-                if (existingBadge) existingBadge.remove();
-                
-                const badge = document.createElement('span');
-                badge.className = 'translation-badge-modal';
-                badge.style.cssText = 'font-size:9px;color:rgba(192,132,252,0.7);margin-left:6px;';
-                const engine = data.engine || 'M2M100';
-                badge.innerHTML = `<i class="fas fa-language"></i> Traducido (${engine})`;
-                userNameEl.appendChild(badge);
-            }
+            updateModalStats(translatedData);
+            updateTranslateButton();
             
             showToast(`✅ Traducido al ${data.languageInfo?.name || userLanguage}`);
         } else {
             console.warn('⚠️ La traducción no cambió el texto');
             showToast('📝 El texto ya está en el idioma seleccionado');
+            translateBtn.style.display = 'none';
+            updateTranslateButton();
         }
     } catch (error) {
         console.error('❌ Error traduciendo:', error);
         showToast('Error al traducir', true);
-    } finally {
-        if (translateBtn) {
-            translateBtn.disabled = false;
-        }
+        isTranslating = false;
+        translateBtn.disabled = false;
+        updateTranslateButton();
     }
 }
 
@@ -1023,7 +1255,7 @@ function updateTextContentOnly(updatedData) {
         if (textContentDiv) {
             textContentDiv.innerHTML = escapeHtml(updatedData.textContent);
             console.log('✅ textContent actualizado');
-        } else if (!mediaContainer.querySelector('img') && !mediaContainer.querySelector('video')) {
+        } else if (!mediaContainer.querySelector('img') && !mediaContainer.querySelector('video') && !mediaContainer.querySelector('.survey-container-modal')) {
             const bgColor = updatedData.textBgColor || '#1a1a2e';
             mediaContainer.innerHTML = `
                 <div class="text-content" style="background:${bgColor}">
@@ -1036,7 +1268,174 @@ function updateTextContentOnly(updatedData) {
 }
 
 // ============================================================
-// CARGAR DATOS DE LA HISTORIA - VERSIÓN CORREGIDA
+// 🔥 ACTUALIZAR ESTADÍSTICAS DEL MODAL
+// ============================================================
+
+function updateModalStats(story) {
+    const views = story.views?.length || 0;
+    const likes = story.likes?.length || 0;
+    const comments = story.comments?.length || 0;
+
+    const viewsEl = document.getElementById('modalViews');
+    if (viewsEl) viewsEl.textContent = formatNumber(views);
+    
+    const likesEl = document.getElementById('modalLikes');
+    if (likesEl) likesEl.textContent = formatNumber(likes);
+    
+    const commentsEl = document.getElementById('modalComments');
+    if (commentsEl) commentsEl.textContent = formatNumber(comments);
+    
+    const commentsCountEl = document.getElementById('commentsCount');
+    if (commentsCountEl) commentsCountEl.textContent = formatNumber(comments);
+}
+
+// ============================================================
+// 🔥 RENDERIZAR ENCUESTA EN EL MODAL
+// ============================================================
+
+function renderSurveyInModal(story) {
+    const mediaContainer = document.getElementById('modalMedia');
+    if (!mediaContainer) return;
+
+    const survey = story.surveyData || {};
+    const surveyType = survey.surveyType || 'poll';
+    const question = survey.question || 'Encuesta';
+    
+    let surveyContent = '';
+    
+    if (surveyType === 'poll') {
+        const options = survey.options || [];
+        const totalVotes = options.reduce((sum, o) => sum + (o.votes || 0), 0);
+        const currentUser = getCurrentUser();
+        const hasVoted = survey.voters?.includes(currentUser?.id) || false;
+        
+        surveyContent = `
+            <div class="survey-container-modal">
+                <div class="survey-question-modal">${escapeHtml(question)}</div>
+                <div class="survey-options-modal">
+                    ${options.map(opt => {
+                        const percentage = totalVotes > 0 ? Math.round((opt.votes || 0) / totalVotes * 100) : 0;
+                        const color = opt.color || '#c084fc';
+                        const isVoted = hasVoted;
+                        return `
+                            <div class="survey-option-modal ${isVoted ? 'voted' : ''}" 
+                                 data-option-id="${opt.id}" 
+                                 onclick="${isVoted ? '' : `window.voteSurvey('${story.id}', '${opt.id}')`}"
+                                 style="${isVoted ? 'cursor:default;' : 'cursor:pointer;'}">
+                                <div class="survey-option-label-modal">${escapeHtml(opt.label)}</div>
+                                <div class="survey-option-bar-modal">
+                                    <div class="survey-option-fill-modal" style="width:${percentage}%;background:${color}"></div>
+                                </div>
+                                <div class="survey-option-stats-modal">${percentage}% (${opt.votes || 0})</div>
+                            </div>
+                        `;
+                    }).join('')}
+                </div>
+                <div class="survey-total-modal">
+                    ${hasVoted ? '✅ Ya votaste' : '🔘 Haz clic en una opción para votar'} · ${totalVotes} ${totalVotes === 1 ? 'voto' : 'votos'}
+                </div>
+            </div>
+        `;
+    } else if (surveyType === 'stats') {
+        const statsData = survey.statsData || [];
+        const maxValue = Math.max(...statsData.map(d => d.value || 0), 1);
+        
+        surveyContent = `
+            <div class="survey-container-modal survey-stats-modal">
+                <div class="survey-question-modal">${escapeHtml(question)}</div>
+                <div class="survey-stats-bars-modal">
+                    ${statsData.map(stat => {
+                        const percentage = Math.round((stat.value || 0) / maxValue * 100);
+                        const color = stat.color || '#c084fc';
+                        return `
+                            <div class="survey-stat-item-modal">
+                                <div class="survey-stat-label-modal">${escapeHtml(stat.label)}</div>
+                                <div class="survey-stat-bar-modal">
+                                    <div class="survey-stat-fill-modal" style="width:${percentage}%;background:${color}"></div>
+                                </div>
+                                <div class="survey-stat-value-modal">${stat.value || 0}</div>
+                            </div>
+                        `;
+                    }).join('')}
+                </div>
+            </div>
+        `;
+    } else if (surveyType === 'calculation') {
+        const calc = survey.calculation || {};
+        surveyContent = `
+            <div class="survey-container-modal survey-calculation-modal">
+                <div class="survey-question-modal">${escapeHtml(question)}</div>
+                <div class="survey-calc-result-modal">
+                    <span class="survey-calc-label-modal">${escapeHtml(calc.operation || 'Resultado')}</span>
+                    <span class="survey-calc-value-modal">${escapeHtml(calc.result || '0')}</span>
+                    ${calc.formula ? `<div class="survey-calc-formula-modal">${escapeHtml(calc.formula)}</div>` : ''}
+                </div>
+            </div>
+        `;
+    }
+
+    mediaContainer.innerHTML = surveyContent;
+    
+    // Registrar la función de voto globalmente
+    window.voteSurvey = async function(storyId, optionId) {
+        await handleSurveyVote(storyId, optionId);
+    };
+}
+
+// ============================================================
+// 🔥 MANEJAR VOTO EN ENCUESTA
+// ============================================================
+
+async function handleSurveyVote(storyId, optionId) {
+    const token = getToken();
+    if (!token) {
+        showToast('Inicia sesión para votar', true);
+        return;
+    }
+
+    const currentUser = getCurrentUser();
+    if (!currentUser) {
+        showToast('Inicia sesión para votar', true);
+        return;
+    }
+
+    // Verificar si ya votó
+    if (currentStoryData?.surveyData?.voters?.includes(currentUser.id)) {
+        showToast('Ya votaste en esta encuesta', true);
+        return;
+    }
+
+    try {
+        const res = await fetch(`${API_URL}/api/stories/${storyId}/survey/vote`, {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ optionId })
+        });
+
+        const data = await res.json();
+
+        if (res.ok) {
+            showToast('✅ Voto registrado');
+            // Actualizar los datos de la encuesta
+            if (currentStoryData) {
+                currentStoryData.surveyData = data.surveyData;
+                // Re-renderizar la encuesta
+                renderSurveyInModal(currentStoryData);
+            }
+        } else {
+            showToast(data.error || 'Error al votar', true);
+        }
+    } catch (error) {
+        console.error('Error votando:', error);
+        showToast('Error al votar', true);
+    }
+}
+
+// ============================================================
+// CARGAR DATOS DE LA HISTORIA
 // ============================================================
 
 async function loadStoryData(storyId, isNavigation = false) {
@@ -1058,8 +1457,8 @@ async function loadStoryData(storyId, isNavigation = false) {
                 updateModalUI(currentStoryData);
                 updateProgress();
                 const highlightCommentId = window._activityCommentId || null;
-                // 🔥 FORZAR RECARGA DE COMENTARIOS AL ABRIR EL MODAL
                 await initComments(storyId, 'commentsList', highlightCommentId, true);
+                setTimeout(() => updateTranslateButton(), 50);
                 return;
             }
             if (currentStoriesList.length > 0) {
@@ -1069,8 +1468,8 @@ async function loadStoryData(storyId, isNavigation = false) {
                     updateModalUI(currentStoryData);
                     updateProgress();
                     const highlightCommentId = window._activityCommentId || null;
-                    // 🔥 FORZAR RECARGA DE COMENTARIOS AL ABRIR EL MODAL
                     await initComments(storyId, 'commentsList', highlightCommentId, true);
+                    setTimeout(() => updateTranslateButton(), 50);
                     return;
                 }
             }
@@ -1092,40 +1491,55 @@ async function loadStoryData(storyId, isNavigation = false) {
         }
 
         const story = await res.json();
-        currentStoryData = story;
-        currentStoryId = story.id;
         
-        // 🔥 GUARDAR DUEÑO DE LA HISTORIA PARA story-comments
+        const originalLanguage = story.language || story.originalLanguage || 'es';
+        
+        currentStoryData = {
+            ...story,
+            _originalLanguage: originalLanguage,
+            originalLanguage: originalLanguage
+        };
+        currentStoryId = story.id;
+        isTranslating = false;
+        
         window._storyOwnerId = story.userId;
 
-        // Verificar si hay traducción en caché
-        const cacheKey = `${storyId}_${userLanguage}`;
-        if (translationCache[cacheKey] && !story.translated) {
-            console.log('📦 Aplicando traducción desde caché');
+        // Verificar si hay traducción en caché persistente
+        const cachedTranslation = getTranslationFromCache(storyId, userLanguage);
+        if (cachedTranslation && !story.translated && story.mediaType !== 'survey') {
+            console.log('📦 Aplicando traducción desde caché persistente');
             currentStoryData = {
                 ...currentStoryData,
-                textContent: translationCache[cacheKey].translated,
-                _originalTextContent: translationCache[cacheKey].original,
+                textContent: cachedTranslation.translated,
+                _originalTextContent: cachedTranslation.original || currentStoryData.textContent,
                 _originalCaption: currentStoryData.caption,
                 translated: true,
-                _translationCache: translationCache[cacheKey]
+                showingOriginal: false,
+                _originalLanguage: originalLanguage,
+                originalLanguage: originalLanguage,
+                language: userLanguage,
+                _translationCache: cachedTranslation
             };
         }
 
         console.log('📝 Datos de la historia:', {
             id: story.id,
+            mediaType: story.mediaType,
             language: story.language || 'es',
+            originalLanguage: originalLanguage,
             hasTextContent: !!story.textContent,
             hasCaption: !!story.caption,
-            hasTranslation: !!translationCache[cacheKey]
+            hasTranslation: !!cachedTranslation,
+            isSurvey: story.mediaType === 'survey'
         });
 
         updateModalUI(currentStoryData);
         updateProgress();
         
         const highlightCommentId = window._activityCommentId || null;
-        // 🔥 FORZAR RECARGA DE COMENTARIOS SIEMPRE QUE SE ABRE EL MODAL
         await initComments(storyId, 'commentsList', highlightCommentId, true);
+        
+        setTimeout(() => updateTranslateButton(), 100);
         
         await registerView(storyId);
 
@@ -1161,38 +1575,19 @@ function updateModalUI(story) {
     
     window._modalUserId = user.id;
 
-    // 🔥 MOSTRAR/OCULTAR BOTÓN ELIMINAR SEGÚN PROPIETARIO
     const deleteBtn = document.getElementById('modalDeleteBtn');
     if (deleteBtn) {
-        if (isOwner) {
-            deleteBtn.style.display = 'inline-flex';
-        } else {
-            deleteBtn.style.display = 'none';
-        }
-    }
-
-    // Botón de traducción - siempre visible
-    const contentLanguage = story.language || story.originalLanguage || 'es';
-    const isDifferentLanguage = contentLanguage !== userLanguage;
-    const isTranslated = story.translated || false;
-    
-    const translateBtn = document.getElementById('modalTranslateBtn');
-    if (translateBtn) {
-        const hasText = story.textContent && story.textContent.trim().length > 0;
-        
-        if (isDifferentLanguage && hasText) {
-            const btnText = isTranslated ? 'Mostrar original' : 'Traducir';
-            const btnIcon = isTranslated ? 'fa-undo' : 'fa-language';
-            translateBtn.style.display = 'inline-flex';
-            translateBtn.innerHTML = `<i class="fas ${btnIcon}"></i> ${btnText}`;
-            translateBtn.disabled = false;
-        } else {
-            translateBtn.style.display = 'none';
-        }
+        deleteBtn.style.display = isOwner ? 'inline-flex' : 'none';
     }
 
     const mediaContainer = document.getElementById('modalMedia');
     if (mediaContainer) {
+        // 🔥 Si es encuesta, renderizar encuesta
+        if (story.mediaType === 'survey' && story.surveyData) {
+            renderSurveyInModal(story);
+            return;
+        }
+        
         if (story.mediaType === 'image' && story.mediaUrl) {
             mediaContainer.innerHTML = `<img src="${story.mediaUrl}" alt="Historia" loading="lazy" />`;
         } else if (story.mediaType === 'video' && story.mediaUrl) {
@@ -1293,21 +1688,7 @@ function updateModalUI(story) {
         }
     }
 
-    const views = story.views?.length || 0;
-    const likes = story.likes?.length || 0;
-    const comments = story.comments?.length || 0;
-
-    const viewsEl = document.getElementById('modalViews');
-    if (viewsEl) viewsEl.textContent = formatNumber(views);
-    
-    const likesEl = document.getElementById('modalLikes');
-    if (likesEl) likesEl.textContent = formatNumber(likes);
-    
-    const commentsEl = document.getElementById('modalComments');
-    if (commentsEl) commentsEl.textContent = formatNumber(comments);
-    
-    const commentsCountEl = document.getElementById('commentsCount');
-    if (commentsCountEl) commentsCountEl.textContent = formatNumber(comments);
+    updateModalStats(story);
 
     const isLiked = story.likes?.includes(currentUser?.id) || false;
     const likeBtn = document.getElementById('modalLikeBtn');
@@ -1320,6 +1701,11 @@ function updateModalUI(story) {
             likeBtn.innerHTML = '<i class="fas fa-heart"></i> Like';
         }
     }
+    
+    // 🔥 CONFIGURAR BOTÓN DE ARCHIVO SEGÚN DUEÑO
+    setupCommentFileUpload();
+    
+    setTimeout(() => updateTranslateButton(), 50);
 }
 
 // ============================================================
@@ -1442,6 +1828,12 @@ async function handleModalLike() {
 }
 
 // ============================================================
+// 🔥 INICIALIZAR CACHÉ
+// ============================================================
+
+loadTranslationsFromStorage();
+
+// ============================================================
 // FUNCIONES GLOBALES
 // ============================================================
 
@@ -1450,6 +1842,9 @@ window.closeStoryModal = closeStoryModal;
 window.navigateStory = navigateStory;
 window.handleSendReply = handleSendReply;
 window.handleSendComment = handleSendComment;
+window.voteSurvey = async function(storyId, optionId) {
+    await handleSurveyVote(storyId, optionId);
+};
 
 window.openProfileFromModal = function() {
     const userId = window._modalUserId;
@@ -1472,4 +1867,21 @@ window.openProfileFromModal = function() {
     }
 };
 
-export { loadStoryData, handleModalLike, handleSendComment };
+// ============================================================
+// EXPORTACIONES
+// ============================================================
+
+export { 
+    loadStoryData, 
+    handleModalLike, 
+    handleSendComment, 
+    updateTranslateButton,
+    toggleTranslation,
+    getTranslationFromCache,
+    saveTranslationToCache,
+    loadTranslationsFromStorage,
+    saveTranslationsToStorage,
+    handleSurveyVote,
+    renderSurveyInModal,
+    setupCommentFileUpload
+};

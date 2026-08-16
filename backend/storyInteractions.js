@@ -1,7 +1,55 @@
 // backend/storyInteractions.js - VERSIÓN COMPLETA CON RESPUESTAS ANIDADAS
-// CON MENSAJES DE NOTIFICACIÓN CORREGIDOS
+// Y SOPORTE PARA SUBIR ARCHIVOS EN COMENTARIOS (SOLO DUEÑO DE HISTORIA)
+// ============================================================
 
 const auth = require('./middleware/auth');
+const multer = require('multer');
+const path = require('path');
+const fs = require('fs');
+
+// ============================================================
+// CONFIGURACIÓN DE MULTER PARA SUBIDA DE ARCHIVOS EN COMENTARIOS
+// ============================================================
+
+const COMMENT_UPLOAD_DIR = path.join(__dirname, '../frontend/uploads/comments');
+
+if (!fs.existsSync(COMMENT_UPLOAD_DIR)) {
+    fs.mkdirSync(COMMENT_UPLOAD_DIR, { recursive: true });
+    console.log('📁 Directorio de uploads de comentarios creado:', COMMENT_UPLOAD_DIR);
+}
+
+const commentStorage = multer.diskStorage({
+    destination: (req, file, cb) => {
+        cb(null, COMMENT_UPLOAD_DIR);
+    },
+    filename: (req, file, cb) => {
+        const ext = path.extname(file.originalname);
+        const name = path.basename(file.originalname, ext);
+        const uniqueName = `comment_${Date.now()}_${Math.random().toString(36).substring(2, 8)}_${name.replace(/[^a-zA-Z0-9]/g, '_')}${ext}`;
+        cb(null, uniqueName);
+    }
+});
+
+// Configuración para archivos en comentarios (máx 20MB)
+const commentFileUpload = multer({
+    storage: commentStorage,
+    limits: { fileSize: 20 * 1024 * 1024 },
+    fileFilter: (req, file, cb) => {
+        const allowedTypes = [
+            'image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/bmp', 'image/svg+xml',
+            'video/mp4', 'video/webm', 'video/ogg', 'video/quicktime',
+            'audio/mp3', 'audio/wav', 'audio/ogg', 'audio/mpeg',
+            'application/pdf', 'application/msword', 
+            'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+            'text/plain'
+        ];
+        if (allowedTypes.includes(file.mimetype)) {
+            cb(null, true);
+        } else {
+            cb(new Error('Formato de archivo no soportado para comentarios'));
+        }
+    }
+});
 
 module.exports = function(read, write, io, areStoriesVisible, logger) {
     const router = require('express').Router();
@@ -37,6 +85,79 @@ module.exports = function(read, write, io, areStoriesVisible, logger) {
         }
         return null;
     }
+
+    // ============================================================
+    // FUNCIÓN AUXILIAR: OBTENER ICONO DE TIPO DE ARCHIVO
+    // ============================================================
+    function getFileTypeIcon(mimetype) {
+        if (!mimetype) return 'file';
+        if (mimetype.startsWith('image/')) return 'image';
+        if (mimetype.startsWith('video/')) return 'video';
+        if (mimetype.startsWith('audio/')) return 'audio';
+        if (mimetype === 'application/pdf') return 'pdf';
+        if (mimetype.includes('word') || mimetype.includes('document')) return 'word';
+        if (mimetype === 'text/plain') return 'text';
+        return 'file';
+    }
+
+    // ============================================================
+    // FUNCIÓN AUXILIAR: FORMATEAR TAMAÑO DE ARCHIVO
+    // ============================================================
+    function formatFileSize(bytes) {
+        if (bytes === 0) return '0 B';
+        const k = 1024;
+        const sizes = ['B', 'KB', 'MB', 'GB'];
+        const i = Math.floor(Math.log(bytes) / Math.log(k));
+        return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+    }
+
+    // ============================================================
+    // 🔥 SUBIR ARCHIVO PARA COMENTARIO (SOLO DUEÑO DE HISTORIA)
+    // ============================================================
+    router.post('/:storyId/upload-comment-file', auth, commentFileUpload.single('file'), async (req, res) => {
+        try {
+            const storyId = req.params.storyId;
+            const userId = req.userId;
+
+            if (!req.file) {
+                return res.status(400).json({ error: 'No se subió ningún archivo' });
+            }
+
+            // Verificar que la historia existe y el usuario es el dueño
+            const stories = read('stories.json');
+            const story = stories.find(s => s.id === storyId);
+
+            if (!story) {
+                return res.status(404).json({ error: 'Historia no encontrada' });
+            }
+
+            if (story.userId !== userId) {
+                return res.status(403).json({ 
+                    error: 'No tienes permiso para subir archivos en esta historia',
+                    message: 'Solo el dueño de la historia puede subir archivos en los comentarios'
+                });
+            }
+
+            const fileUrl = `/uploads/comments/${req.file.filename}`;
+            const fileType = getFileTypeIcon(req.file.mimetype);
+
+            res.json({
+                success: true,
+                fileUrl: fileUrl,
+                filename: req.file.filename,
+                originalName: req.file.originalname,
+                size: req.file.size,
+                sizeFormatted: formatFileSize(req.file.size),
+                mimetype: req.file.mimetype,
+                fileType: fileType,
+                message: '✅ Archivo subido correctamente para comentario'
+            });
+
+        } catch (error) {
+            console.error('Error subiendo archivo para comentario:', error);
+            res.status(500).json({ error: 'Error subiendo archivo' });
+        }
+    });
 
     // ============================================================
     // OBTENER COMENTARIOS DE UNA HISTORIA
@@ -118,19 +239,19 @@ module.exports = function(read, write, io, areStoriesVisible, logger) {
     });
 
     // ============================================================
-    // AGREGAR COMENTARIO PRINCIPAL
+    // AGREGAR COMENTARIO PRINCIPAL (CON SOPORTE PARA ARCHIVO)
     // ============================================================
     router.post('/:storyId/comments', auth, async (req, res) => {
         try {
             const storyId = req.params.storyId;
             const userId = req.userId;
-            const { content } = req.body;
+            const { content, fileUrl, filename, originalName, fileSize, mimetype } = req.body;
             
-            if (!content || content.trim().length === 0) {
-                return res.status(400).json({ error: 'El comentario no puede estar vacío' });
+            if ((!content || content.trim().length === 0) && !fileUrl) {
+                return res.status(400).json({ error: 'El comentario debe tener texto o un archivo adjunto' });
             }
             
-            if (content.length > 500) {
+            if (content && content.length > 500) {
                 return res.status(400).json({ error: 'Máximo 500 caracteres' });
             }
             
@@ -153,6 +274,7 @@ module.exports = function(read, write, io, areStoriesVisible, logger) {
             }
             
             const user = users.find(u => u.id === userId);
+            const isStoryOwner = storyOwner.id === userId;
             
             const newComment = {
                 id: Date.now().toString(),
@@ -160,10 +282,20 @@ module.exports = function(read, write, io, areStoriesVisible, logger) {
                 username: user?.username || 'Usuario',
                 fullName: user?.fullName || 'Usuario',
                 avatar: user?.avatar || 'https://ui-avatars.com/api/?name=Usuario&background=a855f7&color=fff',
-                content: content.trim(),
+                content: content?.trim() || '',
                 createdAt: new Date().toISOString(),
                 replies: [],
-                likes: []
+                likes: [],
+                // 🔥 NUEVOS CAMPOS PARA ARCHIVOS ADJUNTOS
+                hasFile: !!fileUrl,
+                fileUrl: fileUrl || null,
+                filename: filename || null,
+                originalName: originalName || null,
+                fileSize: fileSize || null,
+                fileSizeFormatted: fileSize ? formatFileSize(fileSize) : null,
+                mimetype: mimetype || null,
+                fileType: mimetype ? getFileTypeIcon(mimetype) : null,
+                isStoryOwner: isStoryOwner
             };
             
             stories[storyIndex].comments.push(newComment);
@@ -183,7 +315,7 @@ module.exports = function(read, write, io, areStoriesVisible, logger) {
             
             if (stories[storyIndex].userId !== userId) {
                 const notifications = read('notifications.json');
-                const commentText = content.trim();
+                const commentText = content?.trim() || '📎 Archivó adjunto';
                 const previewText = commentText.length > 50 ? commentText.substring(0, 50) + '...' : commentText;
                 
                 const newNotification = {
@@ -197,12 +329,15 @@ module.exports = function(read, write, io, areStoriesVisible, logger) {
                     storyId: storyId,
                     commentId: newComment.id,
                     commentPreview: commentText,
+                    hasFile: !!fileUrl,
                     message: `${user?.fullName || 'Usuario'} comentó en tu historia: "${previewText}"`,
-                    icon: '💬',
+                    icon: fileUrl ? '📎' : '💬',
                     data: {
                         commentPreview: commentText,
                         storyId: storyId,
-                        commentId: newComment.id
+                        commentId: newComment.id,
+                        hasFile: !!fileUrl,
+                        fileUrl: fileUrl || null
                     },
                     read: false,
                     translated: false,
@@ -215,7 +350,7 @@ module.exports = function(read, write, io, areStoriesVisible, logger) {
                 io.to(`user_${stories[storyIndex].userId}`).emit('new_notification', newNotification);
             }
             
-            if (logger) logger.info(`💬 Usuario ${userId} comentó en historia ${storyId}`);
+            if (logger) logger.info(`💬 Usuario ${userId} comentó en historia ${storyId}${fileUrl ? ' con archivo adjunto' : ''}`);
             res.status(201).json(newComment);
         } catch (error) {
             if (logger) logger.error('Error agregando comentario:', { error: error.message });
@@ -225,7 +360,7 @@ module.exports = function(read, write, io, areStoriesVisible, logger) {
     });
 
     // ============================================================
-    // ELIMINAR COMENTARIO (RECURSIVO)
+    // ELIMINAR COMENTARIO (RECURSIVO) - CON ELIMINACIÓN DE ARCHIVO
     // ============================================================
     router.delete('/:storyId/comments/:commentId', auth, async (req, res) => {
         try {
@@ -253,8 +388,23 @@ module.exports = function(read, write, io, areStoriesVisible, logger) {
             
             const { parent, comment } = result;
             
+            // Verificar permisos: dueño del comentario O dueño de la historia
             if (comment.userId !== userId && stories[storyIndex].userId !== userId) {
                 return res.status(403).json({ error: 'No tienes permiso' });
+            }
+            
+            // 🔥 ELIMINAR ARCHIVO ADJUNTO SI EXISTE
+            if (comment.fileUrl) {
+                try {
+                    const filename = path.basename(comment.fileUrl);
+                    const filePath = path.join(COMMENT_UPLOAD_DIR, filename);
+                    if (fs.existsSync(filePath)) {
+                        fs.unlinkSync(filePath);
+                        console.log(`🗑️ Archivo de comentario eliminado: ${filename}`);
+                    }
+                } catch (e) {
+                    console.warn('⚠️ Error eliminando archivo de comentario:', e.message);
+                }
             }
             
             if (parent) {
@@ -287,7 +437,6 @@ module.exports = function(read, write, io, areStoriesVisible, logger) {
 
     // ============================================================
     // AGREGAR RESPUESTA (ANIDADA - MÚLTIPLES NIVELES)
-    // CON MENSAJES DE NOTIFICACIÓN CORREGIDOS
     // ============================================================
     router.post('/:storyId/comments/:commentId/replies', auth, async (req, res) => {
         try {
@@ -344,7 +493,9 @@ module.exports = function(read, write, io, areStoriesVisible, logger) {
                 content: content.trim(),
                 createdAt: new Date().toISOString(),
                 replies: [],
-                likes: []
+                likes: [],
+                hasFile: false,
+                fileUrl: null
             };
             
             parentComment.replies.push(newReply);
@@ -438,7 +589,7 @@ module.exports = function(read, write, io, areStoriesVisible, logger) {
     });
 
     // ============================================================
-    // ELIMINAR RESPUESTA (RECURSIVO)
+    // ELIMINAR RESPUESTA (RECURSIVO) - CON ELIMINACIÓN DE ARCHIVO
     // ============================================================
     router.delete('/:storyId/comments/:commentId/replies/:replyId', auth, async (req, res) => {
         try {
@@ -479,6 +630,20 @@ module.exports = function(read, write, io, areStoriesVisible, logger) {
             
             if (replyFound.userId !== userId && stories[storyIndex].userId !== userId) {
                 return res.status(403).json({ error: 'No tienes permiso' });
+            }
+            
+            // 🔥 ELIMINAR ARCHIVO ADJUNTO SI EXISTE
+            if (replyFound.fileUrl) {
+                try {
+                    const filename = path.basename(replyFound.fileUrl);
+                    const filePath = path.join(COMMENT_UPLOAD_DIR, filename);
+                    if (fs.existsSync(filePath)) {
+                        fs.unlinkSync(filePath);
+                        console.log(`🗑️ Archivo de respuesta eliminado: ${filename}`);
+                    }
+                } catch (e) {
+                    console.warn('⚠️ Error eliminando archivo de respuesta:', e.message);
+                }
             }
             
             parentComment.replies.splice(replyIndex, 1);

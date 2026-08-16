@@ -1,5 +1,5 @@
 # backend/m2m100_server.py
-# Servidor M2M100 - VERSIÓN CORREGIDA CON FUENTE FORZADA
+# Servidor M2M100 - VERSIÓN CORREGIDA CON FUENTE FORZADA Y DETECCIÓN MEJORADA
 
 import json
 import torch
@@ -26,7 +26,7 @@ signal.signal(signal.SIGTERM, signal_handler)
 MODEL_NAME = "facebook/m2m100_418M"
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
-print(f"🔄 Cargando modelo {MODEL_NAME} en {DEVICE}...")
+print(f"🔧 Cargando modelo {MODEL_NAME} en {DEVICE}...")
 print("⏳ Esto puede tomar unos minutos...")
 
 tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
@@ -78,7 +78,7 @@ LANGUAGE_NAMES = {
 LANGUAGE_FLAGS = {
     'es': '🇪🇸',
     'en': '🇬🇧',
-    'pt': '🇧🇷',
+    'pt': '🇵🇹',
     'fr': '🇫🇷',
     'de': '🇩🇪',
     'it': '🇮🇹',
@@ -87,6 +87,67 @@ LANGUAGE_FLAGS = {
     'zh': '🇨🇳',
     'ar': '🇸🇦'
 }
+
+# ============================================================
+# 🔥 DETECCIÓN DE IDIOMA PARA TEXTOS CORTOS
+# ============================================================
+
+def detect_language_short_text(text):
+    """Detecta idioma para textos cortos usando patrones de caracteres"""
+    if not text:
+        return None
+    
+    text = text.strip()
+    
+    # 🔥 DETECTAR JAPONÉS (caracteres japoneses)
+    if any('\u3040' <= c <= '\u30FF' or '\u4E00' <= c <= '\u9FFF' for c in text):
+        return 'ja'
+    
+    # 🔥 DETECTAR COREANO (hangul)
+    if any('\uAC00' <= c <= '\uD7AF' for c in text):
+        return 'ko'
+    
+    # 🔥 DETECTAR CHINO (caracteres chinos)
+    if any('\u4E00' <= c <= '\u9FFF' for c in text) and not any('\u3040' <= c <= '\u30FF' for c in text):
+        return 'zh'
+    
+    # 🔥 DETECTAR ÁRABE
+    if any('\u0600' <= c <= '\u06FF' for c in text):
+        return 'ar'
+    
+    # 🔥 DETECTAR RUSO (cirílico)
+    if any('\u0400' <= c <= '\u04FF' for c in text):
+        return 'ru'
+    
+    # 🔥 DETECTAR IDIOMAS LATINOS POR PALABRAS CLAVE
+    lower = text.lower()
+    
+    # Palabras comunes en inglés
+    english_words = ['i am', "i'm", 'you', 'are', 'the', 'of', 'and', 'to', 'for', 'with', 'on', 'at', 'from', 'by', 'in', 'that', 'this', 'a', 'an']
+    if any(word in lower for word in english_words) and all(ord(c) < 128 for c in text):
+        return 'en'
+    
+    # Palabras comunes en portugués
+    portuguese_words = ['é', 'ão', 'ões', 'ães', 'ç', 'ou', 'que', 'com', 'para', 'por', 'em', 'de', 'do', 'da']
+    if any(word in lower for word in portuguese_words):
+        return 'pt'
+    
+    # Palabras comunes en francés
+    french_words = ['je', 'tu', 'il', 'elle', 'nous', 'vous', 'ils', 'elles', 'le', 'la', 'les', 'un', 'une', 'et', 'pour', 'avec']
+    if any(word in lower for word in french_words):
+        return 'fr'
+    
+    # Palabras comunes en alemán
+    german_words = ['ich', 'du', 'er', 'sie', 'es', 'wir', 'ihr', 'der', 'die', 'das', 'ein', 'eine', 'und', 'für', 'mit', 'auf']
+    if any(word in lower for word in german_words):
+        return 'de'
+    
+    # Palabras comunes en italiano
+    italian_words = ['io', 'tu', 'lui', 'lei', 'noi', 'voi', 'loro', 'il', 'la', 'lo', 'le', 'un', 'uno', 'una', 'e', 'con', 'per']
+    if any(word in lower for word in italian_words):
+        return 'it'
+    
+    return None
 
 # ============================================================
 # FUNCIÓN DE TRADUCCIÓN CORREGIDA
@@ -100,9 +161,9 @@ def translate_text(text, target_lang, source_lang=None):
     try:
         # SI SE ESPECIFICA FUENTE, USARLA DIRECTAMENTE
         if source_lang:
-            print(f"🔄 Traduciendo con fuente forzada: {source_lang} → {target_lang}")
+            print(f"🔧 Traduciendo con fuente forzada: {source_lang} → {target_lang}")
         else:
-            print(f"🔄 Traduciendo con auto-detección → {target_lang}")
+            print(f"🔧 Traduciendo con auto-detección → {target_lang}")
         
         # Tokenizar
         inputs = tokenizer(text, return_tensors="pt", truncation=True, max_length=512)
@@ -202,7 +263,7 @@ class Handler(BaseHTTPRequestHandler):
                 else:
                     print(f"📝 Fuente forzada desde frontend: {source}")
                 
-                # 🔥🔥🔥 PASAR detected_source A translate_text
+                # 🔥 PASAR detected_source A translate_text
                 translated = translate_text(text, target, detected_source)
                 is_translated = (translated != text and translated.strip() != text.strip())
                 
@@ -239,30 +300,39 @@ class Handler(BaseHTTPRequestHandler):
                 data = json.loads(self.rfile.read(length).decode())
                 text = data.get('text', '')
                 
-                try:
-                    from langdetect import detect
-                    lang = detect(text)
-                    if lang not in LANG_MAP:
+                lang = None
+                
+                # 🔥 PRIMERO: USAR DETECCIÓN POR CARACTERES PARA TEXTOS CORTOS
+                if len(text.strip()) < 15:
+                    lang = detect_language_short_text(text)
+                    print(f"🔍 Detección por caracteres (corto): {lang}")
+                
+                # 🔥 SEGUNDO: SI NO SE DETECTÓ, USAR langdetect
+                if not lang:
+                    try:
+                        from langdetect import detect
+                        lang = detect(text)
+                        if lang not in LANG_MAP:
+                            lang = 'es'
+                        print(f"🔍 Detección por langdetect: {lang}")
+                    except:
                         lang = 'es'
-                    self.send_response(200)
-                    self.send_header('Content-Type', 'application/json')
-                    self.send_header('Access-Control-Allow-Origin', '*')
-                    self.end_headers()
-                    self.wfile.write(json.dumps({
-                        "success": True,
-                        "language": lang,
-                        "detected": lang
-                    }).encode())
-                except:
-                    self.send_response(200)
-                    self.send_header('Content-Type', 'application/json')
-                    self.send_header('Access-Control-Allow-Origin', '*')
-                    self.end_headers()
-                    self.wfile.write(json.dumps({
-                        "success": True,
-                        "language": "es",
-                        "detected": "unknown"
-                    }).encode())
+                        print(f"⚠️ Error en langdetect, usando español")
+                
+                # 🔥 TERCERO: VERIFICAR QUE EL IDIOMA ESTÉ EN EL MAPA
+                if lang not in LANG_MAP:
+                    lang = 'es'
+                
+                self.send_response(200)
+                self.send_header('Content-Type', 'application/json')
+                self.send_header('Access-Control-Allow-Origin', '*')
+                self.end_headers()
+                self.wfile.write(json.dumps({
+                    "success": True,
+                    "language": lang,
+                    "detected": lang
+                }).encode())
+                
             except Exception as e:
                 self.send_response(500)
                 self.send_header('Content-Type', 'application/json')
@@ -301,10 +371,10 @@ if __name__ == '__main__':
     🌐 API ENDPOINTS:
        GET  /health           - Estado del servidor
        POST /translate        - Traducir texto (con source_lang opcional)
-       POST /detect           - Detectar idioma
+       POST /detect           - Detectar idioma (con detección mejorada)
        GET  /languages        - Lista de idiomas
     
-    📱 Servidor corriendo en http://localhost:5002
+    📡 Servidor corriendo en http://localhost:5002
     🔥 ========================================
     """)
     

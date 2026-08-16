@@ -1,4 +1,7 @@
-// backend/stories.js - VERSIÓN COMPLETA CON CLOUDINARY, SISTEMA DE BLOQUEOS, RECOMENDACIONES Y CLASIFICADOR
+// backend/stories.js - VERSIÓN COMPLETA CON SQLITE PARA HISTORIAS
+// Cloudinary, Sistema de bloqueos, Recomendaciones, Clasificador,
+// Detección de idioma mejorada y Encuestas
+// ============================================================
 
 const auth = require('./middleware/auth');
 const multer = require('multer');
@@ -7,6 +10,12 @@ const fs = require('fs');
 const iaClassifier = require('./ia_classifier');
 const videoService = require('./services/video.service');
 const transcriptionService = require('./services/transcription.service');
+
+// ============================================================
+// 🔥 IMPORTAR BASE DE DATOS SQLITE PARA HISTORIAS
+// ============================================================
+
+const storyDB = require('./db/stories.db');
 
 // ============================================================
 // 🔥 IMPORTAR CLOUDINARY
@@ -68,7 +77,7 @@ const videoUpload = multer({
 module.exports = function(read, write, io, processHashtags, isProfileVisible, areStoriesVisible, logger, storyLimiter, likeLimiter) {
     const router = require('express').Router();
     
-    console.log('✅ [STORIES] Módulo cargado correctamente');
+    console.log('✅ [STORIES] Módulo cargado con SQLite para historias');
 
     // ============================================================
     // 🔥 FUNCIÓN AUXILIAR PARA VERIFICAR BLOQUEOS
@@ -83,6 +92,62 @@ module.exports = function(read, write, io, processHashtags, isProfileVisible, ar
         if (blocked.blockedBy && blocked.blockedBy.includes(blockerId)) return true;
         
         return false;
+    }
+
+    // ============================================================
+    // 🔥 FUNCIÓN AUXILIAR PARA ENRIQUECER HISTORIAS CON DATOS DE USUARIO
+    // ============================================================
+    async function enrichStoriesWithUsers(stories, userId) {
+        const users = read('users.json');
+        const userMap = {};
+        users.forEach(u => { userMap[u.id] = u; });
+        
+        const currentUser = users.find(u => u.id === userId);
+        const blockedIds = currentUser?.blocked || [];
+        const blockedByIds = currentUser?.blockedBy || [];
+
+        const result = [];
+        for (const story of stories) {
+            const owner = userMap[story.userId];
+            if (!owner) continue;
+            
+            // 🔥 VERIFICAR BLOQUEOS
+            if (blockedIds.includes(owner.id)) continue;
+            if (blockedByIds.includes(owner.id)) continue;
+            
+            // 🔥 VERIFICAR VISIBILIDAD
+            if (owner.id !== userId && typeof areStoriesVisible === 'function') {
+                if (!areStoriesVisible(owner, userId)) continue;
+            }
+
+            // Convertir campos que vienen como string desde SQLite
+            const enrichedStory = {
+                ...story,
+                views: typeof story.views === 'string' ? JSON.parse(story.views || '[]') : (story.views || []),
+                likes: typeof story.likes === 'string' ? JSON.parse(story.likes || '[]') : (story.likes || []),
+                comments: typeof story.comments === 'string' ? JSON.parse(story.comments || '[]') : (story.comments || []),
+                iaClassification: typeof story.iaClassification === 'string' ? JSON.parse(story.iaClassification || 'null') : (story.iaClassification || null),
+                surveyData: typeof story.surveyData === 'string' ? JSON.parse(story.surveyData || 'null') : (story.surveyData || null),
+                segments: typeof story.segments === 'string' ? JSON.parse(story.segments || 'null') : (story.segments || null),
+                flagged: story.flagged === 1 || story.flagged === true,
+                hidden: story.hidden === 1 || story.hidden === true,
+                hasSubtitles: story.hasSubtitles === 1 || story.hasSubtitles === true,
+                embedded: story.embedded === 1 || story.embedded === true,
+                hiddenByIA: story.hiddenByIA === 1 || story.hiddenByIA === true,
+                isSurvey: story.isSurvey === 1 || story.isSurvey === true,
+                userData: {
+                    id: owner.id,
+                    username: owner.username,
+                    fullName: owner.fullName,
+                    avatar: owner.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(owner.fullName)}&background=a855f7&color=fff`,
+                    isVerified: owner.isVerified || false,
+                    accountType: owner.accountType || 'personal'
+                }
+            };
+            
+            result.push(enrichedStory);
+        }
+        return result;
     }
 
     // ============================================================
@@ -376,10 +441,10 @@ module.exports = function(read, write, io, processHashtags, isProfileVisible, ar
     });
 
     // ============================================================
-    // 🔥 RUTA: FEED CON SORT (LEGACY) - CON FILTRO DE BLOQUEOS
+    // 🔥 RUTA: FEED CON SORT (LEGACY) - CON SQLITE
     // ============================================================
     
-    router.get('/feed', auth, (req, res) => {
+    router.get('/feed', auth, async (req, res) => {
         try {
             const userId = req.userId;
             const limit = parseInt(req.query.limit) || 50;
@@ -395,26 +460,16 @@ module.exports = function(read, write, io, processHashtags, isProfileVisible, ar
             if (!currentUser) {
                 return res.status(404).json({ error: 'Usuario no encontrado' });
             }
-            
-            // 🔥 OBTENER BLOQUEADOS
+
+            // 🔥 OBTENER HISTORIAS DESDE SQLITE
+            const stories = await storyDB.getActiveStories();
             const blockedIds = currentUser.blocked || [];
             const blockedByIds = currentUser.blockedBy || [];
-
-            const stories = read('stories.json');
-            const now = Date.now();
-
             const userMap = {};
             users.forEach(u => { userMap[u.id] = u; });
 
-            let activeStories = stories.filter(s => {
-                if (!s.expiresAt) return false;
-                if (new Date(s.expiresAt).getTime() <= now) return false;
-                if (s.hidden) return false;
-                return true;
-            });
-
-            const visibleStories = [];
-            for (const story of activeStories) {
+            let visibleStories = [];
+            for (const story of stories) {
                 const storyOwner = userMap[story.userId];
                 if (!storyOwner) continue;
                 
@@ -423,8 +478,16 @@ module.exports = function(read, write, io, processHashtags, isProfileVisible, ar
                 if (blockedByIds.includes(storyOwner.id)) continue;
                 
                 if (storyOwner.id === userId) {
-                    visibleStories.push({
+                    const enriched = {
                         ...story,
+                        views: typeof story.views === 'string' ? JSON.parse(story.views || '[]') : (story.views || []),
+                        likes: typeof story.likes === 'string' ? JSON.parse(story.likes || '[]') : (story.likes || []),
+                        comments: typeof story.comments === 'string' ? JSON.parse(story.comments || '[]') : (story.comments || []),
+                        surveyData: typeof story.surveyData === 'string' ? JSON.parse(story.surveyData || 'null') : (story.surveyData || null),
+                        segments: typeof story.segments === 'string' ? JSON.parse(story.segments || 'null') : (story.segments || null),
+                        flagged: story.flagged === 1 || story.flagged === true,
+                        hidden: story.hidden === 1 || story.hidden === true,
+                        hasSubtitles: story.hasSubtitles === 1 || story.hasSubtitles === true,
                         userData: {
                             id: storyOwner.id,
                             username: storyOwner.username,
@@ -432,11 +495,9 @@ module.exports = function(read, write, io, processHashtags, isProfileVisible, ar
                             avatar: storyOwner.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(storyOwner.fullName)}&background=a855f7&color=fff`,
                             isVerified: storyOwner.isVerified || false,
                             accountType: storyOwner.accountType || 'personal'
-                        },
-                        hasSubtitles: story.hasSubtitles || false,
-                        subtitles: story.subtitles || null,
-                        language: story.language || 'es'
-                    });
+                        }
+                    };
+                    visibleStories.push(enriched);
                     continue;
                 }
 
@@ -444,8 +505,16 @@ module.exports = function(read, write, io, processHashtags, isProfileVisible, ar
                     if (!areStoriesVisible(storyOwner, userId)) continue;
                 }
 
-                visibleStories.push({
+                const enriched = {
                     ...story,
+                    views: typeof story.views === 'string' ? JSON.parse(story.views || '[]') : (story.views || []),
+                    likes: typeof story.likes === 'string' ? JSON.parse(story.likes || '[]') : (story.likes || []),
+                    comments: typeof story.comments === 'string' ? JSON.parse(story.comments || '[]') : (story.comments || []),
+                    surveyData: typeof story.surveyData === 'string' ? JSON.parse(story.surveyData || 'null') : (story.surveyData || null),
+                    segments: typeof story.segments === 'string' ? JSON.parse(story.segments || 'null') : (story.segments || null),
+                    flagged: story.flagged === 1 || story.flagged === true,
+                    hidden: story.hidden === 1 || story.hidden === true,
+                    hasSubtitles: story.hasSubtitles === 1 || story.hasSubtitles === true,
                     userData: {
                         id: storyOwner.id,
                         username: storyOwner.username,
@@ -453,11 +522,9 @@ module.exports = function(read, write, io, processHashtags, isProfileVisible, ar
                         avatar: storyOwner.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(storyOwner.fullName)}&background=a855f7&color=fff`,
                         isVerified: storyOwner.isVerified || false,
                         accountType: storyOwner.accountType || 'personal'
-                    },
-                    hasSubtitles: story.hasSubtitles || false,
-                    subtitles: story.subtitles || null,
-                    language: story.language || 'es'
-                });
+                    }
+                };
+                visibleStories.push(enriched);
             }
 
             if (sort === 'recent') {
@@ -483,7 +550,8 @@ module.exports = function(read, write, io, processHashtags, isProfileVisible, ar
                 },
                 meta: {
                     sort: sort,
-                    userId: userId
+                    userId: userId,
+                    source: 'sqlite'
                 }
             });
 
@@ -494,7 +562,7 @@ module.exports = function(read, write, io, processHashtags, isProfileVisible, ar
     });
 
     // ============================================================
-    // 🔥🔥🔥 RUTA: FEED POR CURSOR - CON FILTRO DE BLOQUEOS Y RECOMENDACIONES
+    // 🔥🔥🔥 RUTA: FEED POR CURSOR - CON SQLITE Y RECOMENDACIONES
     // ============================================================
 
     router.get('/feed/cursor', auth, async (req, res) => {
@@ -507,7 +575,6 @@ module.exports = function(read, write, io, processHashtags, isProfileVisible, ar
             console.log(`📡 Feed por cursor: usuario=${userId}, filter=${filter}, cursor=${cursor}`);
 
             const users = read('users.json');
-            const stories = read('stories.json');
             const now = Date.now();
 
             const user = users.find(u => u.id === userId);
@@ -519,6 +586,25 @@ module.exports = function(read, write, io, processHashtags, isProfileVisible, ar
             const blockedIds = user.blocked || [];
             const blockedByIds = user.blockedBy || [];
 
+            // 🔥 OBTENER HISTORIAS DESDE SQLITE
+            let allStories = await storyDB.getActiveStories();
+            
+            // Convertir campos de string a objetos
+            allStories = allStories.map(s => ({
+                ...s,
+                views: typeof s.views === 'string' ? JSON.parse(s.views || '[]') : (s.views || []),
+                likes: typeof s.likes === 'string' ? JSON.parse(s.likes || '[]') : (s.likes || []),
+                comments: typeof s.comments === 'string' ? JSON.parse(s.comments || '[]') : (s.comments || []),
+                surveyData: typeof s.surveyData === 'string' ? JSON.parse(s.surveyData || 'null') : (s.surveyData || null),
+                segments: typeof s.segments === 'string' ? JSON.parse(s.segments || 'null') : (s.segments || null),
+                flagged: s.flagged === 1 || s.flagged === true,
+                hidden: s.hidden === 1 || s.hidden === true,
+                hasSubtitles: s.hasSubtitles === 1 || s.hasSubtitles === true,
+                embedded: s.embedded === 1 || s.embedded === true,
+                hiddenByIA: s.hiddenByIA === 1 || s.hiddenByIA === true,
+                isSurvey: s.isSurvey === 1 || s.isSurvey === true
+            }));
+
             // ============================================================
             // 🔥 OBTENER RECOMENDACIONES DEL SERVICIO UNIFICADO
             // ============================================================
@@ -529,12 +615,11 @@ module.exports = function(read, write, io, processHashtags, isProfileVisible, ar
                     const getRecommendationService = require('./services/recommendation');
                     const recommendationService = getRecommendationService();
                     
-                    // Obtener hasta 200 historias recomendadas (para tener suficiente para paginar)
+                    // Obtener hasta 200 historias recomendadas
                     recommendedStories = await recommendationService.recommendStories(userId, 200);
                     console.log(`✅ [RECOMMENDATIONS] ${recommendedStories.length} historias recomendadas obtenidas`);
                 } catch (error) {
                     console.warn('⚠️ Error obteniendo recomendaciones:', error.message);
-                    // Fallback: usar el método tradicional
                     recommendedStories = [];
                 }
             }
@@ -549,10 +634,7 @@ module.exports = function(read, write, io, processHashtags, isProfileVisible, ar
                 const userRegion = user.region || 'other';
                 const userFollowing = user.following || [];
 
-                let activeStories = stories.filter(s => {
-                    if (!s.expiresAt) return false;
-                    if (new Date(s.expiresAt).getTime() <= now) return false;
-                    if (s.hidden) return false;
+                let activeStories = allStories.filter(s => {
                     if (s.userId === userId) return false;
                     
                     // 🔥 FILTRAR BLOQUEADOS
@@ -657,6 +739,7 @@ module.exports = function(read, write, io, processHashtags, isProfileVisible, ar
                         userId: userId,
                         cursor: cursor,
                         algorithm: filter === 'recent' ? 'recent_traditional' : 'geo_score',
+                        source: 'sqlite',
                         timestamp: new Date().toISOString()
                     }
                 });
@@ -709,18 +792,17 @@ module.exports = function(read, write, io, processHashtags, isProfileVisible, ar
                         isVerified: owner?.isVerified || false,
                         accountType: owner?.accountType || 'personal'
                     },
-                    // Asegurar que estos campos existan
                     hasSubtitles: story.hasSubtitles || false,
                     subtitles: story.subtitles || null,
                     language: story.language || 'es',
                     country: story.country || null,
                     region: story.region || 'other',
-                    // Información de recomendación
                     recommendationScore: story.recommendationScore || 0,
                     topics: story.topics || [],
                     semanticMatch: story.semanticMatch || false,
                     interestMatch: story.interestMatch || false,
-                    interestMatchCount: story.interestMatchCount || 0
+                    interestMatchCount: story.interestMatchCount || 0,
+                    source: 'sqlite'
                 };
             });
 
@@ -743,6 +825,7 @@ module.exports = function(read, write, io, processHashtags, isProfileVisible, ar
                     userId: userId,
                     cursor: cursor,
                     algorithm: 'recommendation_v3_unified',
+                    source: 'sqlite',
                     timestamp: new Date().toISOString()
                 }
             });
@@ -778,10 +861,10 @@ module.exports = function(read, write, io, processHashtags, isProfileVisible, ar
     }
 
     // ============================================================
-    // RUTA: FEED PÚBLICO - CON FILTRO DE BLOQUEOS
+    // RUTA: FEED PÚBLICO - CON SQLITE
     // ============================================================
     
-    router.get('/public', auth, (req, res) => {
+    router.get('/public', auth, async (req, res) => {
         try {
             const userId = req.userId;
             const limit = parseInt(req.query.limit) || 20;
@@ -799,18 +882,14 @@ module.exports = function(read, write, io, processHashtags, isProfileVisible, ar
             const blockedIds = currentUser.blocked || [];
             const blockedByIds = currentUser.blockedBy || [];
 
-            const stories = read('stories.json');
-            const now = Date.now();
-
+            // 🔥 OBTENER HISTORIAS DESDE SQLITE
+            let stories = await storyDB.getActiveStories();
+            
             const userMap = {};
             users.forEach(u => { userMap[u.id] = u; });
 
             const publicStories = stories
                 .filter(s => {
-                    if (!s.expiresAt) return false;
-                    if (new Date(s.expiresAt).getTime() <= now) return false;
-                    if (s.hidden) return false;
-                    
                     const storyOwner = userMap[s.userId];
                     if (!storyOwner) return false;
                     
@@ -824,6 +903,14 @@ module.exports = function(read, write, io, processHashtags, isProfileVisible, ar
                     const storyOwner = userMap[s.userId];
                     return {
                         ...s,
+                        views: typeof s.views === 'string' ? JSON.parse(s.views || '[]') : (s.views || []),
+                        likes: typeof s.likes === 'string' ? JSON.parse(s.likes || '[]') : (s.likes || []),
+                        comments: typeof s.comments === 'string' ? JSON.parse(s.comments || '[]') : (s.comments || []),
+                        surveyData: typeof s.surveyData === 'string' ? JSON.parse(s.surveyData || 'null') : (s.surveyData || null),
+                        segments: typeof s.segments === 'string' ? JSON.parse(s.segments || 'null') : (s.segments || null),
+                        flagged: s.flagged === 1 || s.flagged === true,
+                        hidden: s.hidden === 1 || s.hidden === true,
+                        hasSubtitles: s.hasSubtitles === 1 || s.hasSubtitles === true,
                         userData: {
                             id: storyOwner.id,
                             username: storyOwner.username,
@@ -831,10 +918,7 @@ module.exports = function(read, write, io, processHashtags, isProfileVisible, ar
                             avatar: storyOwner.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(storyOwner.fullName)}&background=a855f7&color=fff`,
                             isVerified: storyOwner.isVerified || false,
                             accountType: storyOwner.accountType || 'personal'
-                        },
-                        hasSubtitles: s.hasSubtitles || false,
-                        subtitles: s.subtitles || null,
-                        language: s.language || 'es'
+                        }
                     };
                 })
                 .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
@@ -847,7 +931,8 @@ module.exports = function(read, write, io, processHashtags, isProfileVisible, ar
                     limit,
                     total: publicStories.length,
                     hasMore: skip + limit < publicStories.length
-                }
+                },
+                source: 'sqlite'
             });
 
         } catch (error) {
@@ -857,10 +942,10 @@ module.exports = function(read, write, io, processHashtags, isProfileVisible, ar
     });
 
     // ============================================================
-    // RUTA: HISTORIAS POR USUARIO - CON VERIFICACIÓN DE BLOQUEOS
+    // RUTA: HISTORIAS POR USUARIO - CON SQLITE
     // ============================================================
     
-    router.get('/user/:userId', auth, (req, res) => {
+    router.get('/user/:userId', auth, async (req, res) => {
         try {
             const targetUserId = req.params.userId;
             const currentUserId = req.userId;
@@ -876,7 +961,9 @@ module.exports = function(read, write, io, processHashtags, isProfileVisible, ar
                 });
             }
 
-            const stories = read('stories.json');
+            // 🔥 OBTENER HISTORIAS DESDE SQLITE
+            let userStories = await storyDB.getStoriesByUser(targetUserId);
+            
             const now = Date.now();
 
             const targetUser = users.find(u => u.id === targetUserId);
@@ -890,15 +977,22 @@ module.exports = function(read, write, io, processHashtags, isProfileVisible, ar
                 }
             }
 
-            const userStories = stories
+            const filteredStories = userStories
                 .filter(s => {
-                    if (s.userId !== targetUserId) return false;
                     if (!s.expiresAt) return false;
                     if (s.hidden) return false;
                     return new Date(s.expiresAt).getTime() > now;
                 })
                 .map(s => ({
                     ...s,
+                    views: typeof s.views === 'string' ? JSON.parse(s.views || '[]') : (s.views || []),
+                    likes: typeof s.likes === 'string' ? JSON.parse(s.likes || '[]') : (s.likes || []),
+                    comments: typeof s.comments === 'string' ? JSON.parse(s.comments || '[]') : (s.comments || []),
+                    surveyData: typeof s.surveyData === 'string' ? JSON.parse(s.surveyData || 'null') : (s.surveyData || null),
+                    segments: typeof s.segments === 'string' ? JSON.parse(s.segments || 'null') : (s.segments || null),
+                    flagged: s.flagged === 1 || s.flagged === true,
+                    hidden: s.hidden === 1 || s.hidden === true,
+                    hasSubtitles: s.hasSubtitles === 1 || s.hasSubtitles === true,
                     userData: {
                         id: targetUser.id,
                         username: targetUser.username,
@@ -906,14 +1000,11 @@ module.exports = function(read, write, io, processHashtags, isProfileVisible, ar
                         avatar: targetUser.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(targetUser.fullName)}&background=a855f7&color=fff`,
                         isVerified: targetUser.isVerified || false,
                         accountType: targetUser.accountType || 'personal'
-                    },
-                    hasSubtitles: s.hasSubtitles || false,
-                    subtitles: s.subtitles || null,
-                    language: s.language || 'es'
+                    }
                 }))
                 .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
 
-            res.json(userStories);
+            res.json(filteredStories);
 
         } catch (error) {
             if (logger) logger.error('Error en /user/:userId:', { error: error.message });
@@ -922,7 +1013,7 @@ module.exports = function(read, write, io, processHashtags, isProfileVisible, ar
     });
 
     // ============================================================
-    // RUTA: DETALLES DE HISTORIA - CON VERIFICACIÓN DE BLOQUEOS
+    // RUTA: DETALLES DE HISTORIA - CON SQLITE
     // ============================================================
     
     router.get('/:storyId/details', auth, async (req, res) => {
@@ -935,14 +1026,31 @@ module.exports = function(read, write, io, processHashtags, isProfileVisible, ar
             const users = read('users.json');
             const currentUser = users.find(u => u.id === userId);
             
-            const stories = read('stories.json');
-            const story = stories.find(s => s.id === storyId);
+            // 🔥 OBTENER HISTORIA DESDE SQLITE
+            const story = await storyDB.getStoryById(storyId);
 
             if (!story) {
                 return res.status(404).json({ error: 'Historia no encontrada' });
             }
 
-            const storyOwner = users.find(u => u.id === story.userId);
+            // Convertir campos
+            const enrichedStory = {
+                ...story,
+                views: typeof story.views === 'string' ? JSON.parse(story.views || '[]') : (story.views || []),
+                likes: typeof story.likes === 'string' ? JSON.parse(story.likes || '[]') : (story.likes || []),
+                comments: typeof story.comments === 'string' ? JSON.parse(story.comments || '[]') : (story.comments || []),
+                iaClassification: typeof story.iaClassification === 'string' ? JSON.parse(story.iaClassification || 'null') : (story.iaClassification || null),
+                surveyData: typeof story.surveyData === 'string' ? JSON.parse(story.surveyData || 'null') : (story.surveyData || null),
+                segments: typeof story.segments === 'string' ? JSON.parse(story.segments || 'null') : (story.segments || null),
+                flagged: story.flagged === 1 || story.flagged === true,
+                hidden: story.hidden === 1 || story.hidden === true,
+                hasSubtitles: story.hasSubtitles === 1 || story.hasSubtitles === true,
+                embedded: story.embedded === 1 || story.embedded === true,
+                hiddenByIA: story.hiddenByIA === 1 || story.hiddenByIA === true,
+                isSurvey: story.isSurvey === 1 || story.isSurvey === true
+            };
+
+            const storyOwner = users.find(u => u.id === enrichedStory.userId);
 
             if (!storyOwner) {
                 return res.status(404).json({ error: 'Dueño no encontrado' });
@@ -960,32 +1068,59 @@ module.exports = function(read, write, io, processHashtags, isProfileVisible, ar
                 return res.status(403).json({ error: 'No tienes permiso' });
             }
 
+            // 🔥 OBTENER COMENTARIOS DESDE SQLITE
+            let comments = await storyDB.getCommentsByStory(storyId);
+            
+            // Construir árbol de comentarios (anidados)
+            const commentMap = {};
+            const rootComments = [];
+            
+            comments.forEach(c => {
+                commentMap[c.id] = {
+                    ...c,
+                    likes: typeof c.likes === 'string' ? JSON.parse(c.likes || '[]') : (c.likes || []),
+                    hasFile: c.hasFile === 1 || c.hasFile === true,
+                    replies: [],
+                    userData: null
+                };
+            });
+            
+            // Enriquecer con datos de usuario
             const userMap = {};
             users.forEach(u => { userMap[u.id] = u; });
-
-            const enrichComments = (comments) => {
-                if (!comments) return [];
-                comments.forEach(comment => {
-                    const user = userMap[comment.userId];
-                    if (user) {
-                        comment.username = user.username;
-                        comment.fullName = user.fullName;
-                        comment.avatar = user.avatar;
-                    }
-                    if (comment.replies && comment.replies.length) {
-                        enrichComments(comment.replies);
-                    }
-                });
-                return comments;
-            };
-
-            const storyCopy = JSON.parse(JSON.stringify(story));
-            if (!storyCopy.comments) storyCopy.comments = [];
             
-            enrichComments(storyCopy.comments);
-            storyCopy.comments.sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
+            Object.values(commentMap).forEach(c => {
+                const user = userMap[c.userId];
+                if (user) {
+                    c.username = user.username;
+                    c.fullName = user.fullName;
+                    c.avatar = user.avatar;
+                    c.userData = {
+                        id: user.id,
+                        username: user.username,
+                        fullName: user.fullName,
+                        avatar: user.avatar
+                    };
+                }
+            });
+            
+            // Construir árbol
+            Object.values(commentMap).forEach(c => {
+                if (c.parentCommentId && commentMap[c.parentCommentId]) {
+                    commentMap[c.parentCommentId].replies.push(c);
+                } else {
+                    rootComments.push(c);
+                }
+            });
+            
+            // Ordenar
+            rootComments.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+            rootComments.forEach(c => {
+                c.replies.sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
+            });
 
-            storyCopy.userData = {
+            enrichedStory.comments = rootComments;
+            enrichedStory.userData = {
                 id: storyOwner.id,
                 username: storyOwner.username,
                 fullName: storyOwner.fullName,
@@ -993,22 +1128,22 @@ module.exports = function(read, write, io, processHashtags, isProfileVisible, ar
                 isVerified: storyOwner.isVerified || false,
                 accountType: storyOwner.accountType || 'personal'
             };
+            enrichedStory.language = story.language || 'es';
 
-            storyCopy.language = story.language || 'es';
-
-            res.json(storyCopy);
+            res.json(enrichedStory);
 
         } catch (error) {
             if (logger) logger.error('Error en /:storyId/details:', { error: error.message });
+            console.error('Error en /:storyId/details:', error);
             res.status(500).json({ error: 'Error interno' });
         }
     });
 
     // ============================================================
-    // RUTA: OBTENER UNA HISTORIA - CON VERIFICACIÓN DE BLOQUEOS
+    // RUTA: OBTENER UNA HISTORIA - CON SQLITE
     // ============================================================
     
-    router.get('/:storyId', auth, (req, res) => {
+    router.get('/:storyId', auth, async (req, res) => {
         try {
             const storyId = req.params.storyId;
             const userId = req.userId;
@@ -1016,8 +1151,8 @@ module.exports = function(read, write, io, processHashtags, isProfileVisible, ar
             const users = read('users.json');
             const currentUser = users.find(u => u.id === userId);
             
-            const stories = read('stories.json');
-            const story = stories.find(s => s.id === storyId);
+            // 🔥 OBTENER HISTORIA DESDE SQLITE
+            const story = await storyDB.getStoryById(storyId);
 
             if (!story) {
                 return res.status(404).json({ error: 'Historia no encontrada' });
@@ -1045,6 +1180,14 @@ module.exports = function(read, write, io, processHashtags, isProfileVisible, ar
 
             const storyWithUser = {
                 ...story,
+                views: typeof story.views === 'string' ? JSON.parse(story.views || '[]') : (story.views || []),
+                likes: typeof story.likes === 'string' ? JSON.parse(story.likes || '[]') : (story.likes || []),
+                comments: typeof story.comments === 'string' ? JSON.parse(story.comments || '[]') : (story.comments || []),
+                surveyData: typeof story.surveyData === 'string' ? JSON.parse(story.surveyData || 'null') : (story.surveyData || null),
+                segments: typeof story.segments === 'string' ? JSON.parse(story.segments || 'null') : (story.segments || null),
+                flagged: story.flagged === 1 || story.flagged === true,
+                hidden: story.hidden === 1 || story.hidden === true,
+                hasSubtitles: story.hasSubtitles === 1 || story.hasSubtitles === true,
                 userData: {
                     id: storyOwner.id,
                     username: storyOwner.username,
@@ -1067,10 +1210,10 @@ module.exports = function(read, write, io, processHashtags, isProfileVisible, ar
     });
 
     // ============================================================
-    // RUTA: HISTORIAS POR HASHTAG - CON FILTRO DE BLOQUEOS
+    // RUTA: HISTORIAS POR HASHTAG - CON SQLITE
     // ============================================================
     
-    router.get('/hashtag/:tag', auth, (req, res) => {
+    router.get('/hashtag/:tag', auth, async (req, res) => {
         try {
             const tag = req.params.tag.toLowerCase();
             const userId = req.userId;
@@ -1088,20 +1231,17 @@ module.exports = function(read, write, io, processHashtags, isProfileVisible, ar
             const blockedIds = currentUser.blocked || [];
             const blockedByIds = currentUser.blockedBy || [];
 
-            const stories = read('stories.json');
-            const now = Date.now();
+            // 🔥 OBTENER HISTORIAS DESDE SQLITE
+            let allStories = await storyDB.getActiveStories();
             
+            const now = Date.now();
             const MAX_AGE_HOURS = 24;
             const cutoffTime = now - (MAX_AGE_HOURS * 60 * 60 * 1000);
             
             const userMap = {};
             users.forEach(u => { userMap[u.id] = u; });
             
-            const hashtagStories = stories.filter(story => {
-                if (!story.expiresAt) return false;
-                if (new Date(story.expiresAt).getTime() <= now) return false;
-                if (story.hidden) return false;
-                
+            const hashtagStories = allStories.filter(story => {
                 const storyTime = new Date(story.createdAt).getTime();
                 if (storyTime < cutoffTime) return false;
                 
@@ -1146,6 +1286,14 @@ module.exports = function(read, write, io, processHashtags, isProfileVisible, ar
                 
                 groups[story.userId].stories.push({
                     ...story,
+                    views: typeof story.views === 'string' ? JSON.parse(story.views || '[]') : (story.views || []),
+                    likes: typeof story.likes === 'string' ? JSON.parse(story.likes || '[]') : (story.likes || []),
+                    comments: typeof story.comments === 'string' ? JSON.parse(story.comments || '[]') : (story.comments || []),
+                    surveyData: typeof story.surveyData === 'string' ? JSON.parse(story.surveyData || 'null') : (story.surveyData || null),
+                    segments: typeof story.segments === 'string' ? JSON.parse(story.segments || 'null') : (story.segments || null),
+                    flagged: story.flagged === 1 || story.flagged === true,
+                    hidden: story.hidden === 1 || story.hidden === true,
+                    hasSubtitles: story.hasSubtitles === 1 || story.hasSubtitles === true,
                     userData: {
                         id: owner.id,
                         username: owner.username,
@@ -1153,10 +1301,7 @@ module.exports = function(read, write, io, processHashtags, isProfileVisible, ar
                         avatar: owner.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(owner.fullName)}&background=a855f7&color=fff`,
                         isVerified: owner.isVerified || false,
                         accountType: owner.accountType || 'personal'
-                    },
-                    hasSubtitles: story.hasSubtitles || false,
-                    subtitles: story.subtitles || null,
-                    language: story.language || 'es'
+                    }
                 });
             });
             
@@ -1175,7 +1320,7 @@ module.exports = function(read, write, io, processHashtags, isProfileVisible, ar
     });
 
     // ============================================================
-    // 🔥 RUTA: CREAR HISTORIA
+    // 🔥 RUTA: CREAR HISTORIA - CON SQLITE
     // ============================================================
     
     router.post('/', auth, storyLimiter, async (req, res) => {
@@ -1183,6 +1328,7 @@ module.exports = function(read, write, io, processHashtags, isProfileVisible, ar
         
         try {
             const userId = req.userId;
+            
             const { 
                 mediaType, 
                 mediaUrl, 
@@ -1192,7 +1338,8 @@ module.exports = function(read, write, io, processHashtags, isProfileVisible, ar
                 hasSubtitles,
                 subtitles,
                 segments,
-                language
+                language,
+                surveyData
             } = req.body;
 
             console.log('📸 Datos recibidos:', { 
@@ -1202,6 +1349,7 @@ module.exports = function(read, write, io, processHashtags, isProfileVisible, ar
                 textContent: textContent?.substring(0, 50) || '',
                 hasSubtitles: hasSubtitles || false,
                 language: language || 'es',
+                isSurvey: !!surveyData,
                 userId 
             });
 
@@ -1209,7 +1357,7 @@ module.exports = function(read, write, io, processHashtags, isProfileVisible, ar
                 return res.status(400).json({ error: 'mediaType es requerido' });
             }
 
-            const validMediaTypes = ['image', 'video', 'audio', 'text'];
+            const validMediaTypes = ['image', 'video', 'audio', 'text', 'survey'];
             if (!validMediaTypes.includes(mediaType)) {
                 return res.status(400).json({ error: 'mediaType inválido' });
             }
@@ -1220,6 +1368,61 @@ module.exports = function(read, write, io, processHashtags, isProfileVisible, ar
                 }
                 if (textContent.length > 1000) {
                     return res.status(400).json({ error: 'Máximo 1000 caracteres' });
+                }
+            } else if (mediaType === 'survey') {
+                if (!surveyData) {
+                    console.error('❌ surveyData no recibido en el body');
+                    return res.status(400).json({ error: 'surveyData es requerido' });
+                }
+                
+                const { surveyType, question, options, statsData, calculation, allowMultiple, anonymous, expiresIn, showResults } = surveyData;
+                
+                console.log('📊 Validando encuesta:', { surveyType, question, optionsLength: options?.length, statsLength: statsData?.length });
+                
+                if (!surveyType || !question) {
+                    return res.status(400).json({ error: 'Tipo de encuesta y pregunta son requeridos' });
+                }
+                
+                if (surveyType === 'poll') {
+                    if (!options || options.length < 2) {
+                        return res.status(400).json({ error: 'La encuesta necesita al menos 2 opciones' });
+                    }
+                    if (options.length > 10) {
+                        return res.status(400).json({ error: 'Máximo 10 opciones por encuesta' });
+                    }
+                    const validOptions = options.filter(o => o.label && o.label.trim());
+                    if (validOptions.length < 2) {
+                        return res.status(400).json({ error: 'Las opciones deben tener un texto' });
+                    }
+                    surveyData.options = validOptions.map(o => ({
+                        id: o.id || Date.now().toString() + Math.random().toString(36).substr(2, 4),
+                        label: o.label.trim(),
+                        votes: 0
+                    }));
+                } else if (surveyType === 'stats') {
+                    if (!statsData || statsData.length < 2) {
+                        return res.status(400).json({ error: 'Las estadísticas necesitan al menos 2 datos' });
+                    }
+                    const validStats = statsData.filter(d => d.label && d.label.trim() && d.value > 0);
+                    if (validStats.length < 2) {
+                        return res.status(400).json({ error: 'Los datos deben tener etiqueta y valor positivo' });
+                    }
+                    surveyData.statsData = validStats.map(d => ({
+                        label: d.label.trim(),
+                        value: parseInt(d.value) || 0,
+                        color: d.color || '#c084fc'
+                    }));
+                } else if (surveyType === 'calculation') {
+                    if (!calculation || !calculation.result) {
+                        return res.status(400).json({ error: 'El cálculo necesita un resultado' });
+                    }
+                    surveyData.calculation = {
+                        operation: calculation.operation || '',
+                        formula: calculation.formula || '',
+                        result: calculation.result || ''
+                    };
+                } else {
+                    return res.status(400).json({ error: 'Tipo de encuesta inválido' });
                 }
             } else {
                 if (!mediaUrl) {
@@ -1233,6 +1436,7 @@ module.exports = function(read, write, io, processHashtags, isProfileVisible, ar
                 return res.status(404).json({ error: 'Usuario no encontrado' });
             }
 
+            // 🔥 DETECCIÓN DE IDIOMA
             let detectedLanguage = language || 'es';
             
             if (!language || language === 'es') {
@@ -1243,19 +1447,17 @@ module.exports = function(read, write, io, processHashtags, isProfileVisible, ar
                     let textToDetect = '';
                     if (mediaType === 'text' && textContent) {
                         textToDetect = textContent;
-                    } else if (caption && caption.trim().length > 5) {
+                    } else if (caption && caption.trim().length > 0) {
                         textToDetect = caption;
-                    } else if (subtitles && subtitles.trim().length > 5) {
+                    } else if (subtitles && subtitles.trim().length > 0) {
                         textToDetect = subtitles;
-                    } else if (textContent) {
-                        textToDetect = textContent;
+                    } else if (mediaType === 'survey' && surveyData?.question) {
+                        textToDetect = surveyData.question;
                     }
                     
-                    if (textToDetect && textToDetect.trim().length > 3) {
+                    if (textToDetect && textToDetect.trim().length > 0) {
                         detectedLanguage = await vyinService.detectLanguage(textToDetect);
-                        console.log(`🔍 Idioma detectado automáticamente: ${detectedLanguage}`);
-                    } else {
-                        console.log(`📝 Texto insuficiente para detectar idioma, usando: ${detectedLanguage}`);
+                        console.log(`🔍 [DETECCIÓN] Idioma detectado: ${detectedLanguage}`);
                     }
                 } catch (error) {
                     console.warn('⚠️ Error detectando idioma:', error.message);
@@ -1263,6 +1465,9 @@ module.exports = function(read, write, io, processHashtags, isProfileVisible, ar
                 }
             }
 
+            // ============================================================
+            // 🔥 CREAR HISTORIA
+            // ============================================================
             const story = {
                 id: Date.now().toString(),
                 userId: userId,
@@ -1293,15 +1498,46 @@ module.exports = function(read, write, io, processHashtags, isProfileVisible, ar
                 embeddingVersion: null,
                 country: user.country || null,
                 region: user.region || 'other',
-                countryName: user.countryName || null
+                countryName: user.countryName || null,
+                publicId: null,
+                cloudinaryUrl: null,
+                isSurvey: mediaType === 'survey' ? 1 : 0,
+                surveyType: null,
+                surveyData: null
             };
 
-            console.log(`📍 Historia guardada con: país=${story.country}, región=${story.region}, idioma=${story.language}`);
+            // ============================================================
+            // 🔥 AGREGAR DATOS DE ENCUESTA
+            // ============================================================
+            if (mediaType === 'survey' && surveyData) {
+                console.log('📊 Guardando encuesta en la historia...');
+                story.surveyType = surveyData.surveyType;
+                story.surveyData = {
+                    question: surveyData.question || '',
+                    options: surveyData.options || [],
+                    statsData: surveyData.statsData || [],
+                    calculation: surveyData.calculation || null,
+                    allowMultiple: surveyData.allowMultiple || false,
+                    anonymous: surveyData.anonymous || false,
+                    showResults: surveyData.showResults || false,
+                    totalVotes: 0,
+                    voters: [],
+                    createdAt: new Date().toISOString(),
+                    expiresIn: surveyData.expiresIn || 24,
+                    isExpired: false
+                };
+                story.caption = surveyData.question || caption || '📊 Encuesta';
+                console.log('✅ Encuesta guardada');
+            }
 
+            console.log(`📍 Historia guardada con: país=${story.country}, región=${story.region}, idioma=${story.language}, tipo=${mediaType}`);
+
+            // ============================================================
+            // 🔥 CLASIFICAR IMAGEN
+            // ============================================================
             if (mediaType === 'image' && mediaUrl && mediaUrl.startsWith('/uploads/')) {
                 try {
                     const imagePath = path.join(__dirname, '../frontend', mediaUrl);
-                    console.log(`🔍 Buscando imagen en: ${imagePath}`);
                     
                     if (fs.existsSync(imagePath)) {
                         console.log('🤖 [IA] Clasificando imagen de la historia...');
@@ -1335,28 +1571,32 @@ module.exports = function(read, write, io, processHashtags, isProfileVisible, ar
                                 console.log(`🚫 [IA] Historia oculta automáticamente por NSFW explícito`);
                             }
                         }
-                    } else {
-                        console.warn(`⚠️ [IA] Imagen no encontrada: ${imagePath}`);
                     }
                 } catch (error) {
                     console.error('❌ [IA] Error clasificando imagen:', error.message);
                 }
             }
 
+            // ============================================================
+            // 🔥 PROCESAR HASHTAGS
+            // ============================================================
             if (story.caption) {
                 try {
                     console.log('🏷️ Procesando hashtags para historia:', story.id);
-                    const hashtags = processHashtags(story.id, story.caption, userId);
-                    console.log(`🏷️ Hashtags encontrados: ${hashtags.length}`);
+                    processHashtags(story.id, story.caption, userId);
                 } catch (e) {
                     console.warn('⚠️ Error procesando hashtags:', e.message);
                 }
             }
 
-            const stories = read('stories.json');
-            stories.push(story);
-            write('stories.json', stories);
+            // ============================================================
+            // 🔥 GUARDAR EN SQLITE
+            // ============================================================
+            await storyDB.createStory(story);
 
+            // ============================================================
+            // 🔥 GENERAR EMBEDDING
+            // ============================================================
             try {
                 console.log('🧠 Generando embedding multilingüe para historia:', story.id);
                 const { getEmbeddingService } = require('./services/embedding.service');
@@ -1366,14 +1606,17 @@ module.exports = function(read, write, io, processHashtags, isProfileVisible, ar
                 if (result) {
                     story.embedded = true;
                     story.embeddingVersion = 'paraphrase-multilingual-MiniLM-L12-v2';
+                    // Actualizar en DB
+                    await storyDB.updateStory(story.id, { embedded: true });
                     console.log('✅ Embedding generado correctamente');
-                } else {
-                    console.warn('⚠️ No se pudo generar embedding para la historia');
                 }
             } catch (embedError) {
                 console.warn('⚠️ Error generando embedding:', embedError.message);
             }
 
+            // ============================================================
+            // 🔥 INVALIDAR CACHÉ
+            // ============================================================
             try {
                 const cache = require('./cache');
                 cache.invalidatePattern('feed_');
@@ -1385,8 +1628,14 @@ module.exports = function(read, write, io, processHashtags, isProfileVisible, ar
                 console.warn('⚠️ Error invalidando caché:', e.message);
             }
 
+            // ============================================================
+            // 🔥 EMITIR EVENTO
+            // ============================================================
             const storyWithUser = {
                 ...story,
+                views: [],
+                likes: [],
+                comments: [],
                 score: 0,
                 userData: {
                     id: user.id,
@@ -1400,6 +1649,14 @@ module.exports = function(read, write, io, processHashtags, isProfileVisible, ar
 
             if (!story.hidden) {
                 io.emit('new_story', storyWithUser);
+                
+                if (mediaType === 'survey') {
+                    io.to(`story_${story.id}`).emit('survey_created', {
+                        storyId: story.id,
+                        surveyData: story.surveyData,
+                        userId: userId
+                    });
+                }
             } else {
                 io.to(`user_${userId}`).emit('story_hidden', {
                     storyId: story.id,
@@ -1408,8 +1665,8 @@ module.exports = function(read, write, io, processHashtags, isProfileVisible, ar
                 });
             }
 
-            if (logger) logger.info(`✅ Historia creada: ${story.id} País: ${story.country}, Región: ${story.region}, Idioma: ${story.language}`);
-            console.log(`✅ Historia creada: ${story.id} por usuario ${user.username} País: ${story.country}, Región: ${story.region}, Idioma: ${story.language}`);
+            if (logger) logger.info(`✅ Historia creada: ${story.id} País: ${story.country}, Región: ${story.region}, Idioma: ${story.language}, Tipo: ${mediaType}`);
+            console.log(`✅ Historia creada: ${story.id} por usuario ${user.username}`);
             
             res.status(201).json(storyWithUser);
 
@@ -1421,7 +1678,151 @@ module.exports = function(read, write, io, processHashtags, isProfileVisible, ar
     });
 
     // ============================================================
-    // RUTA: ELIMINAR HISTORIA
+    // 🔥🔥🔥 RUTA: VOTAR EN ENCUESTA (CON SQLITE)
+    // ============================================================
+
+    router.post('/:storyId/survey/vote', auth, async (req, res) => {
+        try {
+            const storyId = req.params.storyId;
+            const userId = req.userId;
+            const { optionId } = req.body;
+
+            console.log(`📊 [SURVEY] Voto recibido: storyId=${storyId}, userId=${userId}, optionId=${optionId}`);
+
+            if (!optionId) {
+                return res.status(400).json({ error: 'optionId es requerido' });
+            }
+
+            // 🔥 OBTENER HISTORIA DESDE SQLITE
+            const story = await storyDB.getStoryById(storyId);
+
+            if (!story) {
+                return res.status(404).json({ error: 'Historia no encontrada' });
+            }
+
+            // Verificar que sea una encuesta
+            if (story.mediaType !== 'survey' || !story.surveyData) {
+                return res.status(400).json({ error: 'Esta historia no es una encuesta' });
+            }
+
+            // Parsear surveyData si viene como string
+            let surveyData = typeof story.surveyData === 'string' ? JSON.parse(story.surveyData) : story.surveyData;
+
+            // Verificar si la encuesta ha expirado
+            if (surveyData.isExpired) {
+                return res.status(400).json({ error: 'Esta encuesta ya ha expirado' });
+            }
+
+            const now = Date.now();
+            const createdAt = new Date(surveyData.createdAt).getTime();
+            const expiresIn = (surveyData.expiresIn || 24) * 60 * 60 * 1000;
+            if (now - createdAt > expiresIn) {
+                surveyData.isExpired = true;
+                await storyDB.updateStory(storyId, { surveyData: surveyData });
+                return res.status(400).json({ error: 'Esta encuesta ya ha expirado' });
+            }
+
+            // Verificar si el usuario ya votó
+            if (!surveyData.voters) {
+                surveyData.voters = [];
+            }
+
+            if (surveyData.voters.includes(userId)) {
+                return res.status(400).json({ error: 'Ya votaste en esta encuesta' });
+            }
+
+            // Buscar la opción seleccionada
+            let optionFound = false;
+            let totalVotes = 0;
+
+            if (surveyData.options && Array.isArray(surveyData.options)) {
+                surveyData.options = surveyData.options.map(opt => {
+                    if (opt.id === optionId) {
+                        optionFound = true;
+                        opt.votes = (opt.votes || 0) + 1;
+                    }
+                    return opt;
+                });
+
+                totalVotes = surveyData.options.reduce((sum, opt) => sum + (opt.votes || 0), 0);
+            }
+
+            if (!optionFound) {
+                return res.status(400).json({ error: 'Opción no encontrada' });
+            }
+
+            // Registrar el voto del usuario
+            surveyData.voters.push(userId);
+            surveyData.totalVotes = totalVotes;
+
+            // Guardar en SQLite
+            await storyDB.updateStory(storyId, { surveyData: surveyData });
+
+            // Guardar voto en tabla separada
+            await storyDB.createSurveyVote({
+                id: Date.now().toString() + '_' + Math.random().toString(36).substr(2, 6),
+                storyId: storyId,
+                userId: userId,
+                optionId: optionId,
+                votedAt: new Date().toISOString()
+            });
+
+            console.log(`✅ [SURVEY] Voto registrado para usuario ${userId} en historia ${storyId}`);
+
+            io.emit('survey_vote_updated', {
+                storyId: storyId,
+                surveyData: surveyData,
+                userId: userId
+            });
+
+            res.json({
+                success: true,
+                message: 'Voto registrado correctamente',
+                surveyData: surveyData
+            });
+
+        } catch (error) {
+            console.error('❌ Error votando en encuesta:', error);
+            res.status(500).json({ error: 'Error interno del servidor' });
+        }
+    });
+
+    // ============================================================
+    // 🔥 RUTA: OBTENER RESULTADOS DE ENCUESTA (CON SQLITE)
+    // ============================================================
+
+    router.get('/:storyId/survey/results', auth, async (req, res) => {
+        try {
+            const storyId = req.params.storyId;
+            const userId = req.userId;
+
+            const story = await storyDB.getStoryById(storyId);
+
+            if (!story) {
+                return res.status(404).json({ error: 'Historia no encontrada' });
+            }
+
+            if (story.mediaType !== 'survey' || !story.surveyData) {
+                return res.status(400).json({ error: 'Esta historia no es una encuesta' });
+            }
+
+            let surveyData = typeof story.surveyData === 'string' ? JSON.parse(story.surveyData) : story.surveyData;
+            const hasVoted = surveyData.voters?.includes(userId) || false;
+
+            res.json({
+                success: true,
+                surveyData: surveyData,
+                hasVoted: hasVoted
+            });
+
+        } catch (error) {
+            console.error('❌ Error obteniendo resultados:', error);
+            res.status(500).json({ error: 'Error interno del servidor' });
+        }
+    });
+
+    // ============================================================
+    // RUTA: ELIMINAR HISTORIA (CON SQLITE)
     // ============================================================
     
     router.delete('/:storyId', auth, async (req, res) => {
@@ -1429,19 +1830,17 @@ module.exports = function(read, write, io, processHashtags, isProfileVisible, ar
             const storyId = req.params.storyId;
             const userId = req.userId;
 
-            const stories = read('stories.json');
-            const storyIndex = stories.findIndex(s => s.id === storyId);
+            const story = await storyDB.getStoryById(storyId);
 
-            if (storyIndex === -1) {
+            if (!story) {
                 return res.status(404).json({ error: 'Historia no encontrada' });
             }
-
-            const story = stories[storyIndex];
             
             if (story.userId !== userId) {
                 return res.status(403).json({ error: 'No tienes permiso' });
             }
 
+            // Eliminar embedding
             try {
                 const { getEmbeddingService } = require('./services/embedding.service');
                 const embeddingService = getEmbeddingService();
@@ -1451,6 +1850,7 @@ module.exports = function(read, write, io, processHashtags, isProfileVisible, ar
                 console.warn('⚠️ Error eliminando embedding:', e.message);
             }
 
+            // Eliminar archivos locales
             if (story.mediaType === 'image' && story.mediaUrl && story.mediaUrl.startsWith('/uploads/')) {
                 try {
                     const filename = path.basename(story.mediaUrl);
@@ -1477,6 +1877,7 @@ module.exports = function(read, write, io, processHashtags, isProfileVisible, ar
                 }
             }
 
+            // Eliminar de Cloudinary
             if (story.publicId) {
                 try {
                     const result = await deleteFile(story.publicId);
@@ -1488,9 +1889,10 @@ module.exports = function(read, write, io, processHashtags, isProfileVisible, ar
                 }
             }
 
-            stories.splice(storyIndex, 1);
-            write('stories.json', stories);
+            // 🔥 ELIMINAR DE SQLITE
+            await storyDB.deleteStory(storyId);
 
+            // Invalidar caché
             try {
                 const cache = require('./cache');
                 cache.invalidatePattern('feed_');
@@ -1510,10 +1912,10 @@ module.exports = function(read, write, io, processHashtags, isProfileVisible, ar
     });
 
     // ============================================================
-    // RUTA: DAR/QUITAR LIKE - CON VERIFICACIÓN DE BLOQUEOS
+    // RUTA: DAR/QUITAR LIKE (CON SQLITE)
     // ============================================================
     
-    router.post('/:storyId/like', auth, likeLimiter, (req, res) => {
+    router.post('/:storyId/like', auth, likeLimiter, async (req, res) => {
         try {
             const storyId = req.params.storyId;
             const userId = req.userId;
@@ -1521,14 +1923,13 @@ module.exports = function(read, write, io, processHashtags, isProfileVisible, ar
             const users = read('users.json');
             const currentUser = users.find(u => u.id === userId);
             
-            const stories = read('stories.json');
-            const storyIndex = stories.findIndex(s => s.id === storyId);
+            // 🔥 OBTENER HISTORIA DESDE SQLITE
+            const story = await storyDB.getStoryById(storyId);
 
-            if (storyIndex === -1) {
+            if (!story) {
                 return res.status(404).json({ error: 'Historia no encontrada' });
             }
 
-            const story = stories[storyIndex];
             const storyOwner = users.find(u => u.id === story.userId);
             
             if (!storyOwner) {
@@ -1547,19 +1948,19 @@ module.exports = function(read, write, io, processHashtags, isProfileVisible, ar
                 return res.status(403).json({ error: 'No tienes permiso' });
             }
 
-            if (!story.likes) story.likes = [];
-
+            let likes = typeof story.likes === 'string' ? JSON.parse(story.likes || '[]') : (story.likes || []);
             let liked = false;
 
-            if (story.likes.includes(userId)) {
-                story.likes = story.likes.filter(id => id !== userId);
+            if (likes.includes(userId)) {
+                likes = likes.filter(id => id !== userId);
                 liked = false;
             } else {
-                story.likes.push(userId);
+                likes.push(userId);
                 liked = true;
             }
 
-            write('stories.json', stories);
+            // 🔥 ACTUALIZAR EN SQLITE
+            await storyDB.updateStory(storyId, { likes: likes });
             
             try {
                 const cache = require('./cache');
@@ -1570,9 +1971,9 @@ module.exports = function(read, write, io, processHashtags, isProfileVisible, ar
             io.emit('story_liked', {
                 storyId,
                 userId,
-                likes: story.likes,
+                likes: likes,
                 liked: liked,
-                likesCount: story.likes.length
+                likesCount: likes.length
             });
 
             if (liked && storyOwner.id !== userId) {
@@ -1600,8 +2001,8 @@ module.exports = function(read, write, io, processHashtags, isProfileVisible, ar
             res.json({
                 success: true,
                 liked: liked,
-                likes: story.likes,
-                likesCount: story.likes.length
+                likes: likes,
+                likesCount: likes.length
             });
 
         } catch (error) {
@@ -1611,28 +2012,26 @@ module.exports = function(read, write, io, processHashtags, isProfileVisible, ar
     });
 
     // ============================================================
-    // RUTA: QUITAR LIKE
+    // RUTA: QUITAR LIKE (CON SQLITE)
     // ============================================================
     
-    router.delete('/:storyId/like', auth, (req, res) => {
+    router.delete('/:storyId/like', auth, async (req, res) => {
         try {
             const storyId = req.params.storyId;
             const userId = req.userId;
 
-            const stories = read('stories.json');
-            const storyIndex = stories.findIndex(s => s.id === storyId);
+            // 🔥 OBTENER HISTORIA DESDE SQLITE
+            const story = await storyDB.getStoryById(storyId);
 
-            if (storyIndex === -1) {
+            if (!story) {
                 return res.status(404).json({ error: 'Historia no encontrada' });
             }
 
-            const story = stories[storyIndex];
+            let likes = typeof story.likes === 'string' ? JSON.parse(story.likes || '[]') : (story.likes || []);
+            likes = likes.filter(id => id !== userId);
             
-            if (!story.likes) story.likes = [];
-
-            story.likes = story.likes.filter(id => id !== userId);
-            
-            write('stories.json', stories);
+            // 🔥 ACTUALIZAR EN SQLITE
+            await storyDB.updateStory(storyId, { likes: likes });
 
             try {
                 const cache = require('./cache');
@@ -1643,16 +2042,16 @@ module.exports = function(read, write, io, processHashtags, isProfileVisible, ar
             io.emit('story_liked', {
                 storyId,
                 userId,
-                likes: story.likes,
+                likes: likes,
                 liked: false,
-                likesCount: story.likes.length
+                likesCount: likes.length
             });
 
             res.json({
                 success: true,
                 liked: false,
-                likes: story.likes,
-                likesCount: story.likes.length
+                likes: likes,
+                likesCount: likes.length
             });
 
         } catch (error) {
@@ -1662,10 +2061,10 @@ module.exports = function(read, write, io, processHashtags, isProfileVisible, ar
     });
 
     // ============================================================
-    // RUTA: REGISTRAR VISTA - CON VERIFICACIÓN DE BLOQUEOS
+    // RUTA: REGISTRAR VISTA (CON SQLITE)
     // ============================================================
     
-    router.post('/:storyId/view', auth, (req, res) => {
+    router.post('/:storyId/view', auth, async (req, res) => {
         try {
             const storyId = req.params.storyId;
             const userId = req.userId;
@@ -1673,14 +2072,13 @@ module.exports = function(read, write, io, processHashtags, isProfileVisible, ar
             const users = read('users.json');
             const currentUser = users.find(u => u.id === userId);
             
-            const stories = read('stories.json');
-            const storyIndex = stories.findIndex(s => s.id === storyId);
+            // 🔥 OBTENER HISTORIA DESDE SQLITE
+            const story = await storyDB.getStoryById(storyId);
 
-            if (storyIndex === -1) {
+            if (!story) {
                 return res.status(404).json({ error: 'Historia no encontrada' });
             }
 
-            const story = stories[storyIndex];
             const storyOwner = users.find(u => u.id === story.userId);
             
             if (!storyOwner) {
@@ -1694,12 +2092,13 @@ module.exports = function(read, write, io, processHashtags, isProfileVisible, ar
                     message: 'El usuario que buscas no existe'
                 });
             }
-            
-            if (!story.views) story.views = [];
 
-            if (!story.views.includes(userId)) {
-                story.views.push(userId);
-                write('stories.json', stories);
+            let views = typeof story.views === 'string' ? JSON.parse(story.views || '[]') : (story.views || []);
+
+            if (!views.includes(userId)) {
+                views.push(userId);
+                // 🔥 ACTUALIZAR EN SQLITE
+                await storyDB.updateStory(storyId, { views: views });
                 
                 try {
                     const cache = require('./cache');
@@ -1710,7 +2109,7 @@ module.exports = function(read, write, io, processHashtags, isProfileVisible, ar
 
             res.json({
                 success: true,
-                viewsCount: story.views.length
+                viewsCount: views.length
             });
 
         } catch (error) {
@@ -1720,10 +2119,10 @@ module.exports = function(read, write, io, processHashtags, isProfileVisible, ar
     });
 
     // ============================================================
-    // RUTA: ESTADÍSTICAS DE HISTORIA - CON VERIFICACIÓN DE BLOQUEOS
+    // RUTA: ESTADÍSTICAS DE HISTORIA (CON SQLITE)
     // ============================================================
     
-    router.get('/:storyId/stats', auth, (req, res) => {
+    router.get('/:storyId/stats', auth, async (req, res) => {
         try {
             const storyId = req.params.storyId;
             const userId = req.userId;
@@ -1731,8 +2130,8 @@ module.exports = function(read, write, io, processHashtags, isProfileVisible, ar
             const users = read('users.json');
             const currentUser = users.find(u => u.id === userId);
             
-            const stories = read('stories.json');
-            const story = stories.find(s => s.id === storyId);
+            // 🔥 OBTENER HISTORIA DESDE SQLITE
+            const story = await storyDB.getStoryById(storyId);
 
             if (!story) {
                 return res.status(404).json({ error: 'Historia no encontrada' });
@@ -1756,25 +2155,53 @@ module.exports = function(read, write, io, processHashtags, isProfileVisible, ar
                 return res.status(403).json({ error: 'No tienes permiso' });
             }
 
-            res.json({
+            const views = typeof story.views === 'string' ? JSON.parse(story.views || '[]') : (story.views || []);
+            const likes = typeof story.likes === 'string' ? JSON.parse(story.likes || '[]') : (story.likes || []);
+            const comments = typeof story.comments === 'string' ? JSON.parse(story.comments || '[]') : (story.comments || []);
+            const iaClassification = typeof story.iaClassification === 'string' ? JSON.parse(story.iaClassification || 'null') : (story.iaClassification || null);
+            let surveyData = typeof story.surveyData === 'string' ? JSON.parse(story.surveyData || 'null') : (story.surveyData || null);
+
+            const response = {
                 storyId: story.id,
-                views: story.views?.length || 0,
-                likes: story.likes?.length || 0,
-                comments: story.comments?.length || 0,
+                views: views.length,
+                likes: likes.length,
+                comments: comments.length,
                 score: story.score || 0,
                 createdAt: story.createdAt,
                 expiresAt: story.expiresAt,
-                iaClassification: story.iaClassification || null,
-                flagged: story.flagged || false,
+                iaClassification: iaClassification,
+                flagged: story.flagged === 1 || story.flagged === true,
                 flagReason: story.flagReason || null,
-                hasSubtitles: story.hasSubtitles || false,
+                hasSubtitles: story.hasSubtitles === 1 || story.hasSubtitles === true,
                 subtitles: story.subtitles || null,
                 language: story.language || 'es',
-                embedded: story.embedded || false,
+                embedded: story.embedded === 1 || story.embedded === true,
                 country: story.country || null,
                 region: story.region || 'other',
-                countryName: story.countryName || null
-            });
+                countryName: story.countryName || null,
+                source: 'sqlite'
+            };
+
+            // 🔥 SI ES ENCUESTA, AGREGAR DATOS DE ENCUESTA
+            if (story.mediaType === 'survey' && surveyData) {
+                response.surveyType = story.surveyType;
+                response.surveyData = {
+                    question: surveyData.question,
+                    options: surveyData.options,
+                    statsData: surveyData.statsData || [],
+                    calculation: surveyData.calculation || null,
+                    allowMultiple: surveyData.allowMultiple || false,
+                    anonymous: surveyData.anonymous || false,
+                    showResults: surveyData.showResults || false,
+                    totalVotes: surveyData.totalVotes || 0,
+                    voters: surveyData.voters || [],
+                    createdAt: surveyData.createdAt,
+                    expiresIn: surveyData.expiresIn || 24,
+                    isExpired: surveyData.isExpired || false
+                };
+            }
+
+            res.json(response);
 
         } catch (error) {
             if (logger) logger.error('Error en stats:', { error: error.message });
@@ -1783,10 +2210,10 @@ module.exports = function(read, write, io, processHashtags, isProfileVisible, ar
     });
 
     // ============================================================
-    // RUTA: TOP STORIES - CON FILTRO DE BLOQUEOS
+    // RUTA: TOP STORIES (CON SQLITE)
     // ============================================================
     
-    router.get('/top', auth, (req, res) => {
+    router.get('/top', auth, async (req, res) => {
         try {
             const userId = req.userId;
             const limit = parseInt(req.query.limit) || 10;
@@ -1803,16 +2230,15 @@ module.exports = function(read, write, io, processHashtags, isProfileVisible, ar
             const blockedIds = currentUser.blocked || [];
             const blockedByIds = currentUser.blockedBy || [];
 
-            const stories = read('stories.json');
+            // 🔥 OBTENER HISTORIAS DESDE SQLITE
+            let stories = await storyDB.getActiveStories();
+            
             const now = Date.now();
-
             const cutoff = now - (days * 24 * 60 * 60 * 1000);
             const userMap = {};
             users.forEach(u => { userMap[u.id] = u; });
 
             const candidateStories = stories.filter(s => {
-                if (!s.expiresAt) return false;
-                if (new Date(s.expiresAt).getTime() <= now) return false;
                 if (s.hidden) return false;
                 const createdAt = new Date(s.createdAt).getTime();
                 if (createdAt < cutoff) return false;
@@ -1830,9 +2256,15 @@ module.exports = function(read, write, io, processHashtags, isProfileVisible, ar
 
             const scoredStories = candidateStories.map(s => {
                 const owner = userMap[s.userId];
-                const score = (s.likes?.length || 0) * 3 + (s.comments?.length || 0) * 2 + (s.views?.length || 0) * 0.5;
+                const likes = typeof s.likes === 'string' ? JSON.parse(s.likes || '[]') : (s.likes || []);
+                const comments = typeof s.comments === 'string' ? JSON.parse(s.comments || '[]') : (s.comments || []);
+                const views = typeof s.views === 'string' ? JSON.parse(s.views || '[]') : (s.views || []);
+                const score = likes.length * 3 + comments.length * 2 + views.length * 0.5;
                 return {
                     ...s,
+                    views: views,
+                    likes: likes,
+                    comments: comments,
                     score: score,
                     userData: {
                         id: owner.id,
@@ -1841,12 +2273,7 @@ module.exports = function(read, write, io, processHashtags, isProfileVisible, ar
                         avatar: owner.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(owner.fullName)}&background=a855f7&color=fff`,
                         isVerified: owner.isVerified || false,
                         accountType: owner.accountType || 'personal'
-                    },
-                    hasSubtitles: s.hasSubtitles || false,
-                    subtitles: s.subtitles || null,
-                    language: s.language || 'es',
-                    country: s.country || null,
-                    region: s.region || 'other'
+                    }
                 };
             });
 
@@ -1859,6 +2286,7 @@ module.exports = function(read, write, io, processHashtags, isProfileVisible, ar
                 meta: {
                     days: days,
                     totalConsidered: scoredStories.length,
+                    source: 'sqlite',
                     timestamp: new Date().toISOString()
                 }
             });
@@ -1870,12 +2298,13 @@ module.exports = function(read, write, io, processHashtags, isProfileVisible, ar
     });
 
     // ============================================================
-    // RUTA: LIMPIAR HISTORIAS EXPIRADAS
+    // RUTA: LIMPIAR HISTORIAS EXPIRADAS (CON SQLITE)
     // ============================================================
     
-    router.post('/cleanup', auth, (req, res) => {
+    router.post('/cleanup', auth, async (req, res) => {
         try {
-            const stories = read('stories.json');
+            // 🔥 OBTENER HISTORIAS DESDE SQLITE
+            const stories = await storyDB.getAllStories();
             const now = Date.now();
             
             const activeStories = stories.filter(s => {
@@ -1886,6 +2315,7 @@ module.exports = function(read, write, io, processHashtags, isProfileVisible, ar
             const removedCount = stories.length - activeStories.length;
             
             if (removedCount > 0) {
+                // Eliminar embeddings de historias expiradas
                 try {
                     const { getEmbeddingService } = require('./services/embedding.service');
                     const embeddingService = getEmbeddingService();
@@ -1900,7 +2330,12 @@ module.exports = function(read, write, io, processHashtags, isProfileVisible, ar
                     console.warn('⚠️ Error eliminando embeddings:', e.message);
                 }
                 
-                write('stories.json', activeStories);
+                // Eliminar de SQLite
+                for (const story of stories) {
+                    if (!activeStories.some(as => as.id === story.id)) {
+                        await storyDB.deleteStory(story.id);
+                    }
+                }
                 
                 try {
                     const cache = require('./cache');
@@ -1917,7 +2352,8 @@ module.exports = function(read, write, io, processHashtags, isProfileVisible, ar
             res.json({
                 success: true,
                 removed: removedCount,
-                remaining: activeStories.length
+                remaining: activeStories.length,
+                source: 'sqlite'
             });
 
         } catch (error) {
@@ -1927,7 +2363,7 @@ module.exports = function(read, write, io, processHashtags, isProfileVisible, ar
     });
 
     // ============================================================
-    // 🔥🔥🔥 RUTA: BÚSQUEDA SEMÁNTICA MULTILINGÜE - CON FILTRO DE BLOQUEOS
+    // 🔥 RUTA: BÚSQUEDA SEMÁNTICA (CON SQLITE)
     // ============================================================
 
     router.get('/search/semantic', auth, async (req, res) => {
@@ -1957,6 +2393,25 @@ module.exports = function(read, write, io, processHashtags, isProfileVisible, ar
             const blockedIds = currentUser.blocked || [];
             const blockedByIds = currentUser.blockedBy || [];
 
+            // 🔥 OBTENER HISTORIAS DESDE SQLITE
+            let allStories = await storyDB.getActiveStories();
+            
+            // Convertir campos
+            allStories = allStories.map(s => ({
+                ...s,
+                views: typeof s.views === 'string' ? JSON.parse(s.views || '[]') : (s.views || []),
+                likes: typeof s.likes === 'string' ? JSON.parse(s.likes || '[]') : (s.likes || []),
+                comments: typeof s.comments === 'string' ? JSON.parse(s.comments || '[]') : (s.comments || []),
+                surveyData: typeof s.surveyData === 'string' ? JSON.parse(s.surveyData || 'null') : (s.surveyData || null),
+                segments: typeof s.segments === 'string' ? JSON.parse(s.segments || 'null') : (s.segments || null),
+                flagged: s.flagged === 1 || s.flagged === true,
+                hidden: s.hidden === 1 || s.hidden === true,
+                hasSubtitles: s.hasSubtitles === 1 || s.hasSubtitles === true,
+                embedded: s.embedded === 1 || s.embedded === true,
+                hiddenByIA: s.hiddenByIA === 1 || s.hiddenByIA === true,
+                isSurvey: s.isSurvey === 1 || s.isSurvey === true
+            }));
+
             const { getEmbeddingService } = require('./services/embedding.service');
             const embeddingService = await getEmbeddingService();
 
@@ -1976,23 +2431,22 @@ module.exports = function(read, write, io, processHashtags, isProfileVisible, ar
                         model: 'paraphrase-multilingual-MiniLM-L12-v2',
                         languages: '100+ idiomas soportados',
                         matches: 0,
-                        message: 'No se encontraron resultados semánticos'
+                        message: 'No se encontraron resultados semánticos',
+                        source: 'sqlite'
                     }
                 });
             }
 
-            const stories = read('stories.json');
             const userMap = {};
             users.forEach(u => { userMap[u.id] = u; });
 
             const resultIds = new Set(results.map(r => r.storyId));
             
-            const matchedStories = stories
+            const matchedStories = allStories
                 .filter(s => resultIds.has(s.id) && !s.hidden)
                 .filter(s => {
                     const owner = userMap[s.userId];
                     if (!owner) return false;
-                    // 🔥 FILTRAR BLOQUEADOS
                     if (blockedIds.includes(owner.id)) return false;
                     if (blockedByIds.includes(owner.id)) return false;
                     return true;
@@ -2023,12 +2477,7 @@ module.exports = function(read, write, io, processHashtags, isProfileVisible, ar
                             avatar: owner?.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(owner?.fullName || 'U')}&background=a855f7&color=fff`,
                             isVerified: owner?.isVerified || false,
                             accountType: owner?.accountType || 'personal'
-                        },
-                        hasSubtitles: s.hasSubtitles || false,
-                        subtitles: s.subtitles || null,
-                        language: s.language || 'es',
-                        country: s.country || null,
-                        region: s.region || 'other'
+                        }
                     };
                 })
                 .sort((a, b) => (b.relevanceScore || 0) - (a.relevanceScore || 0))
@@ -2046,6 +2495,7 @@ module.exports = function(read, write, io, processHashtags, isProfileVisible, ar
                     totalFound: results.length,
                     threshold: 0.55,
                     language: language || 'all',
+                    source: 'sqlite',
                     timestamp: new Date().toISOString(),
                     embeddingStats: embeddingService.getStats()
                 }
@@ -2058,7 +2508,7 @@ module.exports = function(read, write, io, processHashtags, isProfileVisible, ar
     });
 
     // ============================================================
-    // 🔥🔥🔥 RUTA: BÚSQUEDA HÍBRIDA COMPLETA - CON FILTRO DE BLOQUEOS Y CONTENTCLASSIFIER
+    // 🔥 RUTA: BÚSQUEDA HÍBRIDA (CON SQLITE)
     // ============================================================
 
     router.get('/search/hybrid', auth, async (req, res) => {
@@ -2088,10 +2538,35 @@ module.exports = function(read, write, io, processHashtags, isProfileVisible, ar
             const blockedIds = currentUser.blocked || [];
             const blockedByIds = currentUser.blockedBy || [];
 
-            // 🔥🔥🔥 OBTENER IDIOMA DEL USUARIO
             const userLanguage = currentUser.language || 'es';
 
-            // 🔥🔥🔥 CLASIFICAR LA BÚSQUEDA CON ContentClassifier (NUEVO SISTEMA)
+            // 🔥 OBTENER HISTORIAS DESDE SQLITE
+            let allStories = await storyDB.getActiveStories();
+            
+            allStories = allStories.map(s => ({
+                ...s,
+                views: typeof s.views === 'string' ? JSON.parse(s.views || '[]') : (s.views || []),
+                likes: typeof s.likes === 'string' ? JSON.parse(s.likes || '[]') : (s.likes || []),
+                comments: typeof s.comments === 'string' ? JSON.parse(s.comments || '[]') : (s.comments || []),
+                surveyData: typeof s.surveyData === 'string' ? JSON.parse(s.surveyData || 'null') : (s.surveyData || null),
+                segments: typeof s.segments === 'string' ? JSON.parse(s.segments || 'null') : (s.segments || null),
+                flagged: s.flagged === 1 || s.flagged === true,
+                hidden: s.hidden === 1 || s.hidden === true,
+                hasSubtitles: s.hasSubtitles === 1 || s.hasSubtitles === true,
+                embedded: s.embedded === 1 || s.embedded === true,
+                hiddenByIA: s.hiddenByIA === 1 || s.hiddenByIA === true,
+                isSurvey: s.isSurvey === 1 || s.isSurvey === true
+            }));
+
+            const userMap = {};
+            users.forEach(u => { userMap[u.id] = u; });
+
+            const keywordLower = query.toLowerCase();
+            const keywords = keywordLower.split(' ').filter(w => w.length > 1);
+
+            // ============================================================
+            // 🔥 CLASIFICAR LA BÚSQUEDA
+            // ============================================================
             let detectedCategory = null;
             let detectedCategoryName = null;
             let detectedCategoryEmoji = null;
@@ -2101,7 +2576,6 @@ module.exports = function(read, write, io, processHashtags, isProfileVisible, ar
                 const { getContentClassifier } = require('./classifiers');
                 const classifier = getContentClassifier();
                 
-                // Clasificar el texto de búsqueda con el sistema nuevo
                 const classificationResults = await classifier.classify(query, userLanguage);
                 
                 if (classificationResults && classificationResults.length > 0) {
@@ -2110,39 +2584,26 @@ module.exports = function(read, write, io, processHashtags, isProfileVisible, ar
                     detectedCategoryName = topCategory.name || topCategory.category;
                     detectedCategoryEmoji = topCategory.emoji || '📌';
                     detectedCategoryScore = topCategory.score || 0;
-                    console.log(`📂 Categoría detectada (NUEVO sistema ContentClassifier): ${detectedCategoryName} (${detectedCategory}) con ${Math.round(detectedCategoryScore * 100)}%`);
+                    console.log(`📂 Categoría detectada: ${detectedCategoryName} (${detectedCategory}) con ${Math.round(detectedCategoryScore * 100)}%`);
                 }
             } catch (error) {
-                console.warn('⚠️ Error clasificando búsqueda con ContentClassifier:', error.message);
+                console.warn('⚠️ Error clasificando búsqueda:', error.message);
             }
 
-            const stories = read('stories.json');
-            const now = Date.now();
-
-            const userMap = {};
-            users.forEach(u => { userMap[u.id] = u; });
-
-            const keywordLower = query.toLowerCase();
-            const keywords = keywordLower.split(' ').filter(w => w.length > 1);
-
             // ============================================================
-            // 🔥 1. BÚSQUEDA LITERAL CON FILTRO DE BLOQUEOS
+            // 🔥 BÚSQUEDA LITERAL
             // ============================================================
             
             let literalResults = [];
             let literalIds = new Set();
-            let maxScore = 0;
 
-            for (const s of stories) {
-                if (!s.expiresAt) continue;
-                if (new Date(s.expiresAt).getTime() <= now) continue;
+            for (const s of allStories) {
                 if (s.hidden) continue;
                 if (s.userId === userId) continue;
 
                 const storyOwner = userMap[s.userId];
                 if (!storyOwner) continue;
                 
-                // 🔥 FILTRAR BLOQUEADOS
                 if (blockedIds.includes(storyOwner.id)) continue;
                 if (blockedByIds.includes(storyOwner.id)) continue;
                 
@@ -2197,8 +2658,6 @@ module.exports = function(read, write, io, processHashtags, isProfileVisible, ar
                 relevanceScore += (s.comments?.length || 0) * 0.1;
 
                 if (relevanceScore > 0 && matchSources.length > 0) {
-                    if (relevanceScore > maxScore) maxScore = relevanceScore;
-                    
                     literalIds.add(s.id);
                     literalResults.push({
                         ...s,
@@ -2215,71 +2674,10 @@ module.exports = function(read, write, io, processHashtags, isProfileVisible, ar
                 }
             }
 
-            console.log(`📝 Resultados literales: ${literalResults.length} (max score: ${maxScore})`);
+            console.log(`📝 Resultados literales: ${literalResults.length}`);
 
             // ============================================================
-            // 🔥 2. BÚSQUEDA SEMÁNTICA CON FILTRO DE BLOQUEOS
-            // ============================================================
-            
-            let semanticResults = [];
-            let semanticIds = new Set();
-
-            if (literalResults.length < 10 && query.length > 3) {
-                try {
-                    const { getEmbeddingService } = require('./services/embedding.service');
-                    const embeddingService = await getEmbeddingService();
-
-                    const results = await embeddingService.searchSimilar(query, 20, userId);
-
-                    if (results.length > 0) {
-                        const filteredSemantic = results.filter(r => r.similarity > 0.6);
-                        
-                        if (filteredSemantic.length > 0) {
-                            const resultIds = new Set(filteredSemantic.map(r => r.storyId));
-                            semanticIds = resultIds;
-
-                            const semanticStories = stories
-                                .filter(s => resultIds.has(s.id) && !s.hidden && s.userId !== userId)
-                                .filter(s => {
-                                    const owner = userMap[s.userId];
-                                    if (!owner) return false;
-                                    // 🔥 FILTRAR BLOQUEADOS
-                                    if (blockedIds.includes(owner.id)) return false;
-                                    if (blockedByIds.includes(owner.id)) return false;
-                                    return true;
-                                })
-                                .map(s => {
-                                    const result = filteredSemantic.find(r => r.storyId === s.id);
-                                    const owner = userMap[s.userId];
-                                    let relevanceScore = Math.round((result?.similarity || 0) * 100);
-                                    
-                                    if (s.hasSubtitles) relevanceScore += 5;
-                                    relevanceScore += Math.min(10, (s.likes?.length || 0) * 0.5);
-                                    
-                                    return {
-                                        ...s,
-                                        similarity: result?.similarity || 0,
-                                        relevanceScore: Math.min(100, relevanceScore),
-                                        searchMethod: 'semantic',
-                                        matchSources: ['semántico'],
-                                        sources: {
-                                            semantic: true,
-                                            similarity: result?.similarity || 0
-                                        }
-                                    };
-                                });
-
-                            semanticResults = semanticStories;
-                            console.log(`🧠 Resultados semánticos: ${semanticResults.length} (similaridad > 0.6)`);
-                        }
-                    }
-                } catch (error) {
-                    console.warn('⚠️ Error en búsqueda semántica:', error.message);
-                }
-            }
-
-            // ============================================================
-            // 🔥 3. COMBINAR Y FILTRAR
+            // 🔥 COMBINAR Y FILTRAR
             // ============================================================
             
             const combinedMap = new Map();
@@ -2294,45 +2692,20 @@ module.exports = function(read, write, io, processHashtags, isProfileVisible, ar
                 });
             }
 
-            for (const s of semanticResults) {
-                if (!combinedMap.has(s.id)) {
-                    combinedMap.set(s.id, {
-                        ...s,
-                        searchType: 'semantic',
-                        relevanceScore: s.relevanceScore || 0,
-                        matchSources: s.matchSources || ['semántico'],
-                        sources: s.sources || { semantic: true }
-                    });
-                } else {
-                    const existing = combinedMap.get(s.id);
-                    existing.semanticScore = s.similarity || 0;
-                    existing.relevanceScore = Math.max(existing.relevanceScore || 0, s.relevanceScore || 0);
-                    existing.sources = { ...existing.sources, semantic: true };
-                    if (!existing.matchSources.includes('semántico')) {
-                        existing.matchSources.push('semántico');
-                    }
-                    combinedMap.set(s.id, existing);
-                }
-            }
-
-            // 🔥🔥🔥 FILTRAR POR CATEGORÍA DETECTADA (USANDO ContentClassifier)
+            // 🔥 FILTRAR POR CATEGORÍA DETECTADA
             let combinedStories = Array.from(combinedMap.values());
 
-            // Aplicar filtro de relevancia
             combinedStories = combinedStories.filter(s => {
                 if (s.searchType === 'literal') {
                     return s.relevanceScore >= 15;
                 }
-                if (s.searchType === 'semantic') {
-                    return s.relevanceScore >= 35;
-                }
                 return false;
             });
 
-            console.log(`📊 Resultados después de relevancia: ${combinedStories.length} (de ${combinedMap.size} totales)`);
+            console.log(`📊 Resultados después de relevancia: ${combinedStories.length}`);
 
             if (detectedCategory && combinedStories.length > 0) {
-                console.log(`🔍 Aplicando filtro de categoría (ContentClassifier): ${detectedCategoryName}`);
+                console.log(`🔍 Aplicando filtro de categoría: ${detectedCategoryName}`);
                 
                 const { getContentClassifier } = require('./classifiers');
                 const classifier = getContentClassifier();
@@ -2345,7 +2718,6 @@ module.exports = function(read, write, io, processHashtags, isProfileVisible, ar
                         const hasCategory = categories.some(c => c.category === detectedCategory);
                         
                         if (hasCategory) {
-                            // 🔥 BONUS POR COINCIDENCIA DE CATEGORÍA
                             story.categoryMatch = true;
                             story.categoryName = detectedCategoryName;
                             story.categoryEmoji = detectedCategoryEmoji;
@@ -2363,7 +2735,6 @@ module.exports = function(read, write, io, processHashtags, isProfileVisible, ar
                     }
                 }
                 
-                // Ordenar: primero las que coinciden con categoría
                 classifiedResults.sort((a, b) => {
                     if (a.categoryMatch && !b.categoryMatch) return -1;
                     if (!a.categoryMatch && b.categoryMatch) return 1;
@@ -2377,7 +2748,7 @@ module.exports = function(read, write, io, processHashtags, isProfileVisible, ar
             console.log(`📊 Resultados finales: ${combinedStories.length} historias`);
 
             // ============================================================
-            // 🔥 4. ENRIQUECER CON DATOS DE USUARIO
+            // 🔥 ENRIQUECER CON DATOS DE USUARIO
             // ============================================================
             
             const enrichedStories = combinedStories.map(s => {
@@ -2423,7 +2794,6 @@ module.exports = function(read, write, io, processHashtags, isProfileVisible, ar
             const stats = {
                 totalFound: total,
                 literalCount: literalResults.length,
-                semanticCount: semanticResults.length,
                 uniqueCount: combinedMap.size,
                 filteredCount: combinedStories.length,
                 categoryMatchCount: enrichedStories.filter(s => s.categoryMatch).length,
@@ -2435,7 +2805,6 @@ module.exports = function(read, write, io, processHashtags, isProfileVisible, ar
                     caption: paginated.filter(s => s.sources?.includes('📝 Descripción')).length,
                     hashtags: paginated.filter(s => s.sources?.includes('# Hashtag')).length,
                     text: paginated.filter(s => s.sources?.includes('📄 Texto')).length,
-                    semantic: paginated.filter(s => s.sources?.includes('🔍 Semántico')).length,
                     category: paginated.filter(s => s.sources?.includes(`📂 ${detectedCategoryName || 'Categoría'}`)).length
                 }
             };
@@ -2458,6 +2827,7 @@ module.exports = function(read, write, io, processHashtags, isProfileVisible, ar
                     detectedCategoryName: detectedCategoryName,
                     detectedCategoryEmoji: detectedCategoryEmoji,
                     detectedCategoryScore: Math.round(detectedCategoryScore * 100),
+                    source: 'sqlite',
                     timestamp: new Date().toISOString(),
                     stats: stats,
                     relevanceThreshold: 15,
@@ -2473,7 +2843,7 @@ module.exports = function(read, write, io, processHashtags, isProfileVisible, ar
     });
 
     // ============================================================
-    // 🔥 RUTA: RECOMENDACIONES BASADAS EN EMBEDDINGS - CON FILTRO DE BLOQUEOS
+    // 🔥 RUTA: RECOMENDACIONES BASADAS EN EMBEDDINGS (CON SQLITE)
     // ============================================================
 
     router.get('/recommendations/semantic', auth, async (req, res) => {
@@ -2494,14 +2864,31 @@ module.exports = function(read, write, io, processHashtags, isProfileVisible, ar
             const blockedIds = currentUser.blocked || [];
             const blockedByIds = currentUser.blockedBy || [];
 
+            // 🔥 OBTENER HISTORIAS DESDE SQLITE
+            let allStories = await storyDB.getActiveStories();
+            
+            allStories = allStories.map(s => ({
+                ...s,
+                views: typeof s.views === 'string' ? JSON.parse(s.views || '[]') : (s.views || []),
+                likes: typeof s.likes === 'string' ? JSON.parse(s.likes || '[]') : (s.likes || []),
+                comments: typeof s.comments === 'string' ? JSON.parse(s.comments || '[]') : (s.comments || []),
+                surveyData: typeof s.surveyData === 'string' ? JSON.parse(s.surveyData || 'null') : (s.surveyData || null),
+                segments: typeof s.segments === 'string' ? JSON.parse(s.segments || 'null') : (s.segments || null),
+                flagged: s.flagged === 1 || s.flagged === true,
+                hidden: s.hidden === 1 || s.hidden === true,
+                hasSubtitles: s.hasSubtitles === 1 || s.hasSubtitles === true,
+                embedded: s.embedded === 1 || s.embedded === true,
+                hiddenByIA: s.hiddenByIA === 1 || s.hiddenByIA === true,
+                isSurvey: s.isSurvey === 1 || s.isSurvey === true
+            }));
+
             const { getEmbeddingService } = require('./services/embedding.service');
             const embeddingService = await getEmbeddingService();
 
-            const stories = read('stories.json');
             const userMap = {};
             users.forEach(u => { userMap[u.id] = u; });
             
-            const userStories = stories.filter(s => s.userId === userId && !s.hidden);
+            const userStories = allStories.filter(s => s.userId === userId && !s.hidden);
             
             if (userStories.length > 0) {
                 const recentUserStories = userStories
@@ -2519,12 +2906,11 @@ module.exports = function(read, write, io, processHashtags, isProfileVisible, ar
                     if (results.length > 0) {
                         const resultIds = new Set(results.map(r => r.storyId));
 
-                        const recommendations = stories
-                            .filter(s => resultIds.has(s.id) && !s.hidden)
+                        const recommendations = allStories
+                            .filter(s => resultIds.has(s.id) && !s.hidden && s.userId !== userId)
                             .filter(s => {
                                 const owner = userMap[s.userId];
                                 if (!owner) return false;
-                                // 🔥 FILTRAR BLOQUEADOS
                                 if (blockedIds.includes(owner.id)) return false;
                                 if (blockedByIds.includes(owner.id)) return false;
                                 return true;
@@ -2544,12 +2930,7 @@ module.exports = function(read, write, io, processHashtags, isProfileVisible, ar
                                         avatar: owner?.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(owner?.fullName || 'U')}&background=a855f7&color=fff`,
                                         isVerified: owner?.isVerified || false,
                                         accountType: owner?.accountType || 'personal'
-                                    },
-                                    hasSubtitles: s.hasSubtitles || false,
-                                    subtitles: s.subtitles || null,
-                                    language: s.language || 'es',
-                                    country: s.country || null,
-                                    region: s.region || 'other'
+                                    }
                                 };
                             })
                             .sort((a, b) => (b.recommendationScore || 0) - (a.recommendationScore || 0))
@@ -2563,6 +2944,7 @@ module.exports = function(read, write, io, processHashtags, isProfileVisible, ar
                                 basedOn: 'user_stories',
                                 languages: '100+ idiomas soportados',
                                 count: recommendations.length,
+                                source: 'sqlite',
                                 timestamp: new Date().toISOString()
                             }
                         });
@@ -2570,13 +2952,12 @@ module.exports = function(read, write, io, processHashtags, isProfileVisible, ar
                 }
             }
 
-            // Fallback: historias populares con filtro de bloqueos
-            const popularStories = stories
+            // Fallback: historias populares
+            const popularStories = allStories
                 .filter(s => !s.hidden && s.userId !== userId)
                 .filter(s => {
                     const owner = userMap[s.userId];
                     if (!owner) return false;
-                    // 🔥 FILTRAR BLOQUEADOS
                     if (blockedIds.includes(owner.id)) return false;
                     if (blockedByIds.includes(owner.id)) return false;
                     return true;
@@ -2595,12 +2976,7 @@ module.exports = function(read, write, io, processHashtags, isProfileVisible, ar
                             avatar: owner?.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(owner?.fullName || 'U')}&background=a855f7&color=fff`,
                             isVerified: owner?.isVerified || false,
                             accountType: owner?.accountType || 'personal'
-                        },
-                        hasSubtitles: s.hasSubtitles || false,
-                        subtitles: s.subtitles || null,
-                        language: s.language || 'es',
-                        country: s.country || null,
-                        region: s.region || 'other'
+                        }
                     };
                 });
 
@@ -2609,6 +2985,7 @@ module.exports = function(read, write, io, processHashtags, isProfileVisible, ar
                 meta: {
                     algorithm: 'popular_fallback',
                     count: popularStories.length,
+                    source: 'sqlite',
                     timestamp: new Date().toISOString()
                 }
             });
@@ -2636,19 +3013,31 @@ module.exports = function(read, write, io, processHashtags, isProfileVisible, ar
             const { getEmbeddingService } = require('./services/embedding.service');
             const embeddingService = await getEmbeddingService();
 
-            const stories = read('stories.json');
-            const activeStories = stories.filter(s => {
-                if (s.hidden) return false;
-                if (!s.expiresAt) return false;
-                return new Date(s.expiresAt).getTime() > Date.now();
-            });
+            // 🔥 OBTENER HISTORIAS DESDE SQLITE
+            let allStories = await storyDB.getActiveStories();
+            
+            allStories = allStories.map(s => ({
+                ...s,
+                views: typeof s.views === 'string' ? JSON.parse(s.views || '[]') : (s.views || []),
+                likes: typeof s.likes === 'string' ? JSON.parse(s.likes || '[]') : (s.likes || []),
+                comments: typeof s.comments === 'string' ? JSON.parse(s.comments || '[]') : (s.comments || []),
+                surveyData: typeof s.surveyData === 'string' ? JSON.parse(s.surveyData || 'null') : (s.surveyData || null),
+                segments: typeof s.segments === 'string' ? JSON.parse(s.segments || 'null') : (s.segments || null),
+                flagged: s.flagged === 1 || s.flagged === true,
+                hidden: s.hidden === 1 || s.hidden === true,
+                hasSubtitles: s.hasSubtitles === 1 || s.hasSubtitles === true,
+                embedded: s.embedded === 1 || s.embedded === true,
+                hiddenByIA: s.hiddenByIA === 1 || s.hiddenByIA === true,
+                isSurvey: s.isSurvey === 1 || s.isSurvey === true
+            }));
 
-            await embeddingService.reindexAll(activeStories);
+            await embeddingService.reindexAll(allStories);
 
             res.json({
                 success: true,
-                message: `Reindexados ${activeStories.length} embeddings multilingües`,
-                stats: embeddingService.getStats()
+                message: `Reindexados ${allStories.length} embeddings multilingües`,
+                stats: embeddingService.getStats(),
+                source: 'sqlite'
             });
 
         } catch (error) {
@@ -2676,7 +3065,8 @@ module.exports = function(read, write, io, processHashtags, isProfileVisible, ar
 
             res.json({
                 success: true,
-                stats: embeddingService.getStats()
+                stats: embeddingService.getStats(),
+                source: 'sqlite'
             });
 
         } catch (error) {

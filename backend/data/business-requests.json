@@ -26,5 +26,17 @@
     "trialEnd": "2026-08-10T20:03:16.791Z",
     "approvedAt": "2026-08-03T20:05:23.174Z",
     "approvedBy": "1783122622538"
+  },
+  {
+    "userId": "1786237883372",
+    "businessName": "AAAAA",
+    "businessType": "technology",
+    "description": "AAAAAA",
+    "website": null,
+    "phone": "123453",
+    "address": "A",
+    "status": "pending",
+    "requestedAt": "2026-08-15T20:24:42.837Z",
+    "trialEnd": "2026-08-22T20:24:42.837Z"
   }
 ]

@@ -6,6 +6,8 @@
 // 🔥 AÑADIDO: Botón para enviar mensaje
 // 🔥 MODIFICADO: Soporte para restaurar chat al cerrar perfil
 // 🔥 CORREGIDO: Abrir chat sin cerrar explore ni perfil
+// 🔥 INTEGRADO CON i18n PARA TRADUCCIÓN DE INTERFAZ
+// 🔥 CORREGIDO: Miniaturas para todos los tipos de historias (video, survey, text)
 
 import {
     getToken, getCurrentUser, showToast,
@@ -15,6 +17,9 @@ import {
 import { formatNumber } from './utils.js';
 import { openStoryModal } from './story-modal.js';
 
+// 🔥 IMPORTAR SISTEMA i18n
+import { t, onLocaleChange, translateAll } from './i18n.js';
+
 const API_URL = window.location.origin;
 let currentProfileUserId = null;
 let currentProfileData = null;
@@ -23,6 +28,7 @@ let isEditMode = false;
 let refreshInterval = null;
 let lastRefreshTime = 0;
 let pendingProfileLoads = new Map();
+let localeUnsubscribe = null;
 
 // ============================================================
 // PILA DE NAVEGACIÓN
@@ -66,6 +72,23 @@ function clearProfileCache(userId) {
         profileCache.delete(userId);
         storiesCache.delete(userId);
     }
+}
+
+// ============================================================
+// 🔥 ESCUCHAR CAMBIOS DE IDIOMA
+// ============================================================
+
+function initI18nForProfileModal() {
+    if (localeUnsubscribe) {
+        localeUnsubscribe();
+    }
+    
+    localeUnsubscribe = onLocaleChange(() => {
+        if (isProfileModalOpen && currentProfileData) {
+            const stories = storiesCache.get(currentProfileUserId)?.data || [];
+            updateProfileModalUI(currentProfileData, stories);
+        }
+    });
 }
 
 // ============================================================
@@ -139,6 +162,94 @@ function loadProfileWithCache(userId) {
 }
 
 // ============================================================
+// 🔥 GENERAR MINIATURA DE HISTORIA PARA MODAL - SOPORTE TODOS LOS TIPOS
+// ============================================================
+
+function generateStoryThumbnailModal(story, userId, storiesJson) {
+    const storyId = story.id;
+    const mediaType = story.mediaType || 'image';
+    
+    // 🔥 Para encuestas (SURVEY)
+    if (mediaType === 'survey' && story.surveyData) {
+        const survey = story.surveyData;
+        const question = survey.question || '📊 Encuesta';
+        const totalVotes = survey.options?.reduce((sum, o) => sum + (o.votes || 0), 0) || 0;
+        return `
+            <div class="profile-story-thumb" onclick="window.openStoryFromProfileOverlay('${storyId}', '${storiesJson}', '${userId}')">
+                <div class="text-thumb" style="background:linear-gradient(135deg, rgba(192,132,252,0.15), rgba(219,39,119,0.08));border:1px solid rgba(192,132,252,0.1);">
+                    <div style="display:flex;flex-direction:column;align-items:center;gap:4px;padding:8px;">
+                        <span style="font-size:24px;">📊</span>
+                        <span style="font-size:10px;color:rgba(255,255,255,0.7);font-weight:600;text-align:center;line-height:1.2;max-width:90px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
+                            ${escapeHtml(question.substring(0, 20))}${question.length > 20 ? '…' : ''}
+                        </span>
+                        <span style="font-size:8px;color:rgba(255,255,255,0.2);">${totalVotes} ${t('survey.votes') || 'votos'}</span>
+                    </div>
+                </div>
+                <div class="thumb-overlay" style="background:linear-gradient(0deg, rgba(192,132,252,0.3), transparent);">
+                    <i class="fas fa-chart-pie"></i> ${formatNumber(totalVotes)}
+                </div>
+            </div>
+        `;
+    }
+    
+    // 🔥 Para imágenes
+    if (mediaType === 'image' && story.mediaUrl) {
+        return `
+            <div class="profile-story-thumb" onclick="window.openStoryFromProfileOverlay('${storyId}', '${storiesJson}', '${userId}')">
+                <img src="${story.mediaUrl}" alt="Historia" loading="lazy" decoding="async" onerror="this.style.display='none'" />
+                <div class="thumb-overlay">
+                    <i class="fas fa-heart"></i> ${formatNumber(story.likes?.length || 0)}
+                </div>
+            </div>
+        `;
+    }
+    
+    // 🔥 Para videos
+    if (mediaType === 'video' && story.mediaUrl) {
+        return `
+            <div class="profile-story-thumb" onclick="window.openStoryFromProfileOverlay('${storyId}', '${storiesJson}', '${userId}')">
+                <div class="text-thumb" style="background:linear-gradient(135deg, rgba(96,165,250,0.12), rgba(6,182,212,0.06));border:1px solid rgba(96,165,250,0.08);">
+                    <div style="display:flex;flex-direction:column;align-items:center;gap:2px;padding:8px;">
+                        <span style="font-size:28px;">🎬</span>
+                        <span style="font-size:9px;color:rgba(255,255,255,0.3);font-weight:500;">${t('story.video') || 'Video'}</span>
+                        ${story.hasSubtitles ? `<span style="font-size:7px;color:rgba(192,132,252,0.3);">CC</span>` : ''}
+                    </div>
+                </div>
+                <div class="thumb-overlay">
+                    <i class="fas fa-play"></i>
+                    <i class="fas fa-heart" style="margin-left:6px;"></i> ${formatNumber(story.likes?.length || 0)}
+                </div>
+            </div>
+        `;
+    }
+    
+    // 🔥 Para texto
+    if (mediaType === 'text' && story.textContent) {
+        const text = story.textContent || '';
+        return `
+            <div class="profile-story-thumb" onclick="window.openStoryFromProfileOverlay('${storyId}', '${storiesJson}', '${userId}')">
+                <div class="text-thumb" style="background:${story.textBgColor || '#1a1a2e'};border:1px solid rgba(255,255,255,0.03);">
+                    ${escapeHtml(text.substring(0, 25))}${text.length > 25 ? '…' : ''}
+                </div>
+                <div class="thumb-overlay">
+                    <i class="fas fa-font"></i>
+                    <i class="fas fa-heart" style="margin-left:6px;"></i> ${formatNumber(story.likes?.length || 0)}
+                </div>
+            </div>
+        `;
+    }
+    
+    // 🔥 Fallback genérico
+    return `
+        <div class="profile-story-thumb" onclick="window.openStoryFromProfileOverlay('${storyId}', '${storiesJson}', '${userId}')">
+            <div class="text-thumb" style="background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.02);">
+                <i class="fas fa-file" style="font-size:24px;color:rgba(255,255,255,0.05);"></i>
+            </div>
+        </div>
+    `;
+}
+
+// ============================================================
 // 🔥 CARGAR DATOS DEL PERFIL - CORREGIDO (petición separada)
 // ============================================================
 
@@ -147,7 +258,7 @@ async function loadProfileData(userId, silent = false) {
     const token = getToken();
     
     if (!token) {
-        showToast('Inicia sesión para ver perfiles', true);
+        showToast(t('error.unauthorized') || 'Inicia sesión para ver perfiles', true);
         closeProfileModal();
         return;
     }
@@ -172,7 +283,7 @@ async function loadProfileData(userId, silent = false) {
 
         if (!res.ok) {
             if (res.status === 404) {
-                showToast('Usuario no encontrado', true);
+                showToast(t('error.notFound') || 'Usuario no encontrado', true);
                 closeProfileModal();
                 return;
             } else if (res.status === 403) {
@@ -181,7 +292,7 @@ async function loadProfileData(userId, silent = false) {
                 showPrivateProfileUI(userId, true);
                 return;
             } else {
-                showToast('Error al cargar el perfil', true);
+                showToast(t('error.general') || 'Error al cargar el perfil', true);
                 closeProfileModal();
                 return;
             }
@@ -231,13 +342,16 @@ async function loadProfileData(userId, silent = false) {
         const loadTime = performance.now() - startTime;
         console.log(`✅ Perfil cargado en ${Math.round(loadTime)}ms`);
 
+        // Inicializar i18n para el modal
+        initI18nForProfileModal();
+
     } catch (error) {
         if (error.name === 'AbortError') {
-            showToast('La carga del perfil está tomando demasiado tiempo', true);
+            showToast(t('error.timeout') || 'La carga del perfil está tomando demasiado tiempo', true);
         } else {
             console.error('Error loading profile:', error);
             if (!silent) {
-                showToast('Error al cargar el perfil', true);
+                showToast(t('error.general') || 'Error al cargar el perfil', true);
             }
         }
         closeProfileModal();
@@ -266,8 +380,8 @@ function showPrivateProfileUI(userId, isStrictPrivate = false) {
                 <div class="private-lock-icon">
                     <i class="fas fa-lock"></i>
                 </div>
-                <h3>Este perfil es privado</h3>
-                <p>Este perfil no está disponible para otros usuarios.</p>
+                <h3>${t('profile.private') || 'Este perfil es privado'}</h3>
+                <p>${t('profile.privateDesc') || 'Este perfil no está disponible para otros usuarios.'}</p>
             </div>
         `;
         return;
@@ -280,17 +394,17 @@ function showPrivateProfileUI(userId, isStrictPrivate = false) {
             <div class="private-lock-icon">
                 <i class="fas fa-user-friends"></i>
             </div>
-            <h3>Cuenta privada</h3>
-            <p>Sigue a esta cuenta para ver sus fotos, historias y videos.</p>
+            <h3>${t('profile.private') || 'Cuenta privada'}</h3>
+            <p>${t('profile.privateFollowDesc') || 'Sigue a esta cuenta para ver sus fotos, historias y videos.'}</p>
             <div class="private-actions">
                 ${currentUser && currentUser.id !== userId ? `
                     <button class="btn-private-follow" id="btnPrivateFollow" 
                             onclick="window.handleFollowPrivate('${userId}')"
                             ${hasPendingRequest ? 'disabled' : ''}>
-                        ${hasPendingRequest ? '<i class="fas fa-clock"></i> Solicitud enviada' : '<i class="fas fa-user-plus"></i> Enviar solicitud'}
+                        ${hasPendingRequest ? '<i class="fas fa-clock"></i> ' + (t('profile.requestSent') || 'Solicitud enviada') : '<i class="fas fa-user-plus"></i> ' + (t('profile.sendRequest') || 'Enviar solicitud')}
                     </button>
                 ` : `
-                    <p style="color:rgba(255,255,255,0.2);font-size:13px;">Inicia sesión para seguir</p>
+                    <p style="color:rgba(255,255,255,0.2);font-size:13px;">${t('error.unauthorized') || 'Inicia sesión para seguir'}</p>
                 `}
             </div>
         </div>
@@ -304,25 +418,25 @@ function showPrivateProfileUI(userId, isStrictPrivate = false) {
 window.handleFollowPrivate = async function(userId) {
     const token = getToken();
     if (!token) {
-        showToast('Inicia sesión para enviar solicitud', true);
+        showToast(t('error.unauthorized') || 'Inicia sesión para enviar solicitud', true);
         return;
     }
 
     const currentUser = getCurrentUser();
     if (currentUser?.id === userId) {
-        showToast('No puedes seguirte a ti mismo', true);
+        showToast(t('profile.cantFollowSelf') || 'No puedes seguirte a ti mismo', true);
         return;
     }
 
     if (localStorage.getItem(`follow_pending_${userId}`) === 'true') {
-        showToast('Ya enviaste una solicitud a este usuario', true);
+        showToast(t('profile.requestAlreadySent') || 'Ya enviaste una solicitud a este usuario', true);
         return;
     }
 
     const btn = document.getElementById('btnPrivateFollow');
     if (btn) {
         btn.disabled = true;
-        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Enviando...';
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> ' + (t('action.sending') || 'Enviando...');
     }
 
     try {
@@ -340,9 +454,9 @@ window.handleFollowPrivate = async function(userId) {
         if (res.ok) {
             if (data.status === 'pending_sent') {
                 localStorage.setItem(`follow_pending_${userId}`, 'true');
-                showToast('✅ Solicitud de seguimiento enviada');
+                showToast('✅ ' + (t('profile.requestSent') || 'Solicitud de seguimiento enviada'));
                 if (btn) {
-                    btn.innerHTML = '<i class="fas fa-clock"></i> Solicitud enviada';
+                    btn.innerHTML = '<i class="fas fa-clock"></i> ' + (t('profile.requestSent') || 'Solicitud enviada');
                     btn.disabled = true;
                     btn.style.opacity = '0.6';
                     btn.style.cursor = 'not-allowed';
@@ -356,30 +470,30 @@ window.handleFollowPrivate = async function(userId) {
                     loadProfileData(userId);
                 }, 1000);
             } else if (data.status === 'following') {
-                showToast('✅ Ahora sigues a este usuario');
+                showToast('✅ ' + (t('profile.followed') || 'Ahora sigues a este usuario'));
                 localStorage.removeItem(`follow_pending_${userId}`);
                 clearProfileCache(userId);
                 loadProfileData(userId);
             } else {
-                showToast(data.message || 'Solicitud enviada');
+                showToast(data.message || (t('profile.requestSent') || 'Solicitud enviada'));
                 if (btn) {
                     btn.disabled = false;
-                    btn.innerHTML = '<i class="fas fa-user-plus"></i> Enviar solicitud';
+                    btn.innerHTML = '<i class="fas fa-user-plus"></i> ' + (t('profile.sendRequest') || 'Enviar solicitud');
                 }
             }
         } else {
             if (btn) {
                 btn.disabled = false;
-                btn.innerHTML = '<i class="fas fa-user-plus"></i> Enviar solicitud';
+                btn.innerHTML = '<i class="fas fa-user-plus"></i> ' + (t('profile.sendRequest') || 'Enviar solicitud');
             }
-            showToast(data.error || 'Error al enviar solicitud', true);
+            showToast(data.error || t('error.general') || 'Error al enviar solicitud', true);
         }
     } catch (error) {
         console.error('Error sending follow request:', error);
-        showToast('Error al enviar solicitud', true);
+        showToast(t('error.general') || 'Error al enviar solicitud', true);
         if (btn) {
             btn.disabled = false;
-            btn.innerHTML = '<i class="fas fa-user-plus"></i> Enviar solicitud';
+            btn.innerHTML = '<i class="fas fa-user-plus"></i> ' + (t('profile.sendRequest') || 'Enviar solicitud');
         }
     }
 };
@@ -457,16 +571,16 @@ function getVerificationBadge(user) {
     
     if (user.isVerified) {
         if (user.role === 'admin') {
-            return `<span class="verification-badge admin-verified" title="Administrador verificado"></span>`;
+            return `<span class="verification-badge admin-verified" title="${t('profile.adminVerified') || 'Administrador verificado'}"></span>`;
         } else if (user.accountType === 'business_verified' || user.accountType === 'business') {
-            return `<span class="verification-badge business" title="Empresa verificada"></span>`;
+            return `<span class="verification-badge business" title="${t('profile.businessVerified') || 'Empresa verificada'}"></span>`;
         } else {
-            return `<span class="verification-badge verified" title="Cuenta verificada"></span>`;
+            return `<span class="verification-badge verified" title="${t('profile.verified') || 'Cuenta verificada'}"></span>`;
         }
     }
     
     if (user.role === 'admin') {
-        return `<span class="verification-badge admin" title="Administrador"></span>`;
+        return `<span class="verification-badge admin" title="${t('profile.admin') || 'Administrador'}"></span>`;
     }
     
     return '';
@@ -481,13 +595,13 @@ window.handleBlockUser = async function(userId) {
     
     const token = getToken();
     if (!token) {
-        showToast('Inicia sesión para bloquear', true);
+        showToast(t('error.unauthorized') || 'Inicia sesión para bloquear', true);
         return;
     }
 
     const currentUser = getCurrentUser();
     if (currentUser?.id === userId) {
-        showToast('No puedes bloquearte a ti mismo', true);
+        showToast(t('profile.cantBlockSelf') || 'No puedes bloquearte a ti mismo', true);
         return;
     }
 
@@ -506,7 +620,7 @@ window.handleBlockUser = async function(userId) {
         }
 
         if (isBlockedBy) {
-            showToast('No puedes interactuar con este usuario', true);
+            showToast(t('profile.cantInteract') || 'No puedes interactuar con este usuario', true);
             return;
         }
 
@@ -517,12 +631,12 @@ window.handleBlockUser = async function(userId) {
             });
 
             if (res.ok) {
-                showToast('✅ Usuario desbloqueado');
+                showToast('✅ ' + (t('profile.unblocked') || 'Usuario desbloqueado'));
                 clearProfileCache(userId);
                 await loadProfileData(userId);
             } else {
                 const data = await res.json();
-                showToast(data.error || 'Error al desbloquear', true);
+                showToast(data.error || t('error.general') || 'Error al desbloquear', true);
             }
         } else {
             const res = await fetch(`${API_URL}/api/blocked/block`, {
@@ -535,18 +649,18 @@ window.handleBlockUser = async function(userId) {
             });
 
             if (res.ok) {
-                showToast('🔒 Usuario bloqueado');
+                showToast('🔒 ' + (t('profile.blocked') || 'Usuario bloqueado'));
                 closeProfileModal();
                 clearProfileCache(userId);
                 setTimeout(() => openProfileModal(userId), 300);
             } else {
                 const data = await res.json();
-                showToast(data.error || 'Error al bloquear', true);
+                showToast(data.error || t('error.general') || 'Error al bloquear', true);
             }
         }
     } catch (error) {
         console.error('Error al bloquear/desbloquear:', error);
-        showToast('Error al procesar la solicitud', true);
+        showToast(t('error.general') || 'Error al procesar la solicitud', true);
     }
 };
 
@@ -556,13 +670,13 @@ window.handleBlockUser = async function(userId) {
 
 window.openChatFromProfile = function(userId) {
     if (!userId) {
-        showToast('Usuario no encontrado', true);
+        showToast(t('error.notFound') || 'Usuario no encontrado', true);
         return;
     }
 
     const currentUser = getCurrentUser();
     if (currentUser?.id === userId) {
-        showToast('No puedes abrir un chat contigo mismo', true);
+        showToast(t('profile.cantChatSelf') || 'No puedes abrir un chat contigo mismo', true);
         return;
     }
 
@@ -679,7 +793,111 @@ window.navigateToChat = function(userId) {
 };
 
 // ============================================================
-// 🔥 ACTUALIZAR UI DEL MODAL DE PERFIL - CORREGIDO
+// 🔥 TRADUCIR UI DEL PERFIL
+// ============================================================
+
+function translateProfileUI() {
+    const container = document.getElementById('profileModalBody');
+    if (!container) return;
+
+    // Traducir estadísticas
+    const statLabels = container.querySelectorAll('.profile-stats .stat .label');
+    const labelKeys = ['profile.followers', 'profile.following', 'profile.stories'];
+    statLabels.forEach((label, index) => {
+        if (index < labelKeys.length) {
+            const text = t(labelKeys[index]);
+            if (text && text !== labelKeys[index]) {
+                label.textContent = text;
+            }
+        }
+    });
+
+    // Traducir título de historias
+    const sectionTitle = container.querySelector('.profile-stories-section .section-title');
+    if (sectionTitle) {
+        const textNode = sectionTitle.childNodes[1];
+        if (textNode && textNode.nodeType === Node.TEXT_NODE) {
+            const text = t('profile.stories');
+            if (text && text !== 'profile.stories') {
+                textNode.textContent = text;
+            }
+        }
+    }
+
+    // Traducir botón de seguir/editar
+    const followBtn = container.querySelector('#profileFollowBtn');
+    if (followBtn) {
+        const isFollowing = followBtn.classList.contains('following');
+        const isOwn = followBtn.getAttribute('data-own') === 'true';
+        
+        if (isOwn) {
+            const text = t('profile.edit');
+            if (text && text !== 'profile.edit') {
+                followBtn.innerHTML = '<i class="fas fa-pen"></i> ' + text;
+            }
+        } else if (isFollowing) {
+            const text = t('profile.unfollow');
+            if (text && text !== 'profile.unfollow') {
+                followBtn.innerHTML = '<i class="fas fa-check"></i> ' + text;
+            }
+        } else {
+            const text = t('profile.follow');
+            if (text && text !== 'profile.follow') {
+                followBtn.innerHTML = '<i class="fas fa-user-plus"></i> ' + text;
+            }
+        }
+    }
+
+    // Traducir botón de mensaje
+    const messageBtn = container.querySelector('.btn-message');
+    if (messageBtn) {
+        const text = t('profile.message');
+        if (text && text !== 'profile.message') {
+            const icon = messageBtn.querySelector('i');
+            messageBtn.innerHTML = '';
+            if (icon) messageBtn.appendChild(icon);
+            messageBtn.appendChild(document.createTextNode(' ' + text));
+        }
+    }
+
+    // Traducir botón de bloquear
+    const blockBtn = container.querySelector('.btn-block');
+    if (blockBtn) {
+        const isBlocked = blockBtn.classList.contains('blocked');
+        const textKey = isBlocked ? 'profile.unblock' : 'profile.block';
+        const text = t(textKey);
+        if (text && text !== textKey) {
+            const icon = blockBtn.querySelector('i');
+            blockBtn.innerHTML = '';
+            if (icon) blockBtn.appendChild(icon);
+            blockBtn.appendChild(document.createTextNode(' ' + text));
+        }
+    }
+
+    // Traducir mensaje de "No hay historias"
+    const noStories = container.querySelector('.profile-no-stories span');
+    if (noStories) {
+        const text = t('profile.noStories');
+        if (text && text !== 'profile.noStories') {
+            noStories.textContent = text;
+        }
+    }
+
+    // Traducir título del header
+    const headerTitle = document.querySelector('.profile-modal-header .title');
+    if (headerTitle) {
+        const icon = headerTitle.querySelector('i');
+        const text = t('profile.profile');
+        if (text && text !== 'profile.profile') {
+            headerTitle.innerHTML = '';
+            if (icon) headerTitle.appendChild(icon);
+            headerTitle.appendChild(document.createTextNode(' ' + text));
+        }
+    }
+}
+
+// ============================================================
+// 🔥 ACTUALIZAR UI DEL MODAL DE PERFIL - CON TODOS LOS TIPOS DE HISTORIAS
 // ============================================================
 
 function updateProfileModalUI(user, stories) {
@@ -691,8 +909,8 @@ function updateProfileModalUI(user, stories) {
         container.innerHTML = `
             <div class="profile-not-found">
                 <i class="fas fa-user-slash" style="font-size:48px;color:rgba(255,255,255,0.05);margin-bottom:16px;"></i>
-                <h3 style="color:rgba(255,255,255,0.2);font-weight:400;">Usuario no encontrado</h3>
-                <p style="color:rgba(255,255,255,0.08);font-size:13px;">No se pudo cargar el perfil</p>
+                <h3 style="color:rgba(255,255,255,0.2);font-weight:400;">${t('error.notFound') || 'Usuario no encontrado'}</h3>
+                <p style="color:rgba(255,255,255,0.08);font-size:13px;">${t('profile.loadError') || 'No se pudo cargar el perfil'}</p>
             </div>
         `;
         return;
@@ -711,8 +929,8 @@ function updateProfileModalUI(user, stories) {
         container.innerHTML = `
             <div class="profile-not-found">
                 <i class="fas fa-user-slash" style="font-size:48px;color:rgba(255,255,255,0.05);margin-bottom:16px;"></i>
-                <h3 style="color:rgba(255,255,255,0.2);font-weight:400;">Usuario no encontrado</h3>
-                <p style="color:rgba(255,255,255,0.08);font-size:13px;">El usuario que buscas no existe</p>
+                <h3 style="color:rgba(255,255,255,0.2);font-weight:400;">${t('error.notFound') || 'Usuario no encontrado'}</h3>
+                <p style="color:rgba(255,255,255,0.08);font-size:13px;">${t('profile.userNotFound') || 'El usuario que buscas no existe'}</p>
             </div>
         `;
         return;
@@ -741,7 +959,7 @@ function updateProfileModalUI(user, stories) {
     const followingCount = user.followingCount || 0;
     const badgeHtml = getVerificationBadge(user);
 
-    // 🔥 GENERAR HTML DE HISTORIAS
+    // 🔥 GENERAR HTML DE HISTORIAS CON SOPORTE PARA TODOS LOS TIPOS
     let storiesHtml = '';
     if (stories && Array.isArray(stories) && stories.length > 0) {
         console.log(`📊 Renderizando ${stories.length} historias para ${user.fullName}`);
@@ -749,49 +967,14 @@ function updateProfileModalUI(user, stories) {
         const storiesJson = JSON.stringify(stories).replace(/"/g, '&quot;');
         const displayStories = stories.slice(0, 6);
         
-        const thumbnails = displayStories.map(story => {
-            if (story.mediaType === 'image' && story.mediaUrl) {
-                return `
-                    <div class="profile-story-thumb" onclick="window.openStoryFromProfileOverlay('${story.id}', '${storiesJson}', '${user.id}')">
-                        <img src="${story.mediaUrl}" alt="Historia" loading="lazy" decoding="async" onerror="this.style.display='none'" />
-                        <div class="thumb-overlay">
-                            <i class="fas fa-heart"></i> ${formatNumber(story.likes?.length || 0)}
-                        </div>
-                    </div>
-                `;
-            } else if (story.mediaType === 'text' && story.textContent) {
-                const textPreview = story.textContent.length > 20 ? story.textContent.substring(0, 20) + '...' : story.textContent;
-                return `
-                    <div class="profile-story-thumb" onclick="window.openStoryFromProfileOverlay('${story.id}', '${storiesJson}', '${user.id}')">
-                        <div class="text-thumb">${escapeHtml(textPreview)}</div>
-                    </div>
-                `;
-            } else if (story.mediaType === 'video' && story.mediaUrl) {
-                return `
-                    <div class="profile-story-thumb" onclick="window.openStoryFromProfileOverlay('${story.id}', '${storiesJson}', '${user.id}')">
-                        <video src="${story.mediaUrl}" muted playsinline preload="metadata"></video>
-                        <div class="thumb-overlay">
-                            <i class="fas fa-play"></i>
-                        </div>
-                    </div>
-                `;
-            } else {
-                return `
-                    <div class="profile-story-thumb" onclick="window.openStoryFromProfileOverlay('${story.id}', '${storiesJson}', '${user.id}')">
-                        <div class="text-thumb">
-                            <i class="fas fa-file" style="font-size:14px;color:rgba(255,255,255,0.1);"></i>
-                        </div>
-                    </div>
-                `;
-            }
-        }).join('');
+        const thumbnails = displayStories.map(story => generateStoryThumbnailModal(story, user.id, storiesJson)).join('');
         
         storiesHtml = `<div class="profile-stories-grid">${thumbnails}</div>`;
         
         if (stories.length > 6) {
             storiesHtml += `
                 <div style="text-align:center;font-size:9px;color:rgba(255,255,255,0.15);padding:2px 0;">
-                    +${stories.length - 6} más
+                    +${stories.length - 6} ${t('profile.more') || 'más'}
                 </div>
             `;
         }
@@ -799,16 +982,17 @@ function updateProfileModalUI(user, stories) {
         storiesHtml = `
             <div class="profile-no-stories">
                 <i class="fas fa-camera"></i>
-                <span>No hay historias</span>
+                <span>${t('profile.noStories') || 'No hay historias'}</span>
             </div>
         `;
     }
 
-    let followText = 'Seguir';
+    let followText = t('profile.follow') || 'Seguir';
     let followClass = 'btn-follow';
     let followDisabled = false;
     let followIcon = '<i class="fas fa-user-plus"></i>';
     let followOnClick = `window.handleProfileFollow('${user.id}')`;
+    let dataOwn = 'false';
 
     // 🔥 BOTÓN DE MENSAJE (SOLO SI NO ES TU PROPIO PERFIL)
     let messageButton = '';
@@ -816,26 +1000,29 @@ function updateProfileModalUI(user, stories) {
         messageButton = `
             <button class="btn-message" onclick="window.openChatFromProfile('${user.id}')">
                 <i class="fas fa-comment"></i>
-                Mensaje
+                ${t('profile.message') || 'Mensaje'}
             </button>
         `;
     }
 
     if (isOwnProfile) {
-        followText = 'Editar perfil';
+        followText = t('profile.edit') || 'Editar perfil';
         followClass = 'btn-edit-profile';
         followDisabled = false;
         followIcon = '<i class="fas fa-pen"></i>';
         followOnClick = `window.openEditProfileFromModal()`;
+        dataOwn = 'true';
     } else if (isFollowing) {
-        followText = 'Siguiendo';
+        followText = t('profile.unfollow') || 'Siguiendo';
         followClass = 'btn-follow following';
         followIcon = '<i class="fas fa-check"></i>';
+        dataOwn = 'false';
     } else if (hasPendingRequest) {
-        followText = 'Solicitud enviada';
+        followText = t('profile.requestSent') || 'Solicitud enviada';
         followClass = 'btn-follow';
         followIcon = '<i class="fas fa-clock"></i>';
         followDisabled = true;
+        dataOwn = 'false';
     }
 
     let blockButton = '';
@@ -844,14 +1031,14 @@ function updateProfileModalUI(user, stories) {
             blockButton = `
                 <button class="btn-block blocked" onclick="window.handleBlockUser('${user.id}')">
                     <i class="fas fa-unlock"></i>
-                    Desbloquear
+                    ${t('profile.unblock') || 'Desbloquear'}
                 </button>
             `;
         } else {
             blockButton = `
                 <button class="btn-block" onclick="window.handleBlockUser('${user.id}')">
                     <i class="fas fa-ban"></i>
-                    Bloquear
+                    ${t('profile.block') || 'Bloquear'}
                 </button>
             `;
         }
@@ -874,7 +1061,7 @@ function updateProfileModalUI(user, stories) {
             <div class="profile-name">
                 ${fullName}
                 ${badgeHtml}
-                ${isBlocked ? `<span class="blocked-badge">🔒 Bloqueado</span>` : ''}
+                ${isBlocked ? `<span class="blocked-badge">🔒 ${t('profile.blocked') || 'Bloqueado'}</span>` : ''}
             </div>
             <div class="profile-username">@${username}</div>
             ${bio ? `<div class="profile-bio">${bio}</div>` : ''}
@@ -883,7 +1070,7 @@ function updateProfileModalUI(user, stories) {
 
         <div class="profile-actions">
             <div class="profile-follow-btn">
-                <button class="${followClass}" id="profileFollowBtn" ${followDisabled ? 'disabled' : ''} onclick="${followOnClick}">
+                <button class="${followClass}" id="profileFollowBtn" ${followDisabled ? 'disabled' : ''} onclick="${followOnClick}" data-own="${dataOwn}">
                     ${followIcon}
                     ${followText}
                 </button>
@@ -895,26 +1082,29 @@ function updateProfileModalUI(user, stories) {
         <div class="profile-stats">
             <div class="stat" onclick="window.openFollowersFromProfile('followers')" style="cursor:pointer;">
                 <span class="number">${formatNumber(followersCount)}</span>
-                <span class="label">Seguidores</span>
+                <span class="label">${t('profile.followers') || 'Seguidores'}</span>
             </div>
             <div class="stat" onclick="window.openFollowersFromProfile('following')" style="cursor:pointer;">
                 <span class="number">${formatNumber(followingCount)}</span>
-                <span class="label">Siguiendo</span>
+                <span class="label">${t('profile.following') || 'Siguiendo'}</span>
             </div>
             <div class="stat">
                 <span class="number">${formatNumber(stories?.length || 0)}</span>
-                <span class="label">Historias</span>
+                <span class="label">${t('profile.stories') || 'Historias'}</span>
             </div>
         </div>
 
         <div class="profile-stories-section">
             <div class="section-title">
-                <i class="fas fa-images"></i> Historias
+                <i class="fas fa-images"></i> ${t('profile.stories') || 'Historias'}
                 <span style="font-size:9px;color:rgba(255,255,255,0.15);margin-left:auto;">${stories?.length || 0}</span>
             </div>
             ${storiesHtml}
         </div>
     `;
+
+    // Traducir la UI después de renderizar
+    setTimeout(translateProfileUI, 50);
 }
 
 // ============================================================
@@ -930,11 +1120,11 @@ function showPrivateProfileUIWithPending(userId) {
             <div class="private-lock-icon">
                 <i class="fas fa-user-friends"></i>
             </div>
-            <h3>Cuenta privada</h3>
-            <p>Sigue a esta cuenta para ver sus fotos, historias y videos.</p>
+            <h3>${t('profile.private') || 'Cuenta privada'}</h3>
+            <p>${t('profile.privateFollowDesc') || 'Sigue a esta cuenta para ver sus fotos, historias y videos.'}</p>
             <div class="private-actions">
                 <button class="btn-private-follow" disabled style="opacity:0.6;cursor:not-allowed;">
-                    <i class="fas fa-clock"></i> Solicitud enviada
+                    <i class="fas fa-clock"></i> ${t('profile.requestSent') || 'Solicitud enviada'}
                 </button>
             </div>
         </div>
@@ -947,7 +1137,7 @@ function showPrivateProfileUIWithPending(userId) {
 
 function openProfileModal(userId, fromFollowers = false, fromFollowersStack = null) {
     if (!userId) {
-        showToast('Usuario no encontrado', true);
+        showToast(t('error.notFound') || 'Usuario no encontrado', true);
         return;
     }
 
@@ -1014,6 +1204,9 @@ function openProfileModal(userId, fromFollowers = false, fromFollowersStack = nu
 
     document.body.style.overflow = 'hidden';
 
+    // Inicializar i18n para el modal
+    initI18nForProfileModal();
+
     const cached = loadProfileWithCache(userId);
     if (!cached) {
         showSkeletonLoader();
@@ -1070,6 +1263,11 @@ function closeProfileModalInternal(restoreFromStack = true) {
     if (refreshInterval) {
         clearInterval(refreshInterval);
         refreshInterval = null;
+    }
+
+    if (localeUnsubscribe) {
+        localeUnsubscribe();
+        localeUnsubscribe = null;
     }
 
     const overlay = document.getElementById('profileModalOverlay');
@@ -1155,7 +1353,7 @@ function closeProfileModal() {
                 }
             }).catch(err => {
                 console.error('❌ Error restaurando followers-modal:', err);
-                showToast('Error al volver a seguidores', true);
+                showToast(t('error.general') || 'Error al volver a seguidores', true);
                 closeProfileModalInternal(false);
                 if (typeof window.showProfileNative === 'function') {
                     window.showProfileNative(getCurrentUser()?.id);
@@ -1294,7 +1492,7 @@ function restorePreviousFollowers(previous) {
             openFollowersModal(previous.userId, previous.filter || 'followers', true);
         }).catch(err => {
             console.error('❌ Error abriendo followers:', err);
-            showToast('Error al restaurar seguidores', true);
+            showToast(t('error.general') || 'Error al restaurar seguidores', true);
         });
     }
 }
@@ -1310,7 +1508,7 @@ function createProfileModalHTML() {
         <div id="profileModalOverlay" class="profile-modal-overlay" onclick="window.closeProfileModal()">
             <div class="profile-modal-content" onclick="event.stopPropagation()">
                 <div class="profile-modal-header">
-                    <span class="title"><i class="fas fa-user"></i> Perfil</span>
+                    <span class="title"><i class="fas fa-user"></i> ${t('profile.profile') || 'Perfil'}</span>
                     <button class="close-btn" onclick="window.closeProfileModal()">
                         <i class="fas fa-times"></i>
                     </button>
@@ -1318,7 +1516,7 @@ function createProfileModalHTML() {
                 <div class="profile-modal-body" id="profileModalBody">
                     <div class="profile-loading">
                         <i class="fas fa-spinner fa-pulse"></i>
-                        <span>Cargando perfil...</span>
+                        <span>${t('modal.loading') || 'Cargando perfil...'}</span>
                     </div>
                 </div>
             </div>
@@ -1361,7 +1559,7 @@ function openEditProfileFromModal() {
             if (typeof window.openEditProfileModal === 'function') {
                 window.openEditProfileModal(currentProfileData);
             } else {
-                showToast('Error al abrir edición de perfil', true);
+                showToast(t('error.general') || 'Error al abrir edición de perfil', true);
             }
         });
     }, 100);
@@ -1373,7 +1571,7 @@ function openEditProfileFromModal() {
 
 function openFollowersFromProfile(filter) {
     if (!currentProfileUserId) {
-        showToast('Usuario no encontrado', true);
+        showToast(t('error.notFound') || 'Usuario no encontrado', true);
         return;
     }
     
@@ -1406,7 +1604,7 @@ function openFollowersFromProfile(filter) {
             openFollowersModal(userId, filter, true);
         }).catch((err) => {
             console.error('❌ Error cargando followers-modal:', err);
-            showToast('Error al abrir seguidores', true);
+            showToast(t('error.general') || 'Error al abrir seguidores', true);
         });
     }, 100);
 }
@@ -1418,7 +1616,7 @@ function openFollowersFromProfile(filter) {
 async function handleFollowUser(userId) {
     const token = getToken();
     if (!token) {
-        showToast('Inicia sesión para seguir', true);
+        showToast(t('error.unauthorized') || 'Inicia sesión para seguir', true);
         return;
     }
 
@@ -1444,32 +1642,35 @@ async function handleFollowUser(userId) {
         if (res.ok) {
             if (data.status === 'following' || data.following) {
                 btn.classList.add('following');
-                btn.innerHTML = '<i class="fas fa-check"></i> Siguiendo';
-                showToast(`✅ Siguiendo a ${currentProfileData?.fullName}`);
+                btn.innerHTML = '<i class="fas fa-check"></i> ' + (t('profile.unfollow') || 'Siguiendo');
+                btn.setAttribute('data-own', 'false');
+                showToast(`✅ ${t('profile.followed') || 'Siguiendo a'} ${currentProfileData?.fullName}`);
                 localStorage.removeItem(`follow_pending_${userId}`);
                 clearProfileCache(userId);
                 loadProfileData(userId);
             } else if (data.status === 'pending_sent') {
                 btn.classList.remove('following');
-                btn.innerHTML = '<i class="fas fa-clock"></i> Solicitud enviada';
+                btn.innerHTML = '<i class="fas fa-clock"></i> ' + (t('profile.requestSent') || 'Solicitud enviada');
                 btn.disabled = true;
+                btn.setAttribute('data-own', 'false');
                 localStorage.setItem(`follow_pending_${userId}`, 'true');
-                showToast(`📨 Solicitud enviada a ${currentProfileData?.fullName}`);
+                showToast(`📨 ${t('profile.requestSentTo') || 'Solicitud enviada a'} ${currentProfileData?.fullName}`);
             } else {
                 btn.classList.remove('following');
-                btn.innerHTML = '<i class="fas fa-user-plus"></i> Seguir';
+                btn.innerHTML = '<i class="fas fa-user-plus"></i> ' + (t('profile.follow') || 'Seguir');
                 btn.disabled = false;
+                btn.setAttribute('data-own', 'false');
                 localStorage.removeItem(`follow_pending_${userId}`);
-                showToast('❌ Dejaste de seguir');
+                showToast('❌ ' + (t('profile.unfollowed') || 'Dejaste de seguir'));
                 clearProfileCache(userId);
                 loadProfileData(userId);
             }
         } else {
-            showToast(data.error || 'Error al seguir', true);
+            showToast(data.error || t('error.general') || 'Error al seguir', true);
         }
     } catch (error) {
         console.error('Error following user:', error);
-        showToast('Error al seguir', true);
+        showToast(t('error.general') || 'Error al seguir', true);
     }
 }
 
@@ -1591,6 +1792,7 @@ window.preloadCurrentUserProfile = preloadCurrentUserProfile;
 window.openChatFromProfile = window.openChatFromProfile;
 window.restoreExploreAfterChat = window.restoreExploreAfterChat;
 window.navigateToChat = window.navigateToChat;
+window.translateProfileUI = translateProfileUI;
 
 // ============================================================
 // EXPORTAR
@@ -1603,5 +1805,7 @@ export {
     handleFollowUser,
     openFollowersFromProfile,
     clearProfileCache,
-    preloadCurrentUserProfile
+    preloadCurrentUserProfile,
+    translateProfileUI,
+    initI18nForProfileModal
 };

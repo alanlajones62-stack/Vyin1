@@ -1,11 +1,16 @@
 // ============================================================
 // edit-profile-modal.js - Modal para editar perfil CON TABS Y DOWNGRADE DE EMPRESA
+// 🔥 INTEGRADO CON i18n PARA TRADUCCIÓN DE INTERFAZ
+// 🔥 CORREGIDO: Duplicación de textos, limpieza de tabs y estado
 // ============================================================
 
 import {
     getToken, getCurrentUser, showToast,
     getAvatar, escapeHtml, setCurrentUser
 } from './auth.js';
+
+// 🔥 IMPORTAR SISTEMA i18n
+import { t, translateAll, onLocaleChange, translateElement, translateElementPlaceholder, setLocale } from './i18n.js';
 
 const API_URL = window.location.origin;
 let isEditProfileOpen = false;
@@ -429,9 +434,6 @@ function injectStyles() {
         }
         .account-type-locked i { color: #c084fc; }
         
-        /* ============================================================
-           🆕 BOTÓN DE DEJAR DE SER EMPRESA
-           ============================================================ */
         .btn-downgrade-business {
             width: 100%;
             padding: 12px;
@@ -458,9 +460,6 @@ function injectStyles() {
         .btn-downgrade-business:active { transform: scale(0.97); }
         .btn-downgrade-business i { font-size: 14px; }
         
-        /* ============================================================
-           🆕 COMMUNITY RULES SECTION
-           ============================================================ */
         .community-rules-section {
             background: rgba(255, 255, 255, 0.02);
             border-radius: 16px;
@@ -515,9 +514,6 @@ function injectStyles() {
         }
         .rules-footer i { color: #fbbf24; font-size: 16px; flex-shrink: 0; }
         
-        /* ============================================================
-           🆕 BLOCKED LIST SECTION
-           ============================================================ */
         .blocked-list-container {
             display: flex;
             flex-direction: column;
@@ -595,7 +591,6 @@ function injectStyles() {
         }
         .blocked-loading i { font-size: 24px; margin-bottom: 8px; display: block; }
         
-        /* ===== LOGOUT SECTION ===== */
         .edit-logout-section {
             margin-top: 20px;
             padding-top: 20px;
@@ -831,7 +826,320 @@ function injectStyles() {
 injectStyles();
 
 // ============================================================
-// ABRIR MODAL DE EDICIÓN DE PERFIL
+// 🔥 ESCUCHAR CAMBIOS DE IDIOMA
+// ============================================================
+
+let localeUnsubscribe = null;
+
+function initI18nForEditProfile() {
+    if (localeUnsubscribe) {
+        localeUnsubscribe();
+    }
+    
+    localeUnsubscribe = onLocaleChange(() => {
+        if (isEditProfileOpen) {
+            translateEditProfileUI();
+        }
+    });
+}
+
+// ============================================================
+// 🔥 TRADUCIR UI DEL MODAL DE EDICIÓN - CORREGIDO (SIN DUPLICACIÓN)
+// ============================================================
+
+function translateEditProfileUI() {
+    const overlay = document.getElementById('editProfileOverlay');
+    if (!overlay || !overlay.classList.contains('active')) return;
+    
+    console.log('🌐 Traduciendo UI de edición de perfil...');
+    
+    // 🔥 1. TRADUCIR EL TÍTULO DEL HEADER
+    const title = overlay.querySelector('.edit-profile-header .title');
+    if (title) {
+        const text = t('settings.title');
+        if (text && text !== 'settings.title') {
+            title.textContent = text;
+        }
+    }
+    
+    // 🔥 2. TRADUCIR TABS - SIN DUPLICAR EL TEXTO
+    const tabButtons = overlay.querySelectorAll('.edit-tab-btn');
+    const i18nKeys = ['profile.edit', 'settings.privacy', 'settings.rules', 'profile.blocked'];
+    
+    tabButtons.forEach((btn, index) => {
+        if (index < i18nKeys.length) {
+            const icon = btn.querySelector('i');
+            const badge = btn.querySelector('.tab-badge');
+            const text = t(i18nKeys[index]);
+            
+            if (text && text !== i18nKeys[index]) {
+                // 🔥 LIMPIAR SOLO EL TEXTO, MANTENER ICONO Y BADGE
+                const iconClone = icon ? icon.cloneNode(true) : null;
+                const badgeClone = badge ? badge.cloneNode(true) : null;
+                
+                // Limpiar el contenido del botón
+                btn.innerHTML = '';
+                
+                // Reconstruir: icono, texto, badge
+                if (iconClone) btn.appendChild(iconClone);
+                btn.appendChild(document.createTextNode(' ' + text));
+                if (badgeClone) btn.appendChild(badgeClone);
+            }
+        }
+    });
+    
+    // 🔥 3. TRADUCIR LABELS - SIN DUPLICACIÓN
+    const labels = overlay.querySelectorAll('.edit-group label');
+    labels.forEach(label => {
+        const key = label.getAttribute('data-i18n');
+        if (key) {
+            const text = t(key);
+            if (text && text !== key) {
+                const required = label.querySelector('.required');
+                // Limpiar solo los nodos de texto
+                const textNodes = [];
+                for (const node of label.childNodes) {
+                    if (node.nodeType === Node.TEXT_NODE) {
+                        textNodes.push(node);
+                    }
+                }
+                textNodes.forEach(node => {
+                    node.textContent = '';
+                });
+                // Insertar el nuevo texto al principio
+                const firstChild = label.firstChild;
+                if (firstChild) {
+                    label.insertBefore(document.createTextNode(text), firstChild);
+                } else {
+                    label.appendChild(document.createTextNode(text));
+                }
+                if (required) label.appendChild(required);
+            }
+        }
+    });
+    
+    // 🔥 4. TRADUCIR PLACEHOLDERS
+    const inputs = overlay.querySelectorAll('input, textarea');
+    inputs.forEach(input => {
+        const placeholderKey = input.getAttribute('data-i18n-placeholder');
+        if (placeholderKey) {
+            const text = t(placeholderKey);
+            if (text && text !== placeholderKey) {
+                input.placeholder = text;
+            }
+        }
+    });
+    
+    // 🔥 5. TRADUCIR BOTONES - SIN DUPLICACIÓN
+    const buttons = overlay.querySelectorAll('.business-request-btn, .btn-downgrade-business, .btn-logout, .submit-business-request, .btn-unblock');
+    buttons.forEach(btn => {
+        const key = btn.getAttribute('data-i18n');
+        if (key) {
+            const text = t(key);
+            if (text && text !== key) {
+                const icon = btn.querySelector('i');
+                btn.innerHTML = '';
+                if (icon) btn.appendChild(icon);
+                btn.appendChild(document.createTextNode(' ' + text));
+            }
+        }
+    });
+    
+    // 🔥 6. TRADUCIR EL ESTADO DE GUARDADO
+    const saveStatusSpan = overlay.querySelector('.save-status span');
+    if (saveStatusSpan) {
+        const key = saveStatusSpan.getAttribute('data-i18n');
+        if (key) {
+            const text = t(key);
+            if (text && text !== key) {
+                saveStatusSpan.textContent = text;
+            }
+        }
+    }
+    
+    // 🔥 7. TRADUCIR REGLAS
+    const ruleTitles = overlay.querySelectorAll('.rule-title');
+    const ruleDescs = overlay.querySelectorAll('.rule-desc');
+    const ruleKeys = [
+        'rules.respect.title', 'rules.respect.desc',
+        'rules.nsfw.title', 'rules.nsfw.desc',
+        'rules.ephemeral.title', 'rules.ephemeral.desc',
+        'rules.age.title', 'rules.age.desc',
+        'rules.language.title', 'rules.language.desc',
+        'rules.laws.title', 'rules.laws.desc'
+    ];
+    
+    ruleTitles.forEach((el, index) => {
+        const keyIndex = index * 2;
+        if (keyIndex < ruleKeys.length) {
+            const key = ruleKeys[keyIndex];
+            const text = t(key);
+            if (text && text !== key) {
+                el.textContent = text;
+            }
+        }
+    });
+    
+    ruleDescs.forEach((el, index) => {
+        const keyIndex = (index * 2) + 1;
+        if (keyIndex < ruleKeys.length) {
+            const key = ruleKeys[keyIndex];
+            const text = t(key);
+            if (text && text !== key) {
+                el.textContent = text;
+            }
+        }
+    });
+    
+    // 🔥 8. TRADUCIR FOOTER DE REGLAS
+    const rulesFooter = overlay.querySelector('.rules-footer span');
+    if (rulesFooter) {
+        const key = rulesFooter.getAttribute('data-i18n');
+        if (key) {
+            const text = t(key);
+            if (text && text !== key) {
+                rulesFooter.textContent = text;
+            }
+        }
+    }
+    
+    // 🔥 9. TRADUCIR HELPERS
+    const helpers = overlay.querySelectorAll('.edit-helper span');
+    helpers.forEach(el => {
+        const key = el.getAttribute('data-i18n');
+        if (key) {
+            const text = t(key);
+            if (text && text !== key) {
+                el.textContent = text;
+            }
+        }
+    });
+    
+    // 🔥 10. TRADUCIR TÍTULOS DE SECCIÓN
+    const sectionTitles = overlay.querySelectorAll('.edit-section-title span');
+    sectionTitles.forEach(el => {
+        const key = el.getAttribute('data-i18n');
+        if (key) {
+            const text = t(key);
+            if (text && text !== key) {
+                el.textContent = text;
+            }
+        }
+    });
+    
+    // 🔥 11. TRADUCIR DESCRIPCIONES DE PRIVACIDAD
+    const privacyDescs = overlay.querySelectorAll('.privacy-option .privacy-info .desc');
+    privacyDescs.forEach(el => {
+        const key = el.getAttribute('data-i18n');
+        if (key) {
+            const text = t(key);
+            if (text && text !== key) {
+                el.textContent = text;
+            }
+        }
+    });
+    
+    // 🔥 12. TRADUCIR TÍTULOS DE PRIVACIDAD
+    const privacyTitles = overlay.querySelectorAll('.privacy-option .privacy-info .title');
+    privacyTitles.forEach(el => {
+        const key = el.getAttribute('data-i18n');
+        if (key) {
+            const text = t(key);
+            if (text && text !== key) {
+                el.textContent = text;
+            }
+        }
+    });
+    
+    // 🔥 13. TRADUCIR TEXTO DE EMPRESA PENDIENTE
+    const businessPending = overlay.querySelectorAll('.business-request-sent span, .business-request-sent div');
+    businessPending.forEach(el => {
+        const key = el.getAttribute('data-i18n');
+        if (key) {
+            const text = t(key);
+            if (text && text !== key) {
+                el.textContent = text;
+            }
+        }
+    });
+    
+    // 🔥 14. TRADUCIR EL BOTÓN DE CERRAR SESIÓN (si tiene span)
+    const logoutBtn = overlay.querySelector('.btn-logout span');
+    if (logoutBtn) {
+        const key = logoutBtn.getAttribute('data-i18n');
+        if (key) {
+            const text = t(key);
+            if (text && text !== key) {
+                logoutBtn.textContent = text;
+            }
+        }
+    }
+    
+    console.log('✅ UI de edición de perfil traducida');
+}
+
+// ============================================================
+// 🔥 FUNCIÓN PARA ACTUALIZAR IDIOMA EN i18n DESPUÉS DE GUARDAR
+// ============================================================
+
+async function updateLocaleAfterSave(user) {
+    if (!user || !user.language) return;
+    
+    try {
+        setLocale(user.language);
+        console.log(`🌐 [i18n] Idioma actualizado a: ${user.language}`);
+        
+        // Traducir la UI después del cambio
+        setTimeout(translateEditProfileUI, 150);
+        
+        // También traducir el resto de la página
+        setTimeout(() => {
+            if (typeof translateAll === 'function') {
+                translateAll();
+            }
+        }, 200);
+    } catch (error) {
+        console.warn('⚠️ Error actualizando idioma en i18n:', error);
+    }
+}
+
+// ============================================================
+// 🔥 ACTIVAR PESTAÑA 'profile' VISUALMENTE
+// ============================================================
+
+function activateProfileTab() {
+    // Actualizar botones
+    document.querySelectorAll('.edit-tab-btn').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.tab === 'profile');
+    });
+    
+    // Actualizar contenido
+    document.querySelectorAll('.tab-content').forEach(content => {
+        content.classList.toggle('active', content.dataset.tab === 'profile');
+    });
+    
+    currentTab = 'profile';
+}
+
+// ============================================================
+// 🔥 ACTUALIZAR TÍTULO DE LA PESTAÑA ACTIVA
+// ============================================================
+
+function updateActiveTabTitle() {
+    const activeBtn = document.querySelector('.edit-tab-btn.active');
+    if (activeBtn) {
+        const span = activeBtn.querySelector('span');
+        if (span) {
+            const text = t('profile.edit');
+            if (text && text !== 'profile.edit') {
+                span.textContent = text;
+            }
+        }
+    }
+}
+
+// ============================================================
+// ABRIR MODAL DE EDICIÓN DE PERFIL - CORREGIDO
 // ============================================================
 
 export function openEditProfileModal(userData) {
@@ -849,39 +1157,64 @@ export function openEditProfileModal(userData) {
     currentUserData = userData;
     originalUsername = userData.username || '';
     isBusinessRequestSent = false;
+    
+    // 🔥 FORZAR LA PESTAÑA 'profile' AL ABRIR
     currentTab = 'profile';
     
     if (userData.businessInfo && (userData.accountType === 'business' || userData.accountType === 'business_verified')) {
         isBusinessRequestSent = true;
     }
 
+    // 🔥 ELIMINAR OVERLAY ANTERIOR SI EXISTE PARA LIMPIAR ESTADO
     const existingOverlay = document.getElementById('editProfileOverlay');
     if (existingOverlay) {
-        existingOverlay.classList.add('active');
-        document.body.style.overflow = 'hidden';
-        loadEditProfileData(userData);
-        return;
+        // Limpiar completamente el DOM
+        existingOverlay.remove();
+        // Reiniciar variables de estado
+        isEditProfileOpen = false;
+        if (saveTimeout) {
+            clearTimeout(saveTimeout);
+            saveTimeout = null;
+        }
+        if (localeUnsubscribe) {
+            localeUnsubscribe();
+            localeUnsubscribe = null;
+        }
     }
 
     isEditProfileOpen = true;
     createEditProfileHTML();
     
+    // 🔥 ESPERAR A QUE EL DOM ESTÉ LISTO
     setTimeout(() => {
         const newOverlay = document.getElementById('editProfileOverlay');
         if (newOverlay) {
             newOverlay.classList.add('active');
             document.body.style.overflow = 'hidden';
+            
+            // 🔥 FORZAR LA PESTAÑA 'profile' VISUALMENTE
+            activateProfileTab();
+            
             loadEditProfileData(userData);
+            // Traducir después de cargar
+            setTimeout(() => {
+                translateEditProfileUI();
+                // 🔥 ACTUALIZAR EL TÍTULO DE LA PESTAÑA ACTIVA
+                updateActiveTabTitle();
+            }, 200);
             console.log('✅ Modal de edición abierto');
         } else {
             console.error('❌ No se pudo crear el overlay de edición');
             showToast('Error al abrir edición de perfil', true);
         }
-    }, 100);
+    }, 150);
+    
+    // Inicializar i18n para el modal
+    initI18nForEditProfile();
 }
 
 // ============================================================
-// CERRAR MODAL DE EDICIÓN DE PERFIL
+// CERRAR MODAL DE EDICIÓN DE PERFIL - CORREGIDO
 // ============================================================
 
 export function closeEditProfileModal() {
@@ -889,14 +1222,24 @@ export function closeEditProfileModal() {
     currentUserData = null;
     isBusinessRequestSent = false;
     
+    // 🔥 REINICIAR LA PESTAÑA A 'profile'
+    currentTab = 'profile';
+    
     if (saveTimeout) {
         clearTimeout(saveTimeout);
         saveTimeout = null;
+    }
+    
+    if (localeUnsubscribe) {
+        localeUnsubscribe();
+        localeUnsubscribe = null;
     }
 
     const overlay = document.getElementById('editProfileOverlay');
     if (overlay) {
         overlay.classList.remove('active');
+        // No eliminar el overlay para evitar recrearlo cada vez
+        // pero resetear el estado interno
     }
     document.body.style.overflow = '';
 }
@@ -913,25 +1256,25 @@ function createEditProfileHTML() {
                     <button class="back-btn" id="editProfileBackBtn">
                         <i class="fas fa-arrow-left"></i>
                     </button>
-                    <span class="title">Configuración</span>
+                    <span class="title" data-i18n="settings.title">Configuración</span>
                     <span class="save-status" id="saveStatus">
-                        <i class="fas fa-check"></i> Guardado
+                        <i class="fas fa-check"></i> <span data-i18n="action.save">Guardado</span>
                     </span>
                 </div>
                 
                 <!-- TABS -->
                 <div class="edit-profile-tabs" id="editProfileTabs">
                     <button class="edit-tab-btn active" data-tab="profile" onclick="window.switchEditTab('profile')">
-                        <i class="fas fa-user"></i> Perfil
+                        <i class="fas fa-user"></i> <span data-i18n="profile.edit">Perfil</span>
                     </button>
                     <button class="edit-tab-btn" data-tab="privacy" onclick="window.switchEditTab('privacy')">
-                        <i class="fas fa-lock"></i> Privacidad
+                        <i class="fas fa-lock"></i> <span data-i18n="settings.privacy">Privacidad</span>
                     </button>
                     <button class="edit-tab-btn" data-tab="rules" onclick="window.switchEditTab('rules')">
-                        <i class="fas fa-gavel"></i> Reglas
+                        <i class="fas fa-gavel"></i> <span data-i18n="settings.rules">Reglas</span>
                     </button>
                     <button class="edit-tab-btn" data-tab="blocked" onclick="window.switchEditTab('blocked')">
-                        <i class="fas fa-ban"></i> Bloqueados
+                        <i class="fas fa-ban"></i> <span data-i18n="profile.blocked">Bloqueados</span>
                         <span class="tab-badge" id="blockedBadge">0</span>
                     </button>
                 </div>
@@ -939,7 +1282,7 @@ function createEditProfileHTML() {
                 <div class="edit-profile-body" id="editProfileBody">
                     <div class="edit-loading">
                         <i class="fas fa-spinner fa-pulse"></i>
-                        <span>Cargando...</span>
+                        <span data-i18n="modal.loading">Cargando...</span>
                     </div>
                 </div>
             </div>
@@ -1016,12 +1359,12 @@ function updateSaveStatus(status, message) {
     el.className = 'save-status';
     if (status === 'saving') {
         el.classList.add('saving');
-        el.innerHTML = '<i class="fas fa-spinner fa-pulse"></i> Guardando...';
+        el.innerHTML = '<i class="fas fa-spinner fa-pulse"></i> <span data-i18n="action.save">Guardando...</span>';
     } else if (status === 'saved') {
         el.classList.add('saved');
-        el.innerHTML = '<i class="fas fa-check"></i> Guardado';
+        el.innerHTML = '<i class="fas fa-check"></i> <span data-i18n="action.save">Guardado</span>';
     } else {
-        el.innerHTML = '<i class="fas fa-check"></i> ' + (message || 'Guardado');
+        el.innerHTML = '<i class="fas fa-check"></i> ' + (message || t('action.save'));
     }
 }
 
@@ -1059,7 +1402,7 @@ async function performSave() {
     const privacy = window._selectedPrivacy || 'public';
 
     if (username && !validateUsername(username)) {
-        updateSaveStatus('error', 'Usuario inválido');
+        updateSaveStatus('error', t('error.unauthorized'));
         return;
     }
 
@@ -1108,6 +1451,11 @@ async function performSave() {
             originalUsername = updatedUser.username || '';
             updateSaveStatus('saved');
             
+            // 🔥🔥🔥 ACTUALIZAR IDIOMA EN i18n
+            if (updatedUser.language) {
+                await updateLocaleAfterSave(updatedUser);
+            }
+            
             const profileOverlay = document.getElementById('profileModalOverlay');
             if (profileOverlay && profileOverlay.classList.contains('active')) {
                 const userId = updatedUser.id;
@@ -1120,11 +1468,11 @@ async function performSave() {
                 }
             }
         } else {
-            updateSaveStatus('error', 'Error al guardar');
+            updateSaveStatus('error', t('error.general'));
         }
     } catch (error) {
         console.error('Error saving profile:', error);
-        updateSaveStatus('error', 'Error de conexión');
+        updateSaveStatus('error', t('error.network'));
     } finally {
         isSaving = false;
     }
@@ -1203,92 +1551,88 @@ function loadEditProfileData(user) {
     const usernameDisabled = daysRemaining > 0;
 
     // ============================================================
-    // 🆕 SECCIÓN DE EMPRESA ACTUALIZADA CON DOWNGRADE
+    // SECCIÓN DE EMPRESA
     // ============================================================
     let businessSectionHtml = '';
     
     if (isAdmin) {
         businessSectionHtml = `
             <div class="edit-section business-info-section">
-                <div class="edit-section-title"><i class="fas fa-shield-alt" style="color:#c084fc;"></i> Cuenta de administrador</div>
-                <div class="edit-helper"><i class="fas fa-info-circle"></i> Los administradores tienen cuenta verificada automáticamente</div>
+                <div class="edit-section-title"><i class="fas fa-shield-alt" style="color:#c084fc;"></i> <span data-i18n="settings.admin">Cuenta de administrador</span></div>
+                <div class="edit-helper"><i class="fas fa-info-circle"></i> <span data-i18n="settings.adminInfo">Los administradores tienen cuenta verificada automáticamente</span></div>
             </div>
         `;
     } else if (accountType === 'personal' || accountType === 'verified') {
-        // USUARIO PERSONAL O VERIFICADO - Mostrar opción de solicitar empresa
         if (hasBusinessRequest || isBusinessRequestSent) {
             businessSectionHtml = `
                 <div class="edit-section business-request-section">
-                    <div class="edit-section-title"><i class="fas fa-building"></i> Solicitar cuenta de empresa</div>
+                    <div class="edit-section-title"><i class="fas fa-building"></i> <span data-i18n="profile.businessRequest">Solicitar cuenta de empresa</span></div>
                     <div class="business-request-sent">
                         <i class="fas fa-check-circle" style="color:#4ade80;"></i>
-                        <span style="color:#4ade80;font-weight:500;">✅ Solicitud enviada</span>
-                        <div style="font-size:12px;color:rgba(255,255,255,0.4);margin-top:4px;">Tu solicitud está siendo revisada por el equipo de moderación</div>
+                        <span style="color:#4ade80;font-weight:500;">✅ <span data-i18n="profile.businessRequestSent">Solicitud enviada</span></span>
+                        <div style="font-size:12px;color:rgba(255,255,255,0.4);margin-top:4px;"><span data-i18n="profile.businessRequestPending">Tu solicitud está siendo revisada por el equipo de moderación</span></div>
                     </div>
                 </div>
             `;
         } else {
             businessSectionHtml = `
                 <div class="edit-section business-request-section">
-                    <div class="edit-section-title"><i class="fas fa-building"></i> Solicitar cuenta de empresa</div>
-                    <button class="business-request-btn" onclick="window.requestBusinessAccount()">
-                        <i class="fas fa-store"></i> Solicitar cuenta de empresa
+                    <div class="edit-section-title"><i class="fas fa-building"></i> <span data-i18n="profile.businessRequest">Solicitar cuenta de empresa</span></div>
+                    <button class="business-request-btn" onclick="window.requestBusinessAccount()" data-i18n="profile.businessRequestBtn">
+                        <i class="fas fa-store"></i> <span>Solicitar cuenta de empresa</span>
                     </button>
-                    <div class="edit-helper"><i class="fas fa-info-circle"></i> Al solicitar, tu cuenta será revisada por el equipo de moderación</div>
+                    <div class="edit-helper"><i class="fas fa-info-circle"></i> <span data-i18n="profile.businessRequestInfo">Al solicitar, tu cuenta será revisada por el equipo de moderación</span></div>
                 </div>
             `;
         }
     } else if (accountType === 'business') {
-        // 🆕 CUENTA DE EMPRESA (NO VERIFICADA) - Mostrar opción de dejar de ser empresa
         businessSectionHtml = `
             <div class="edit-section business-info-section">
-                <div class="edit-section-title"><i class="fas fa-building" style="color:#fbbf24;"></i> Cuenta de empresa</div>
+                <div class="edit-section-title"><i class="fas fa-building" style="color:#fbbf24;"></i> <span data-i18n="profile.businessAccount">Cuenta de empresa</span></div>
                 ${user.businessInfo ? `
                     <div class="business-info-display">
-                        <div><strong>Nombre:</strong> ${escapeHtml(user.businessInfo.name || '')}</div>
-                        <div><strong>Tipo:</strong> ${escapeHtml(user.businessInfo.type || '')}</div>
-                        <div><strong>Estado:</strong> ⏳ Pendiente de verificación</div>
+                        <div><strong><span data-i18n="profile.businessName">Nombre</span>:</strong> ${escapeHtml(user.businessInfo.name || '')}</div>
+                        <div><strong><span data-i18n="profile.businessType">Tipo</span>:</strong> ${escapeHtml(user.businessInfo.type || '')}</div>
+                        <div><strong><span data-i18n="profile.businessStatus">Estado</span>:</strong> ⏳ <span data-i18n="profile.businessPending">Pendiente de verificación</span></div>
                         ${user.businessInfo.trialEndsAt ? `
                             <div style="margin-top:8px;font-size:12px;color:rgba(255,255,255,0.3);">
-                                <i class="fas fa-clock"></i> Período de prueba hasta: ${new Date(user.businessInfo.trialEndsAt).toLocaleDateString()}
+                                <i class="fas fa-clock"></i> <span data-i18n="profile.businessTrial">Período de prueba hasta</span>: ${new Date(user.businessInfo.trialEndsAt).toLocaleDateString()}
                             </div>
                         ` : ''}
                     </div>
                 ` : `
-                    <div class="edit-helper">Cuenta de empresa activa</div>
+                    <div class="edit-helper"><span data-i18n="profile.businessActive">Cuenta de empresa activa</span></div>
                 `}
                 
-                <!-- 🔥 BOTÓN PARA DEJAR DE SER EMPRESA -->
-                <button class="btn-downgrade-business" onclick="window.downgradeBusinessAccount()">
-                    <i class="fas fa-user"></i> Dejar de ser empresa
+                <button class="btn-downgrade-business" onclick="window.downgradeBusinessAccount()" data-i18n="profile.downgradeBusiness">
+                    <i class="fas fa-user"></i> <span>Dejar de ser empresa</span>
                 </button>
                 <div class="edit-helper" style="color:#fbbf24;">
-                    <i class="fas fa-info-circle"></i> Al dejar de ser empresa, volverás a una cuenta personal
+                    <i class="fas fa-info-circle"></i> <span data-i18n="profile.downgradeBusinessInfo">Al dejar de ser empresa, volverás a una cuenta personal</span>
                 </div>
             </div>
         `;
     } else {
-        // CUENTA BUSINESS_VERIFIED o VERIFIED - No se puede cambiar
         businessSectionHtml = `
             <div class="edit-section business-info-section">
-                <div class="edit-section-title"><i class="fas fa-building" style="color:#4ade80;"></i> Cuenta de empresa verificada</div>
+                <div class="edit-section-title"><i class="fas fa-building" style="color:#4ade80;"></i> <span data-i18n="profile.businessVerified">Cuenta de empresa verificada</span></div>
                 ${user.businessInfo ? `
                     <div class="business-info-display">
-                        <div><strong>Nombre:</strong> ${escapeHtml(user.businessInfo.name || '')}</div>
-                        <div><strong>Tipo:</strong> ${escapeHtml(user.businessInfo.type || '')}</div>
-                        <div><strong>Estado:</strong> ✅ Verificada</div>
+                        <div><strong><span data-i18n="profile.businessName">Nombre</span>:</strong> ${escapeHtml(user.businessInfo.name || '')}</div>
+                        <div><strong><span data-i18n="profile.businessType">Tipo</span>:</strong> ${escapeHtml(user.businessInfo.type || '')}</div>
+                        <div><strong><span data-i18n="profile.businessStatus">Estado</span>:</strong> ✅ <span data-i18n="profile.businessVerifiedStatus">Verificada</span></div>
                         <div style="margin-top:8px;font-size:12px;color:#4ade80;">
-                            <i class="fas fa-check-circle"></i> Cuenta verificada por el equipo de moderación
+                            <i class="fas fa-check-circle"></i> <span data-i18n="profile.businessVerifiedByMod">Cuenta verificada por el equipo de moderación</span>
                         </div>
                     </div>
                 ` : `
                     <div class="edit-helper" style="color:#4ade80;">
-                        <i class="fas fa-check-circle"></i> Cuenta de empresa verificada
+                        <i class="fas fa-check-circle"></i> <span data-i18n="profile.businessVerifiedStatus">Cuenta de empresa verificada</span>
                     </div>
                 `}
                 <div class="account-type-locked" style="border-color:rgba(74,222,128,0.2);">
                     <i class="fas fa-lock" style="color:#4ade80;"></i>
-                    No puedes cambiar una cuenta verificada. Contacta al soporte.
+                    <span data-i18n="profile.businessLocked">No puedes cambiar una cuenta verificada. Contacta al soporte.</span>
                 </div>
             </div>
         `;
@@ -1321,17 +1665,17 @@ function loadEditProfileData(user) {
             </div>
 
             <div class="edit-section">
-                <div class="edit-section-title"><i class="fas fa-user-circle"></i> Información personal</div>
+                <div class="edit-section-title"><i class="fas fa-user-circle"></i> <span data-i18n="profile.personalInfo">Información personal</span></div>
                 
                 <div class="edit-group">
-                    <label>Nombre completo</label>
-                    <input type="text" id="editFullName" value="${fullName}" placeholder="Tu nombre completo" maxlength="50">
-                    <div class="edit-helper">Máximo 50 caracteres</div>
+                    <label data-i18n="profile.fullName">Nombre completo</label>
+                    <input type="text" id="editFullName" value="${fullName}" data-i18n-placeholder="profile.fullNamePlaceholder" placeholder="Tu nombre completo" maxlength="50">
+                    <div class="edit-helper"><span data-i18n="profile.maxChars">Máximo 50 caracteres</span></div>
                 </div>
 
                 <div class="edit-group">
-                    <label>Nombre de usuario</label>
-                    <input type="text" id="editUsername" value="${username}" placeholder="Nombre de usuario" 
+                    <label data-i18n="profile.username">Nombre de usuario</label>
+                    <input type="text" id="editUsername" value="${username}" data-i18n-placeholder="profile.usernamePlaceholder" placeholder="Nombre de usuario" 
                            maxlength="20" ${usernameDisabled ? 'disabled' : ''}>
                     <div class="edit-helper ${usernameDisabled ? 'warning' : ''}">
                         ${usernameDisabled 
@@ -1343,9 +1687,9 @@ function loadEditProfileData(user) {
                 </div>
 
                 <div class="edit-group">
-                    <label>Biografía</label>
-                    <textarea id="editBio" rows="3" placeholder="Cuéntanos sobre ti..." maxlength="200">${bio}</textarea>
-                    <div class="edit-helper"><span id="bioCount">${bio.length}</span>/200 caracteres</div>
+                    <label data-i18n="profile.bio">Biografía</label>
+                    <textarea id="editBio" rows="3" data-i18n-placeholder="profile.bioPlaceholder" placeholder="Cuéntanos sobre ti..." maxlength="200">${bio}</textarea>
+                    <div class="edit-helper"><span id="bioCount">${bio.length}</span>/200 <span data-i18n="profile.characters">caracteres</span></div>
                 </div>
             </div>
 
@@ -1355,17 +1699,17 @@ function loadEditProfileData(user) {
         <!-- TAB 2: PRIVACIDAD Y PREFERENCIAS -->
         <div class="tab-content" data-tab="privacy">
             <div class="edit-section">
-                <div class="edit-section-title"><i class="fas fa-globe"></i> Preferencias</div>
+                <div class="edit-section-title"><i class="fas fa-globe"></i> <span data-i18n="settings.preferences">Preferencias</span></div>
 
                 <div class="edit-group">
-                    <label>Idioma</label>
+                    <label data-i18n="settings.language">Idioma</label>
                     <select id="editLanguage">
                         ${languageOptions}
                     </select>
                 </div>
 
                 <div class="edit-group">
-                    <label>Tipo de cuenta</label>
+                    <label data-i18n="settings.accountType">Tipo de cuenta</label>
                     ${isSpecialAccount ? accountTypeDisplay : `
                         <select id="editAccountType">
                             ${accountTypeOptions}
@@ -1377,14 +1721,14 @@ function loadEditProfileData(user) {
             </div>
 
             <div class="edit-section">
-                <div class="edit-section-title"><i class="fas fa-lock"></i> Privacidad</div>
+                <div class="edit-section-title"><i class="fas fa-lock"></i> <span data-i18n="settings.privacy">Privacidad</span></div>
 
                 <div class="privacy-options">
                     <div class="privacy-option ${privacy === 'public' ? 'active' : ''}" data-privacy="public" onclick="window.selectEditPrivacy('public')">
                         <div class="privacy-icon">🌍</div>
                         <div class="privacy-info">
-                            <div class="title">Público</div>
-                            <div class="desc">Cualquiera puede ver tu perfil y seguirte sin solicitud</div>
+                            <div class="title" data-i18n="settings.privacyPublic">Público</div>
+                            <div class="desc" data-i18n="settings.privacyPublicDesc">Cualquiera puede ver tu perfil y seguirte sin solicitud</div>
                         </div>
                         <div class="privacy-check"><i class="fas fa-check"></i></div>
                     </div>
@@ -1392,8 +1736,8 @@ function loadEditProfileData(user) {
                     <div class="privacy-option ${privacy === 'followers' ? 'active' : ''}" data-privacy="followers" onclick="window.selectEditPrivacy('followers')">
                         <div class="privacy-icon">👥</div>
                         <div class="privacy-info">
-                            <div class="title">Solo seguidores</div>
-                            <div class="desc">Solo tus seguidores pueden ver tus historias</div>
+                            <div class="title" data-i18n="settings.privacyFollowers">Solo seguidores</div>
+                            <div class="desc" data-i18n="settings.privacyFollowersDesc">Solo tus seguidores pueden ver tus historias</div>
                         </div>
                         <div class="privacy-check"><i class="fas fa-check"></i></div>
                     </div>
@@ -1401,8 +1745,8 @@ function loadEditProfileData(user) {
                     <div class="privacy-option ${privacy === 'private' ? 'active' : ''}" data-privacy="private" onclick="window.selectEditPrivacy('private')">
                         <div class="privacy-icon">🔒</div>
                         <div class="privacy-info">
-                            <div class="title">Privado</div>
-                            <div class="desc">Solo tú puedes ver tu perfil</div>
+                            <div class="title" data-i18n="settings.privacyPrivate">Privado</div>
+                            <div class="desc" data-i18n="settings.privacyPrivateDesc">Solo tú puedes ver tu perfil</div>
                         </div>
                         <div class="privacy-check"><i class="fas fa-check"></i></div>
                     </div>
@@ -1415,62 +1759,62 @@ function loadEditProfileData(user) {
             <div class="community-rules-section">
                 <div class="edit-section-title">
                     <i class="fas fa-gavel" style="color: #fbbf24;"></i> 
-                    Reglas y normas de la comunidad
+                    <span data-i18n="settings.rules">Reglas y normas de la comunidad</span>
                 </div>
 
                 <div class="rules-grid">
                     <div class="rule-item">
                         <div class="rule-icon">🤝</div>
                         <div class="rule-content">
-                            <div class="rule-title">Respeta a los demás</div>
-                            <div class="rule-desc">Trata a todos con respeto. No se tolerará el acoso, el odio o la discriminación.</div>
+                            <div class="rule-title" data-i18n="rules.respect.title">Respeta a los demás</div>
+                            <div class="rule-desc" data-i18n="rules.respect.desc">Trata a todos con respeto. No se tolerará el acoso, el odio o la discriminación.</div>
                         </div>
                     </div>
 
                     <div class="rule-item">
                         <div class="rule-icon">🚫</div>
                         <div class="rule-content">
-                            <div class="rule-title">Sin NSFW ni contenido sensible</div>
-                            <div class="rule-desc">No se permite contenido explícito, violento, o que pueda ser considerado sensible o perturbador.</div>
+                            <div class="rule-title" data-i18n="rules.nsfw.title">Sin NSFW ni contenido sensible</div>
+                            <div class="rule-desc" data-i18n="rules.nsfw.desc">No se permite contenido explícito, violento, o que pueda ser considerado sensible o perturbador.</div>
                         </div>
                     </div>
 
                     <div class="rule-item">
                         <div class="rule-icon">⏳</div>
                         <div class="rule-content">
-                            <div class="rule-title">Contenido efímero</div>
-                            <div class="rule-desc">Todo lo que compartes aquí es temporal. Las historias desaparecen después de 24 horas. ¡Disfruta el momento!</div>
+                            <div class="rule-title" data-i18n="rules.ephemeral.title">Contenido efímero</div>
+                            <div class="rule-desc" data-i18n="rules.ephemeral.desc">Todo lo que compartes aquí es temporal. Las historias desaparecen después de 24 horas. ¡Disfruta el momento!</div>
                         </div>
                     </div>
 
                     <div class="rule-item">
                         <div class="rule-icon">🔞</div>
                         <div class="rule-content">
-                            <div class="rule-title">Contenido para mayores de 16 años</div>
-                            <div class="rule-desc">Esta plataforma está diseñada para usuarios mayores de 16 años. La supervisión parental es recomendada para menores.</div>
+                            <div class="rule-title" data-i18n="rules.age.title">Contenido para mayores de 16 años</div>
+                            <div class="rule-desc" data-i18n="rules.age.desc">Esta plataforma está diseñada para usuarios mayores de 16 años. La supervisión parental es recomendada para menores.</div>
                         </div>
                     </div>
 
                     <div class="rule-item">
                         <div class="rule-icon">💬</div>
                         <div class="rule-content">
-                            <div class="rule-title">Idioma y comunicación</div>
-                            <div class="rule-desc">Fomenta un ambiente positivo. El lenguaje ofensivo o las discusiones tóxicas no son bienvenidas.</div>
+                            <div class="rule-title" data-i18n="rules.language.title">Idioma y comunicación</div>
+                            <div class="rule-desc" data-i18n="rules.language.desc">Fomenta un ambiente positivo. El lenguaje ofensivo o las discusiones tóxicas no son bienvenidas.</div>
                         </div>
                     </div>
 
                     <div class="rule-item">
                         <div class="rule-icon">⚖️</div>
                         <div class="rule-content">
-                            <div class="rule-title">Cumple con las leyes locales</div>
-                            <div class="rule-desc">Asegúrate de que tu contenido cumpla con todas las leyes y regulaciones aplicables en tu país.</div>
+                            <div class="rule-title" data-i18n="rules.laws.title">Cumple con las leyes locales</div>
+                            <div class="rule-desc" data-i18n="rules.laws.desc">Asegúrate de que tu contenido cumpla con todas las leyes y regulaciones aplicables en tu país.</div>
                         </div>
                     </div>
                 </div>
 
                 <div class="rules-footer">
                     <i class="fas fa-info-circle"></i>
-                    <span>Estas reglas aplican para todos los usuarios. El incumplimiento puede resultar en la suspensión de tu cuenta.</span>
+                    <span data-i18n="rules.footer">Estas reglas aplican para todos los usuarios. El incumplimiento puede resultar en la suspensión de tu cuenta.</span>
                 </div>
             </div>
         </div>
@@ -1480,13 +1824,13 @@ function loadEditProfileData(user) {
             <div class="edit-section">
                 <div class="edit-section-title">
                     <i class="fas fa-ban" style="color: #ff6b6b;"></i> 
-                    Usuarios bloqueados
-                    <span style="font-size:12px;color:rgba(255,255,255,0.2);margin-left:auto;">${blockedCount} bloqueados</span>
+                    <span data-i18n="profile.blockedUsers">Usuarios bloqueados</span>
+                    <span style="font-size:12px;color:rgba(255,255,255,0.2);margin-left:auto;">${blockedCount} <span data-i18n="profile.blocked">bloqueados</span></span>
                 </div>
                 <div id="blockedListContainer">
                     <div class="blocked-loading">
                         <i class="fas fa-spinner fa-pulse"></i>
-                        <span>Cargando lista de bloqueados...</span>
+                        <span data-i18n="modal.loading">Cargando lista de bloqueados...</span>
                     </div>
                 </div>
             </div>
@@ -1494,12 +1838,12 @@ function loadEditProfileData(user) {
 
         <!-- LOGOUT (siempre visible al final) -->
         <div class="edit-logout-section">
-            <button class="btn-logout" onclick="window.handleLogout()">
+            <button class="btn-logout" onclick="window.handleLogout()" data-i18n="nav.logout">
                 <i class="fas fa-sign-out-alt"></i>
-                Cerrar sesión
+                <span>Cerrar sesión</span>
             </button>
             <div class="edit-helper" style="text-align:center;margin-top:8px;">
-                <i class="fas fa-info-circle"></i> Cerrarás tu sesión actual
+                <i class="fas fa-info-circle"></i> <span data-i18n="settings.logoutInfo">Cerrarás tu sesión actual</span>
             </div>
         </div>
     `;
@@ -1569,6 +1913,8 @@ function loadEditProfileData(user) {
     
     setTimeout(() => {
         updateSaveStatus('saved');
+        // 🔥 TRADUCIR LA UI DESPUÉS DE CARGAR
+        translateEditProfileUI();
     }, 500);
 }
 
@@ -1583,13 +1929,11 @@ async function downgradeBusinessAccount() {
         return;
     }
 
-    // Verificar que es cuenta business (no verificada)
     if (user.accountType !== 'business') {
         showToast('❌ No puedes realizar esta acción', true);
         return;
     }
 
-    // Confirmar con el usuario
     if (!confirm('¿Estás seguro de que quieres dejar de ser una cuenta de empresa?\n\nVolverás a una cuenta personal y perderás los beneficios de empresa.')) {
         return;
     }
@@ -1616,17 +1960,14 @@ async function downgradeBusinessAccount() {
         if (response.ok) {
             showToast('✅ Has dejado de ser una cuenta de empresa', false);
             
-            // Actualizar el usuario en localStorage
             if (currentUserData) {
                 currentUserData.accountType = 'personal';
                 currentUserData.businessInfo = null;
                 setCurrentUser(currentUserData);
             }
             
-            // Recargar los datos del perfil
             loadEditProfileData(currentUserData || getCurrentUser());
             
-            // Actualizar el perfil si está abierto
             const profileOverlay = document.getElementById('profileModalOverlay');
             if (profileOverlay && profileOverlay.classList.contains('active')) {
                 const userId = user.id;
@@ -1658,7 +1999,7 @@ async function loadBlockedList() {
         container.innerHTML = `
             <div class="blocked-empty">
                 <i class="fas fa-exclamation-circle"></i>
-                <span>Inicia sesión para ver tu lista de bloqueados</span>
+                <span data-i18n="error.unauthorized">Inicia sesión para ver tu lista de bloqueados</span>
             </div>
         `;
         return;
@@ -1667,7 +2008,7 @@ async function loadBlockedList() {
     container.innerHTML = `
         <div class="blocked-loading">
             <i class="fas fa-spinner fa-pulse"></i>
-            <span>Cargando...</span>
+            <span data-i18n="modal.loading">Cargando...</span>
         </div>
     `;
 
@@ -1684,7 +2025,6 @@ async function loadBlockedList() {
 
         const blockedUsers = await response.json();
 
-        // Actualizar badge
         const badge = document.getElementById('blockedBadge');
         if (badge) badge.textContent = blockedUsers.length;
 
@@ -1692,8 +2032,8 @@ async function loadBlockedList() {
             container.innerHTML = `
                 <div class="blocked-empty">
                     <i class="fas fa-smile"></i>
-                    <span>No tienes usuarios bloqueados</span>
-                    <div style="font-size:12px;color:rgba(255,255,255,0.15);margin-top:8px;">Los bloqueos son silenciosos, el usuario no se entera</div>
+                    <span data-i18n="profile.noBlocked">No tienes usuarios bloqueados</span>
+                    <div style="font-size:12px;color:rgba(255,255,255,0.15);margin-top:8px;"><span data-i18n="profile.blockedSilent">Los bloqueos son silenciosos, el usuario no se entera</span></div>
                 </div>
             `;
             return;
@@ -1712,7 +2052,7 @@ async function loadBlockedList() {
                                 <div class="user-username">@${escapeHtml(user.username)}</div>
                             </div>
                         </div>
-                        <button class="btn-unblock" onclick="window.unblockUser('${user.id}')">
+                        <button class="btn-unblock" onclick="window.unblockUser('${user.id}')" data-i18n="profile.unblock">
                             <i class="fas fa-user-plus"></i> Desbloquear
                         </button>
                     </div>
@@ -1725,7 +2065,7 @@ async function loadBlockedList() {
         container.innerHTML = `
             <div class="blocked-empty">
                 <i class="fas fa-exclamation-triangle" style="color:#fbbf24;"></i>
-                <span>Error al cargar la lista</span>
+                <span data-i18n="error.general">Error al cargar la lista</span>
                 <div style="font-size:12px;color:rgba(255,255,255,0.15);margin-top:8px;">${error.message}</div>
             </div>
         `;
@@ -1766,26 +2106,21 @@ async function unblockUser(userId) {
 
         showToast(`✅ Has desbloqueado a ${userName}`, false);
         
-        // Actualizar lista local
         if (blockedUser) {
             blockedUser.remove();
         }
         
-        // Actualizar badge
         const remaining = document.querySelectorAll('.blocked-item').length;
         const badge = document.getElementById('blockedBadge');
         if (badge) badge.textContent = remaining;
         
-        // Actualizar contador en el título
         const titleSpan = document.querySelector('.edit-section-title span:last-child');
         if (titleSpan) titleSpan.textContent = `${remaining} bloqueados`;
 
-        // Actualizar currentUserData
         if (currentUserData && currentUserData.blocked) {
             currentUserData.blocked = currentUserData.blocked.filter(id => id !== userId);
         }
 
-        // Recargar si no quedan
         if (remaining === 0) {
             loadBlockedList();
         }
@@ -1885,60 +2220,60 @@ function createBusinessRequestModal() {
         <div id="businessRequestOverlay" class="business-request-overlay" onclick="window.closeBusinessRequestModal()">
             <div class="business-request-content" onclick="event.stopPropagation()">
                 <div class="business-request-header">
-                    <span class="title"><i class="fas fa-store"></i> Solicitar cuenta de empresa</span>
+                    <span class="title"><i class="fas fa-store"></i> <span data-i18n="profile.businessRequest">Solicitar cuenta de empresa</span></span>
                     <button class="close-btn" onclick="window.closeBusinessRequestModal()">
                         <i class="fas fa-times"></i>
                     </button>
                 </div>
                 <div class="business-request-body">
                     <div class="business-request-info">
-                        <p>Completa la información para solicitar tu cuenta de empresa. Será revisada por el equipo de moderación.</p>
+                        <p data-i18n="profile.businessRequestInfo">Completa la información para solicitar tu cuenta de empresa. Será revisada por el equipo de moderación.</p>
                     </div>
 
                     <div class="edit-group">
-                        <label>Nombre de la empresa <span class="required">*</span></label>
-                        <input type="text" id="bizName" placeholder="Ej: Mi Empresa S.A." maxlength="50">
+                        <label data-i18n="profile.businessName">Nombre de la empresa <span class="required">*</span></label>
+                        <input type="text" id="bizName" data-i18n-placeholder="profile.businessNamePlaceholder" placeholder="Ej: Mi Empresa S.A." maxlength="50">
                     </div>
 
                     <div class="edit-group">
-                        <label>Tipo de empresa <span class="required">*</span></label>
+                        <label data-i18n="profile.businessType">Tipo de empresa <span class="required">*</span></label>
                         <select id="bizType">
-                            <option value="">Selecciona...</option>
-                            <option value="technology">Tecnología</option>
-                            <option value="retail">Comercio / Retail</option>
-                            <option value="food">Alimentos / Restaurantes</option>
-                            <option value="education">Educación</option>
-                            <option value="health">Salud</option>
-                            <option value="finance">Finanzas</option>
-                            <option value="entertainment">Entretenimiento</option>
-                            <option value="art">Arte / Cultura</option>
-                            <option value="sports">Deportes</option>
-                            <option value="other">Otro</option>
+                            <option value="" data-i18n="profile.businessSelect">Selecciona...</option>
+                            <option value="technology" data-i18n="profile.businessTech">Tecnología</option>
+                            <option value="retail" data-i18n="profile.businessRetail">Comercio / Retail</option>
+                            <option value="food" data-i18n="profile.businessFood">Alimentos / Restaurantes</option>
+                            <option value="education" data-i18n="profile.businessEducation">Educación</option>
+                            <option value="health" data-i18n="profile.businessHealth">Salud</option>
+                            <option value="finance" data-i18n="profile.businessFinance">Finanzas</option>
+                            <option value="entertainment" data-i18n="profile.businessEntertainment">Entretenimiento</option>
+                            <option value="art" data-i18n="profile.businessArt">Arte / Cultura</option>
+                            <option value="sports" data-i18n="profile.businessSports">Deportes</option>
+                            <option value="other" data-i18n="profile.businessOther">Otro</option>
                         </select>
                     </div>
 
                     <div class="edit-group">
-                        <label>Descripción</label>
-                        <textarea id="bizDescription" rows="3" placeholder="Describe tu empresa..." maxlength="500"></textarea>
-                        <div class="edit-helper"><span id="bizDescCount">0</span>/500 caracteres</div>
+                        <label data-i18n="profile.businessDescription">Descripción</label>
+                        <textarea id="bizDescription" rows="3" data-i18n-placeholder="profile.businessDescriptionPlaceholder" placeholder="Describe tu empresa..." maxlength="500"></textarea>
+                        <div class="edit-helper"><span id="bizDescCount">0</span>/500 <span data-i18n="profile.characters">caracteres</span></div>
                     </div>
 
                     <div class="edit-group">
-                        <label>Sitio web</label>
-                        <input type="url" id="bizWebsite" placeholder="https://tusitio.com">
+                        <label data-i18n="profile.businessWebsite">Sitio web</label>
+                        <input type="url" id="bizWebsite" data-i18n-placeholder="profile.businessWebsitePlaceholder" placeholder="https://tusitio.com">
                     </div>
 
                     <div class="edit-group">
-                        <label>Teléfono</label>
-                        <input type="tel" id="bizPhone" placeholder="+1234567890">
+                        <label data-i18n="profile.businessPhone">Teléfono</label>
+                        <input type="tel" id="bizPhone" data-i18n-placeholder="profile.businessPhonePlaceholder" placeholder="+1234567890">
                     </div>
 
                     <div class="edit-group">
-                        <label>Dirección</label>
-                        <input type="text" id="bizAddress" placeholder="Dirección de la empresa">
+                        <label data-i18n="profile.businessAddress">Dirección</label>
+                        <input type="text" id="bizAddress" data-i18n-placeholder="profile.businessAddressPlaceholder" placeholder="Dirección de la empresa">
                     </div>
 
-                    <button class="submit-business-request" id="submitBusinessRequestBtn">
+                    <button class="submit-business-request" id="submitBusinessRequestBtn" data-i18n="profile.businessSubmit">
                         <i class="fas fa-paper-plane"></i> Enviar solicitud
                     </button>
                     <div id="businessRequestStatus" class="business-request-status" style="display:none;"></div>
@@ -2038,11 +2373,11 @@ async function submitBusinessRequest() {
             const section = document.querySelector('.business-request-section');
             if (section) {
                 section.innerHTML = `
-                    <div class="edit-section-title"><i class="fas fa-building"></i> Solicitar cuenta de empresa</div>
+                    <div class="edit-section-title"><i class="fas fa-building"></i> <span data-i18n="profile.businessRequest">Solicitar cuenta de empresa</span></div>
                     <div class="business-request-sent">
                         <i class="fas fa-check-circle" style="color:#4ade80;"></i>
-                        <span style="color:#4ade80;font-weight:500;">✅ Solicitud enviada</span>
-                        <div style="font-size:12px;color:rgba(255,255,255,0.4);margin-top:4px;">Tu solicitud está siendo revisada por el equipo de moderación</div>
+                        <span style="color:#4ade80;font-weight:500;">✅ <span data-i18n="profile.businessRequestSent">Solicitud enviada</span></span>
+                        <div style="font-size:12px;color:rgba(255,255,255,0.4);margin-top:4px;"><span data-i18n="profile.businessRequestPending">Tu solicitud está siendo revisada por el equipo de moderación</span></div>
                     </div>
                 `;
             }

@@ -8,7 +8,7 @@ const path = require('path');
 // ============================================================
 
 const EMBEDDING_CACHE_FILE = path.join(__dirname, '../data/embeddings.json');
-const EMBEDDINGS_ENABLED = false;  // ← 🔥 CAMBIAR A false para ahorrar memoria
+const EMBEDDINGS_ENABLED = true;  // ← 🔥 CAMBIAR A false para ahorrar memoria
 const MODEL_NAME = 'Xenova/paraphrase-multilingual-MiniLM-L12-v2';
 const EMBEDDING_DIMENSION = 384;
 const SIMILARITY_THRESHOLD = 0.45;

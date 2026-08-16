@@ -1,4 +1,5 @@
-// app.js - VERSIÓN COMPLETA CON FILTRO PUBLICIDAD, LOGIN MODULAR, PREFERENCIAS Y TRADUCCIÓN
+// app.js - VERSIÓN COMPLETA CON FILTRO PUBLICIDAD, LOGIN MODULAR, PREFERENCIAS Y TRADUCCIÓN (i18n)
+// 🔥 CORREGIDO: Race condition en registro de vistas (debounce + pending views)
 // ============================================================
 
 import {
@@ -11,6 +12,9 @@ import {
 } from './auth.js';
 
 import { formatNumber } from './utils.js';
+
+// 🔥 IMPORTAR SISTEMA i18n
+import { t, setLocale, initI18n, translateAll, onLocaleChange } from './i18n.js';
 
 // Importar modales
 import { openStoryModal, closeStoryModal } from './story-modal.js';
@@ -212,9 +216,9 @@ async function showPreferencesScreen() {
         grid.innerHTML = `
             <div style="grid-column:1/-1;text-align:center;color:rgba(255,255,255,0.2);padding:20px 0;">
                 <i class="fas fa-exclamation-circle" style="font-size:24px;color:#ff6b6b;"></i>
-                <p style="margin-top:8px;">No se pudieron cargar las categorías</p>
+                <p style="margin-top:8px;">${t('error.general') || 'No se pudieron cargar las categorías'}</p>
                 <button onclick="location.reload()" style="margin-top:8px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);color:#fff;padding:6px 20px;border-radius:50px;cursor:pointer;">
-                    <i class="fas fa-redo"></i> Reintentar
+                    <i class="fas fa-redo"></i> ${t('action.retry') || 'Reintentar'}
                 </button>
             </div>
         `;
@@ -245,7 +249,7 @@ async function showPreferencesScreen() {
                 selected = selected.filter(c => c !== category);
             } else {
                 if (selected.length >= 6) {
-                    showToast('Máximo 6 temas', true);
+                    showToast(t('profile.maxInterests') || 'Máximo 6 temas', true);
                     return;
                 }
                 el.classList.add('selected');
@@ -266,18 +270,18 @@ async function showPreferencesScreen() {
         submitBtn.parentNode.replaceChild(newBtn, submitBtn);
         newBtn.addEventListener('click', async () => {
             if (selected.length === 0) {
-                showToast('Selecciona al menos 1 tema', true);
+                showToast(t('profile.selectAtLeastOne') || 'Selecciona al menos 1 tema', true);
                 return;
             }
 
             const user = getCurrentUser();
             if (!user) {
-                showToast('Inicia sesión primero', true);
+                showToast(t('error.unauthorized') || 'Inicia sesión primero', true);
                 return;
             }
 
             newBtn.disabled = true;
-            newBtn.innerHTML = '<span class="pref-btn-spinner"></span> Guardando...';
+            newBtn.innerHTML = '<span class="pref-btn-spinner"></span> ' + (t('action.saving') || 'Guardando...');
 
             try {
                 const res = await fetch(`${API_URL}/api/users/${user.id}/interests`, {
@@ -300,21 +304,21 @@ async function showPreferencesScreen() {
                     markPreferencesDone();
                     localStorage.setItem(SELECTED_INTERESTS_KEY, JSON.stringify(selected));
 
-                    showToast(`✅ ${data.percentage || 0}% de tu feed será de tus temas`);
+                    showToast(`✅ ${data.percentage || 0}% ${t('profile.feedWillBe') || 'de tu feed será de tus temas'}`);
 
                     closePreferencesScreen();
                     if (typeof refreshFeed === 'function') {
                         setTimeout(refreshFeed, 500);
                     }
                 } else {
-                    showToast(data.error || 'Error guardando preferencias', true);
+                    showToast(data.error || t('error.general') || 'Error guardando preferencias', true);
                 }
             } catch (error) {
                 console.error('Error:', error);
-                showToast('Error de conexión', true);
+                showToast(t('error.network') || 'Error de conexión', true);
             } finally {
                 newBtn.disabled = false;
-                newBtn.innerHTML = 'Continuar <i class="fas fa-arrow-right" style="margin-left:8px;"></i>';
+                newBtn.innerHTML = (t('action.continue') || 'Continuar') + ' <i class="fas fa-arrow-right" style="margin-left:8px;"></i>';
             }
         });
     }
@@ -327,7 +331,7 @@ async function showPreferencesScreen() {
         newSkip.addEventListener('click', () => {
             markPreferencesDone();
             closePreferencesScreen();
-            showToast('Puedes configurar tus intereses después en ajustes');
+            showToast(t('profile.interestsLater') || 'Puedes configurar tus intereses después en ajustes');
             if (typeof refreshFeed === 'function') {
                 setTimeout(refreshFeed, 500);
             }
@@ -344,9 +348,9 @@ function updatePrefCounter(selected) {
     if (submitBtn) {
         submitBtn.disabled = selected.length === 0;
         if (selected.length === 0) {
-            submitBtn.textContent = 'Selecciona al menos 1 tema';
+            submitBtn.textContent = t('profile.selectAtLeastOne') || 'Selecciona al menos 1 tema';
         } else {
-            submitBtn.innerHTML = 'Continuar <i class="fas fa-arrow-right" style="margin-left:8px;"></i>';
+            submitBtn.innerHTML = (t('action.continue') || 'Continuar') + ' <i class="fas fa-arrow-right" style="margin-left:8px;"></i>';
         }
     }
 }
@@ -605,10 +609,10 @@ function updateStoryCounters(storyId, data) {
         if (likeBtn) {
             if (isLikedByMe) {
                 likeBtn.classList.add('liked');
-                likeBtn.innerHTML = '<i class="fas fa-heart"></i> Quitar';
+                likeBtn.innerHTML = '<i class="fas fa-heart"></i> ' + (t('action.remove') || 'Quitar');
             } else {
                 likeBtn.classList.remove('liked');
-                likeBtn.innerHTML = '<i class="fas fa-heart"></i> Like';
+                likeBtn.innerHTML = '<i class="fas fa-heart"></i> ' + (t('feed.like') || 'Like');
             }
         }
         
@@ -648,6 +652,16 @@ window.restoreNavToHome = restoreNavToHome;
 async function init() {
     console.log('📱 Iniciando Vygorax...');
 
+    // 🔥 INICIALIZAR i18n
+    initI18n();
+    
+    // 🔥 ESCUCHAR CAMBIOS DE IDIOMA PARA ACTUALIZAR UI
+    onLocaleChange(() => {
+        console.log('🌐 Idioma cambiado, actualizando UI...');
+        translateAll();
+        translateFeedUI();
+    });
+
     loadPersistedData();
 
     // 🔥 RESTAURAR FILTRO GUARDADO
@@ -666,6 +680,11 @@ async function init() {
             userRegion = user?.region || 'other';
             userCountry = user?.country || null;
             console.log(`🌐 Idioma: ${userLanguage}, Región: ${userRegion}, País: ${userCountry}`);
+            
+            // 🔥 ACTUALIZAR IDIOMA EN i18n
+            if (user?.language) {
+                setLocale(user.language);
+            }
             
             initSocket();
             updateHeaderUI(user);
@@ -707,6 +726,12 @@ async function init() {
             const filterToApply = savedFilter || 'ranked';
             applyFilter(filterToApply);
             
+            // 🔥 TRADUCIR UI DESPUÉS DE CARGAR
+            setTimeout(() => {
+                translateAll();
+                translateFeedUI();
+            }, 500);
+            
             loadAdsInBackground();
             
             if (!isPreloadDone) {
@@ -730,6 +755,52 @@ async function init() {
         },
         containerId: 'feedContainer',
         autoCheck: true
+    });
+}
+
+// ============================================================
+// 🔥 TRADUCIR UI DEL FEED
+// ============================================================
+
+function translateFeedUI() {
+    // Traducir textos del feed
+    const emptyStates = document.querySelectorAll('.empty-state h3, .empty-state p');
+    emptyStates.forEach(el => {
+        const key = el.getAttribute('data-i18n');
+        if (key) {
+            const text = t(key);
+            if (text && text !== key) {
+                el.textContent = text;
+            }
+        }
+    });
+    
+    // Traducir botones de filtros
+    const filterBtns = document.querySelectorAll('.filter-btn');
+    const filterKeys = ['feed.forYou', 'feed.recent', 'feed.ads'];
+    filterBtns.forEach((btn, index) => {
+        if (index < filterKeys.length) {
+            const text = t(filterKeys[index]);
+            if (text && text !== filterKeys[index]) {
+                const icon = btn.querySelector('i');
+                const existingText = btn.textContent.replace(/[^\w\s]/g, '').trim();
+                btn.innerHTML = '';
+                if (icon) btn.appendChild(icon);
+                btn.appendChild(document.createTextNode(' ' + text));
+            }
+        }
+    });
+    
+    // Traducir badges
+    const badgeTexts = document.querySelectorAll('.new-badge-text');
+    badgeTexts.forEach(el => {
+        const key = el.getAttribute('data-i18n');
+        if (key) {
+            const text = t(key);
+            if (text && text !== key) {
+                el.textContent = text;
+            }
+        }
     });
 }
 
@@ -901,7 +972,7 @@ function showNewStoriesBadge() {
     }
     const textEl = document.getElementById('newBadgeText');
     if (textEl) {
-        textEl.textContent = pendingNewStories === 1 ? 'Nueva historia' : 'Nuevas historias';
+        textEl.textContent = pendingNewStories === 1 ? (t('feed.newStory') || 'Nueva historia') : (t('feed.newStories') || 'Nuevas historias');
     }
 }
 
@@ -920,7 +991,7 @@ function hideNewStoriesBadge() {
 async function fetchFeedByCursor(filter, cursor = null) {
     const token = getToken();
     if (!token) {
-        showToast('Inicia sesión para ver historias', true);
+        showToast(t('error.unauthorized') || 'Inicia sesión para ver historias', true);
         setTimeout(() => {
             window.location.href = '/login.html';
         }, 500);
@@ -1057,7 +1128,7 @@ async function fetchFeedByCursor(filter, cursor = null) {
     } catch (error) {
         console.error('Error cargando feed por cursor:', error);
         if (displayedStories.length === 0 && allStories.length === 0) {
-            showToast('Error al cargar el feed', true);
+            showToast(t('error.general') || 'Error al cargar el feed', true);
         }
         isLoading = false;
     }
@@ -1075,8 +1146,8 @@ function renderAdsFeed(ads) {
         container.innerHTML = `
             <div class="empty-state">
                 <i class="fas fa-bullhorn" style="color:#fbbf24;"></i>
-                <h3>No hay publicidades disponibles</h3>
-                <p>Las empresas aún no han publicado anuncios</p>
+                <h3>${t('feed.noAds') || 'No hay publicidades disponibles'}</h3>
+                <p>${t('feed.noAdsDesc') || 'Las empresas aún no han publicado anuncios'}</p>
             </div>
         `;
         return;
@@ -1100,10 +1171,10 @@ function renderAdsFeed(ads) {
             const adId = btn.dataset.adId;
             const url = `${window.location.origin}/ad/${adId}`;
             if (navigator.share) {
-                navigator.share({ title: 'Vygorax - Publicidad', url });
+                navigator.share({ title: t('ads.share') || 'Vygorax - Publicidad', url });
             } else {
                 navigator.clipboard?.writeText(url).then(() => {
-                    showToast('📋 Enlace copiado');
+                    showToast(t('action.copied') || '📋 Enlace copiado');
                 });
             }
         });
@@ -1318,7 +1389,7 @@ function applyFilter(filter) {
     
     if (!token) {
         console.log('🔒 Sin sesión - Abriendo modal de login');
-        showToast('Inicia sesión para ver historias', true);
+        showToast(t('error.unauthorized') || 'Inicia sesión para ver historias', true);
         // 🔥 ABRIR MODAL DE LOGIN EN VEZ DE REDIRIGIR
         openLoginModal();
         return;
@@ -1418,13 +1489,14 @@ function showEmptyState(message) {
         <div class="empty-state">
             <i class="fas fa-camera"></i>
             <h3>${message}</h3>
-            <p>${currentFilter === 'ranked' ? 'Las historias nuevas (menos de 10 minutos) aparecen en RECIENTES' : ''}</p>
+            <p>${currentFilter === 'ranked' ? (t('feed.newStoriesInRecent') || 'Las historias nuevas (menos de 10 minutos) aparecen en RECIENTES') : ''}</p>
         </div>
     `;
 }
 
 // ============================================================
-// 🔥 RENDER FEED
+// 🔥 RENDER FEED - CON SOPORTE PARA ENCUESTAS (SURVEY)
+// 🔥 CORREGIDO: Race condition en registro de vistas con debounce
 // ============================================================
 
 function renderFeed(storiesData) {
@@ -1433,15 +1505,15 @@ function renderFeed(storiesData) {
 
     if (!storiesData || storiesData.length === 0) {
         const messages = {
-            ranked: 'No hay historias disponibles para ti',
-            recent: 'No hay historias recientes en tu región',
-            public: 'No hay historias públicas disponibles'
+            ranked: t('feed.noStoriesRanked') || 'No hay historias disponibles para ti',
+            recent: t('feed.noStoriesRecent') || 'No hay historias recientes en tu región',
+            public: t('feed.noStoriesPublic') || 'No hay historias públicas disponibles'
         };
         container.innerHTML = `
             <div class="empty-state">
                 <i class="fas fa-camera"></i>
-                <h3>${messages[currentFilter] || 'No hay historias'}</h3>
-                <p>${currentFilter === 'ranked' ? 'Vuelve más tarde para ver nuevas historias' : currentFilter === 'recent' ? 'Espera a que alguien publique en tu país/región' : currentFilter === 'public' ? 'Inicia sesión para ver más contenido' : ''}</p>
+                <h3>${messages[currentFilter] || t('feed.noStories') || 'No hay historias'}</h3>
+                <p>${currentFilter === 'ranked' ? (t('feed.rankedDesc') || 'Vuelve más tarde para ver nuevas historias') : currentFilter === 'recent' ? (t('feed.recentDesc') || 'Espera a que alguien publique en tu país/región') : currentFilter === 'public' ? (t('feed.publicDesc') || 'Inicia sesión para ver más contenido') : ''}</p>
             </div>
         `;
         return;
@@ -1481,14 +1553,14 @@ function renderFeed(storiesData) {
         if (isTranslated && isDifferentLanguage) {
             translationBadge = `
                 <span class="translation-badge">
-                    <i class="fas fa-language"></i> Traducido
+                    <i class="fas fa-language"></i> ${t('story.translated') || 'Traducido'}
                 </span>
             `;
         }
 
         let translateBtn = '';
         if (isDifferentLanguage) {
-            const btnText = isTranslated ? 'Mostrar original' : 'Traducir';
+            const btnText = isTranslated ? (t('story.showOriginal') || 'Mostrar original') : (t('story.translate') || 'Traducir');
             const btnIcon = isTranslated ? 'fa-undo' : 'fa-language';
             translateBtn = `
                 <button class="btn-translate" data-story-id="${story.id}">
@@ -1523,6 +1595,10 @@ function renderFeed(storiesData) {
         }
 
         let mediaHtml = '';
+        
+        // ============================================================
+        // 🔥 SOPORTE PARA ENCUESTAS (SURVEY)
+        // ============================================================
         if (story.mediaType === 'image' && story.mediaUrl) {
             mediaHtml = `<img src="${story.mediaUrl}" loading="lazy" decoding="async" onerror="this.src='https://placehold.co/800x800/1a1a2e/c084fc?text=Imagen'" />`;
         } else if (story.mediaType === 'video' && story.mediaUrl) {
@@ -1533,11 +1609,86 @@ function renderFeed(storiesData) {
                     ${escapeHtml(story.textContent)}
                 </div>
             `;
+        } else if (story.mediaType === 'survey' && story.surveyData) {
+            const survey = story.surveyData;
+            const surveyType = survey.surveyType || 'poll';
+            const question = survey.question || 'Encuesta';
+            
+            let surveyContent = '';
+            
+            if (surveyType === 'poll') {
+                const options = survey.options || [];
+                const totalVotes = options.reduce((sum, o) => sum + (o.votes || 0), 0);
+                
+                surveyContent = `
+                    <div class="survey-poll">
+                        <div class="survey-question">${escapeHtml(question)}</div>
+                        <div class="survey-options">
+                            ${options.map(opt => {
+                                const percentage = totalVotes > 0 ? Math.round((opt.votes || 0) / totalVotes * 100) : 0;
+                                const color = opt.color || '#c084fc';
+                                return `
+                                    <div class="survey-option">
+                                        <div class="survey-option-label">${escapeHtml(opt.label)}</div>
+                                        <div class="survey-option-bar">
+                                            <div class="survey-option-fill" style="width:${percentage}%;background:${color}"></div>
+                                        </div>
+                                        <div class="survey-option-stats">${percentage}% (${opt.votes || 0})</div>
+                                    </div>
+                                `;
+                            }).join('')}
+                        </div>
+                        <div class="survey-total">${totalVotes} ${t('survey.votes') || 'votos'}</div>
+                    </div>
+                `;
+            } else if (surveyType === 'stats') {
+                const statsData = survey.statsData || [];
+                const maxValue = Math.max(...statsData.map(d => d.value || 0), 1);
+                
+                surveyContent = `
+                    <div class="survey-stats">
+                        <div class="survey-question">${escapeHtml(question)}</div>
+                        <div class="survey-stats-bars">
+                            ${statsData.map(stat => {
+                                const percentage = Math.round((stat.value || 0) / maxValue * 100);
+                                const color = stat.color || '#c084fc';
+                                return `
+                                    <div class="survey-stat-item">
+                                        <div class="survey-stat-label">${escapeHtml(stat.label)}</div>
+                                        <div class="survey-stat-bar">
+                                            <div class="survey-stat-fill" style="width:${percentage}%;background:${color}"></div>
+                                        </div>
+                                        <div class="survey-stat-value">${stat.value || 0}</div>
+                                    </div>
+                                `;
+                            }).join('')}
+                        </div>
+                    </div>
+                `;
+            } else if (surveyType === 'calculation') {
+                const calc = survey.calculation || {};
+                surveyContent = `
+                    <div class="survey-calculation">
+                        <div class="survey-question">${escapeHtml(question)}</div>
+                        <div class="survey-calc-result">
+                            <span class="survey-calc-label">${escapeHtml(calc.operation || 'Resultado')}</span>
+                            <span class="survey-calc-value">${escapeHtml(calc.result || '0')}</span>
+                            ${calc.formula ? `<div class="survey-calc-formula">${escapeHtml(calc.formula)}</div>` : ''}
+                        </div>
+                    </div>
+                `;
+            }
+            
+            mediaHtml = `
+                <div class="survey-container" onclick="window.handleStoryView('${story.id}')">
+                    ${surveyContent}
+                </div>
+            `;
         } else {
             mediaHtml = `
                 <div class="text-placeholder" style="background:#1a1a2e;">
                     <i class="fas fa-book-open" style="color:#c084fc;font-size:40px;margin-bottom:12px;display:block;"></i>
-                    <span>Historia sin contenido</span>
+                    <span>${t('story.noContent') || 'Historia sin contenido'}</span>
                 </div>
             `;
         }
@@ -1546,7 +1697,7 @@ function renderFeed(storiesData) {
             story.caption.replace(/#([a-zA-Z0-9_]+)/g, '<span class="hashtag">#$1</span>') : '';
 
         html += `
-            <div class="story-card" data-index="${index}" data-story-id="${story.id}">
+            <div class="story-card" data-index="${index}" data-story-id="${story.id}" data-viewed="false">
                 <div class="card-header">
                     <img class="avatar" src="${user.avatar}" alt="${user.fullName}" onclick="window.goToProfileUser('${user.id}')" loading="lazy" decoding="async" />
                     <div class="info">
@@ -1578,7 +1729,7 @@ function renderFeed(storiesData) {
                             </div>
                             <div class="btns">
                                 <button class="btn-like ${isLiked ? 'liked' : ''}" data-story-id="${story.id}">
-                                    <i class="fas fa-heart"></i> ${isLiked ? 'Quitar' : 'Like'}
+                                    <i class="fas fa-heart"></i> ${isLiked ? (t('action.remove') || 'Quitar') : (t('feed.like') || 'Like')}
                                 </button>
                                 <button class="btn-comment" data-story-id="${story.id}">
                                     <i class="fas fa-comment"></i>
@@ -1600,7 +1751,7 @@ function renderFeed(storiesData) {
     html += `
         <div id="feedEnd" style="height: 20px; display: ${hasMoreStories ? 'block' : 'none'};">
             <div style="text-align:center;padding:10px;color:rgba(255,255,255,0.1);font-size:12px;">
-                <i class="fas fa-spinner fa-pulse"></i> Cargando más...
+                <i class="fas fa-spinner fa-pulse"></i> ${t('feed.loading') || 'Cargando más...'}
             </div>
         </div>
     `;
@@ -1609,16 +1760,52 @@ function renderFeed(storiesData) {
 
     setupInfiniteScroll();
 
+    // ============================================================
+    // 🔥 CORREGIDO: Observer con debounce para evitar race condition
+    // ============================================================
+    
+    let viewTimeout = null;
+    let pendingViews = new Set();
+
     const observer = new IntersectionObserver((entries) => {
+        // 🔥 Limpiar timeout anterior
+        if (viewTimeout) {
+            clearTimeout(viewTimeout);
+            viewTimeout = null;
+        }
+
+        // 🔥 Recopilar todas las historias visibles
         entries.forEach(entry => {
             if (entry.isIntersecting) {
                 const card = entry.target;
                 const storyId = card.dataset.storyId;
-                if (storyId && !isStoryViewed(storyId)) {
-                    registerView(storyId);
+                const isViewed = card.dataset.viewed === 'true';
+                
+                if (storyId && !isViewed && !isStoryViewed(storyId)) {
+                    pendingViews.add(storyId);
+                    // Marcar como vista en el DOM para evitar duplicados
+                    card.dataset.viewed = 'true';
                 }
             }
         });
+
+        // 🔥 Si hay vistas pendientes, esperar un momento antes de registrarlas
+        if (pendingViews.size > 0) {
+            viewTimeout = setTimeout(() => {
+                // 🔥 Registrar todas las vistas pendientes en una sola tanda
+                const viewsToRegister = Array.from(pendingViews);
+                pendingViews.clear();
+                
+                // 🔥 Registrar cada vista con un pequeño delay entre ellas
+                viewsToRegister.forEach((storyId, index) => {
+                    setTimeout(() => {
+                        registerView(storyId);
+                    }, index * 100); // 100ms entre cada vista
+                });
+                
+                viewTimeout = null;
+            }, 300); // Esperar 300ms después de que el usuario deje de hacer scroll
+        }
     }, {
         threshold: 0.3,
         rootMargin: '0px 0px -50px 0px'
@@ -1629,6 +1816,10 @@ function renderFeed(storiesData) {
     });
 
     window._viewObserver = observer;
+
+    // ============================================================
+    // 🔥 EVENTOS
+    // ============================================================
 
     container.querySelectorAll('.btn-like').forEach(btn => {
         btn.addEventListener('click', (e) => {
@@ -1662,10 +1853,10 @@ function renderFeed(storiesData) {
             const storyId = btn.dataset.storyId;
             const url = `${window.location.origin}/story/${storyId}`;
             if (navigator.share) {
-                navigator.share({ title: 'Vygorax - Historia', url });
+                navigator.share({ title: t('story.share') || 'Vygorax - Historia', url });
             } else {
                 navigator.clipboard?.writeText(url).then(() => {
-                    showToast('📋 Enlace copiado');
+                    showToast(t('action.copied') || '📋 Enlace copiado');
                 });
             }
         });
@@ -1775,19 +1966,19 @@ async function registerView(storyId) {
 window.translateStory = async function(storyId) {
     const token = getToken();
     if (!token) {
-        showToast('Inicia sesión para traducir', true);
+        showToast(t('error.unauthorized') || 'Inicia sesión para traducir', true);
         openLoginModal();
         return;
     }
 
     if (!translationAvailable) {
-        showToast('🌐 Servicio de traducción no disponible', true);
+        showToast(t('story.translateUnavailable') || '🌐 Servicio de traducción no disponible', true);
         return;
     }
 
     const idx = allStories.findIndex(s => s.id === storyId);
     if (idx === -1) {
-        showToast('Historia no encontrada', true);
+        showToast(t('story.notFound') || 'Historia no encontrada', true);
         return;
     }
 
@@ -1806,7 +1997,7 @@ window.translateStory = async function(storyId) {
         };
         allStories[idx] = restoredStory;
         updateStoryCard(storyId, restoredStory);
-        showToast('📝 Mostrando original');
+        showToast(t('story.showingOriginal') || '📝 Mostrando original');
         return;
     }
 
@@ -1825,7 +2016,7 @@ window.translateStory = async function(storyId) {
         };
         allStories[idx] = updatedStory;
         updateStoryCard(storyId, updatedStory);
-        showToast(`✅ Traducción cargada (caché)`);
+        showToast(`✅ ${t('story.translatedFromCache') || 'Traducción cargada (caché)'}`);
         return;
     }
 
@@ -1841,7 +2032,7 @@ window.translateStory = async function(storyId) {
     try {
         let textToTranslate = story.caption || story.textContent || story.subtitles || '';
         if (!textToTranslate) {
-            showToast('No hay texto para traducir', true);
+            showToast(t('story.noTextToTranslate') || 'No hay texto para traducir', true);
             return;
         }
 
@@ -1883,19 +2074,19 @@ window.translateStory = async function(storyId) {
             };
             allStories[idx] = updatedStory;
             updateStoryCard(storyId, updatedStory);
-            showToast(`✅ Traducido al ${data.languageInfo?.name || userLanguage}`);
+            showToast(`✅ ${t('story.translatedTo') || 'Traducido al'} ${data.languageInfo?.name || userLanguage}`);
         } else {
-            showToast('📝 No se pudo traducir', true);
+            showToast(t('story.translateFailed') || '📝 No se pudo traducir', true);
         }
     } catch (error) {
         console.error('❌ Error traduciendo:', error);
-        showToast('Error al traducir', true);
+        showToast(t('error.general') || 'Error al traducir', true);
     } finally {
         if (card) {
             const translateBtn = card.querySelector('.btn-translate');
             if (translateBtn) {
                 const isNowTranslated = allStories[idx]?.translated || false;
-                const btnText = isNowTranslated ? 'Mostrar original' : 'Traducir';
+                const btnText = isNowTranslated ? (t('story.showOriginal') || 'Mostrar original') : (t('story.translate') || 'Traducir');
                 const btnIcon = isNowTranslated ? 'fa-undo' : 'fa-language';
                 translateBtn.innerHTML = `<i class="fas ${btnIcon}"></i> ${btnText}`;
                 translateBtn.disabled = false;
@@ -1927,7 +2118,7 @@ function updateStoryCard(storyId, updatedStory) {
             const badge = document.createElement('span');
             badge.className = 'translation-badge';
             badge.style.cssText = 'font-size:9px; color:rgba(192,132,252,0.5); margin-left:4px;';
-            badge.innerHTML = '<i class="fas fa-language"></i> Traducido';
+            badge.innerHTML = `<i class="fas fa-language"></i> ${t('story.translated') || 'Traducido'}`;
             nameEl.appendChild(badge);
         }
     }
@@ -1935,7 +2126,7 @@ function updateStoryCard(storyId, updatedStory) {
     const translateBtn = card.querySelector('.btn-translate');
     if (translateBtn) {
         const isTranslated = updatedStory.translated || false;
-        const btnText = isTranslated ? 'Mostrar original' : 'Traducir';
+        const btnText = isTranslated ? (t('story.showOriginal') || 'Mostrar original') : (t('story.translate') || 'Traducir');
         const btnIcon = isTranslated ? 'fa-undo' : 'fa-language';
         translateBtn.innerHTML = `<i class="fas ${btnIcon}"></i> ${btnText}`;
         translateBtn.disabled = false;
@@ -1968,7 +2159,7 @@ async function handleStoryView(storyId) {
 async function handleLike(storyId, btn) {
     const token = getToken();
     if (!token) {
-        showToast('Inicia sesión para dar like', true);
+        showToast(t('error.unauthorized') || 'Inicia sesión para dar like', true);
         openLoginModal();
         return;
     }
@@ -2008,13 +2199,13 @@ async function handleLike(storyId, btn) {
                 story.likes = data.likes;
             }
 
-            showToast(data.liked ? '❤️ Like guardado' : '💔 Like eliminado');
+            showToast(data.liked ? '❤️ ' + (t('story.liked') || 'Like guardado') : '💔 ' + (t('story.unliked') || 'Like eliminado'));
         } else {
-            showToast(data.error || 'Error al procesar like', true);
+            showToast(data.error || t('error.general') || 'Error al procesar like', true);
         }
     } catch (error) {
         console.error('Error al dar like:', error);
-        showToast('Error al procesar like', true);
+        showToast(t('error.general') || 'Error al procesar like', true);
     }
 }
 
@@ -2025,13 +2216,13 @@ async function handleLike(storyId, btn) {
 async function refreshFeed() {
     const token = getToken();
     if (!token) {
-        showToast('Inicia sesión para actualizar', true);
+        showToast(t('error.unauthorized') || 'Inicia sesión para actualizar', true);
         openLoginModal();
         return;
     }
     
     console.log(`🔄 Refrescando feed: ${currentFilter}`);
-    showToast('🔄 Actualizando feed...');
+    showToast('🔄 ' + (t('feed.updating') || 'Actualizando feed...'));
     
     hideNewStoriesBadge();
     
@@ -2096,7 +2287,7 @@ window.handleAdClick = async function(adId) {
 window.handleAdLike = async function(adId, btn) {
     const token = getToken();
     if (!token) {
-        showToast('Inicia sesión para dar like', true);
+        showToast(t('error.unauthorized') || 'Inicia sesión para dar like', true);
         openLoginModal();
         return;
     }
@@ -2116,12 +2307,12 @@ window.handleAdLike = async function(adId, btn) {
         if (res.ok) {
             const data = await res.json();
             btn.classList.toggle('liked');
-            btn.innerHTML = data.liked ? '<i class="fas fa-heart"></i> Quitar' : '<i class="fas fa-heart"></i> Like';
-            showToast(data.liked ? '❤️ Like guardado' : '💔 Like eliminado');
+            btn.innerHTML = data.liked ? '<i class="fas fa-heart"></i> ' + (t('action.remove') || 'Quitar') : '<i class="fas fa-heart"></i> ' + (t('feed.like') || 'Like');
+            showToast(data.liked ? '❤️ ' + (t('story.liked') || 'Like guardado') : '💔 ' + (t('story.unliked') || 'Like eliminado'));
         }
     } catch (error) {
         console.error('Error dando like a publicidad:', error);
-        showToast('Error al procesar like', true);
+        showToast(t('error.general') || 'Error al procesar like', true);
     }
 };
 
@@ -2153,7 +2344,7 @@ window.goToProfileUser = (userId) => {
             openModal(userId);
         }).catch(err => {
             console.error('❌ Error abriendo perfil:', err);
-            showToast('Error al abrir perfil', true);
+            showToast(t('error.general') || 'Error al abrir perfil', true);
         });
     }
 };
@@ -2166,7 +2357,7 @@ function setupEvents() {
     document.getElementById('settingsBtn')?.addEventListener('click', () => {
         const token = getToken();
         if (!token) {
-            showToast('Inicia sesión para configurar', true);
+            showToast(t('error.unauthorized') || 'Inicia sesión para configurar', true);
             openLoginModal();
             return;
         }
@@ -2175,10 +2366,10 @@ function setupEvents() {
             if (typeof window.openEditProfileModal === 'function') {
                 window.openEditProfileModal(user);
             } else {
-                showToast('Error al abrir configuración', true);
+                showToast(t('error.general') || 'Error al abrir configuración', true);
             }
         } else {
-            showToast('Inicia sesión para configurar', true);
+            showToast(t('error.unauthorized') || 'Inicia sesión para configurar', true);
             openLoginModal();
         }
     });
@@ -2196,7 +2387,7 @@ function setupEvents() {
             
             showProfileNative(user.id);
         } else {
-            showToast('Inicia sesión', true);
+            showToast(t('error.unauthorized') || 'Inicia sesión', true);
             openLoginModal();
         }
     });
@@ -2217,7 +2408,7 @@ function setupEvents() {
             
             showProfileNative(user.id);
         } else {
-            showToast('Inicia sesión', true);
+            showToast(t('error.unauthorized') || 'Inicia sesión', true);
             openLoginModal();
         }
     });
@@ -2229,7 +2420,7 @@ function setupEvents() {
     document.getElementById('createBtn')?.addEventListener('click', () => {
         const token = getToken();
         if (!token) {
-            showToast('Inicia sesión para crear contenido', true);
+            showToast(t('error.unauthorized') || 'Inicia sesión para crear contenido', true);
             openLoginModal();
             return;
         }
@@ -2248,7 +2439,7 @@ function setupEvents() {
     document.getElementById('filterRanked')?.addEventListener('click', () => {
         const token = getToken();
         if (!token) {
-            showToast('Inicia sesión para ver historias', true);
+            showToast(t('error.unauthorized') || 'Inicia sesión para ver historias', true);
             openLoginModal();
             return;
         }
@@ -2260,7 +2451,7 @@ function setupEvents() {
     document.getElementById('filterRecent')?.addEventListener('click', () => {
         const token = getToken();
         if (!token) {
-            showToast('Inicia sesión para ver historias', true);
+            showToast(t('error.unauthorized') || 'Inicia sesión para ver historias', true);
             openLoginModal();
             return;
         }
@@ -2274,7 +2465,7 @@ function setupEvents() {
     document.getElementById('filterTrending')?.addEventListener('click', () => {
         const token = getToken();
         if (!token) {
-            showToast('Inicia sesión para ver publicidades', true);
+            showToast(t('error.unauthorized') || 'Inicia sesión para ver publicidades', true);
             openLoginModal();
             return;
         }
@@ -2287,7 +2478,7 @@ function setupEvents() {
     document.getElementById('navFeed')?.addEventListener('click', () => {
         const token = getToken();
         if (!token) {
-            showToast('Inicia sesión para ver el feed', true);
+            showToast(t('error.unauthorized') || 'Inicia sesión para ver el feed', true);
             openLoginModal();
             return;
         }
@@ -2320,7 +2511,7 @@ function setupEvents() {
     document.getElementById('navExplore')?.addEventListener('click', () => {
         const token = getToken();
         if (!token) {
-            showToast('Inicia sesión para explorar', true);
+            showToast(t('error.unauthorized') || 'Inicia sesión para explorar', true);
             openLoginModal();
             return;
         }
@@ -2348,7 +2539,7 @@ function setupEvents() {
     document.getElementById('navNotifications')?.addEventListener('click', () => {
         const token = getToken();
         if (!token) {
-            showToast('Inicia sesión para ver notificaciones', true);
+            showToast(t('error.unauthorized') || 'Inicia sesión para ver notificaciones', true);
             openLoginModal();
             return;
         }

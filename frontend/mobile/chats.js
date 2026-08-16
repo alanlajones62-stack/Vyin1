@@ -1,10 +1,14 @@
 // ============================================================
 // CHAT MOBILE - RENDERIZADO OPTIMIZADO SIN PARPADEOS
 // CON SOPORTE PARA ENLACES (TikTok, YouTube, Vyin, etc.)
+// 🔥 CON SOPORTE i18n
+// 🔥 CON SOPORTE PARA SUBIR IMÁGENES Y ARCHIVOS
+// 🔥 CON LONG PRESS PARA ARCHIVAR CONVERSACIONES
 // ============================================================
 
 import { getToken, getCurrentUser, showToast as authShowToast } from './auth.js';
 import { openProfileModal } from './profile-modal.js';
+import { t, onLocaleChange, translateAll, initI18n } from './i18n.js';
 
 const API_URL = window.location.origin;
 
@@ -20,6 +24,7 @@ let nextOffset = 0;
 const MESSAGES_PER_PAGE = 30;
 let currentTab = 'active';
 let isRendering = false;
+let localeUnsubscribe = null;
 
 let conversationsListEl = document.getElementById('conversationsList');
 let messagesContainerEl = document.getElementById('messagesContainer');
@@ -31,7 +36,152 @@ let scrollTimeout = null;
 let isInitialLoad = true;
 
 // ============================================================
-// 🔗 DETECCIÓN Y APERTURA DE ENLACES - CORREGIDO
+// 🔥 LONG PRESS - VARIABLES
+// ============================================================
+
+let longPressTimer = null;
+let longPressTarget = null;
+let isLongPressTriggered = false;
+let longPressMenu = null;
+let longPressStartX = 0;
+let longPressStartY = 0;
+const LONG_PRESS_DELAY = 500;
+
+// ============================================================
+// 🔥 i18n - INICIALIZAR Y ESCUCHAR CAMBIOS
+// ============================================================
+
+function initI18nForChat() {
+    initI18n();
+    
+    if (localeUnsubscribe) {
+        localeUnsubscribe();
+    }
+    
+    localeUnsubscribe = onLocaleChange(() => {
+        console.log('🌐 [CHAT] Idioma cambiado, actualizando UI...');
+        translateChatUI();
+        renderConversations();
+        renderMessages();
+    });
+}
+
+function translateChatUI() {
+    const titleEl = document.querySelector('.chat-header .title span');
+    if (titleEl) {
+        const text = t('chat.title');
+        if (text && text !== 'chat.title') {
+            titleEl.textContent = text;
+        }
+    }
+
+    const tabs = document.querySelectorAll('.chat-tab');
+    const tabKeys = ['chat.active', 'chat.pending', 'chat.archived'];
+    tabs.forEach((tab, index) => {
+        if (index < tabKeys.length) {
+            const span = tab.querySelector('span:not(.tab-badge)');
+            if (span) {
+                const text = t(tabKeys[index]);
+                if (text && text !== tabKeys[index]) {
+                    span.textContent = text;
+                }
+            }
+        }
+    });
+
+    const searchInput = document.getElementById('searchConversations');
+    if (searchInput) {
+        const text = t('chat.searchPlaceholder');
+        if (text && text !== 'chat.searchPlaceholder') {
+            searchInput.placeholder = text;
+        }
+    }
+
+    const statusText = document.getElementById('chatStatusText');
+    if (statusText) {
+        const status = statusText.textContent;
+        if (status.includes('Desconectado') || status.includes('Offline')) {
+            statusText.textContent = t('chat.offline');
+        } else if (status.includes('En línea') || status.includes('Online')) {
+            statusText.textContent = t('chat.online');
+        }
+    }
+
+    const typingIndicator = document.getElementById('typingIndicator');
+    if (typingIndicator) {
+        const span = typingIndicator.querySelector('span');
+        if (span) {
+            const text = t('chat.typing');
+            if (text && text !== 'chat.typing') {
+                span.textContent = text;
+            }
+        }
+    }
+
+    const messageInputEl = document.getElementById('messageInput');
+    if (messageInputEl) {
+        const text = t('chat.writeMessage');
+        if (text && text !== 'chat.writeMessage') {
+            messageInputEl.placeholder = text;
+        }
+    }
+
+    const pendingBadges = document.querySelectorAll('.pending-badge');
+    pendingBadges.forEach(badge => {
+        const text = t('chat.pendingRequest');
+        if (text && text !== 'chat.pendingRequest') {
+            badge.textContent = text;
+        }
+    });
+
+    const isOwnLabels = document.querySelectorAll('.is-own');
+    isOwnLabels.forEach(label => {
+        const text = t('chat.you');
+        if (text && text !== 'chat.you') {
+            label.textContent = text + ':';
+        }
+    });
+
+    const archivedLabels = document.querySelectorAll('.conversation-last-message .archived-label');
+    archivedLabels.forEach(label => {
+        const text = t('chat.archived');
+        if (text && text !== 'chat.archived') {
+            label.textContent = '· ' + text;
+        }
+    });
+
+    const acceptBtns = document.querySelectorAll('.btn-accept');
+    acceptBtns.forEach(btn => {
+        btn.title = t('chat.accept') || 'Aceptar';
+    });
+    const rejectBtns = document.querySelectorAll('.btn-reject');
+    rejectBtns.forEach(btn => {
+        btn.title = t('chat.reject') || 'Rechazar';
+    });
+
+    const attachBtns = document.querySelectorAll('.attach-menu button span');
+    const attachKeys = ['chat.attachImage', 'chat.attachFile', 'chat.takePhoto'];
+    attachBtns.forEach((span, index) => {
+        if (index < attachKeys.length) {
+            const text = t(attachKeys[index]);
+            if (text && text !== attachKeys[index]) {
+                span.textContent = text;
+            }
+        }
+    });
+
+    // Traducir botón de archivar
+    const archiveBtn = document.getElementById('archiveChatBtn');
+    if (archiveBtn) {
+        const isArchived = currentConversation?.isArchived || false;
+        archiveBtn.title = isArchived ? (t('chat.unarchive') || 'Desarchivar') : (t('chat.archive') || 'Archivar');
+    }
+
+    console.log('✅ [CHAT] UI traducida');
+}
+
+// ============================================================
+// 🔗 DETECCIÓN Y APERTURA DE ENLACES
 // ============================================================
 
 function detectAndRenderLinks(text) {
@@ -110,7 +260,7 @@ function escapeHtml(text) {
 }
 
 // ============================================================
-// 🔥 ABRIR ENLACE DESDE EL CHAT - CON SOPORTE PARA PERFIL E HISTORIA
+// 🔥 ABRIR ENLACE DESDE EL CHAT
 // ============================================================
 
 function openLinkFromChat(event) {
@@ -171,7 +321,7 @@ function openLinkFromChat(event) {
 }
 
 // ============================================================
-// 🔥 ABRIR PERFIL DEL USUARIO DE LA CONVERSACIÓN ACTUAL - CORREGIDO
+// 🔥 ABRIR PERFIL DEL USUARIO DE LA CONVERSACIÓN ACTUAL
 // ============================================================
 
 window.openProfileFromChat = function() {
@@ -184,12 +334,10 @@ window.openProfileFromChat = function() {
     const fullName = currentConversation.fullName || 'Usuario';
     console.log(`👤 Abriendo perfil de ${fullName} (${userId}) desde chat`);
     
-    // 🔥 GUARDAR EL ESTADO ACTUAL DEL CHAT
     const currentConversationBackup = { ...currentConversation };
     const messagesBackup = [...messages];
     const scrollPosition = messagesContainerEl?.scrollTop || 0;
     
-    // 🔥 Guardar en variable global para restaurar después
     window._chatContext = {
         conversation: currentConversationBackup,
         messages: messagesBackup,
@@ -197,7 +345,6 @@ window.openProfileFromChat = function() {
         isChatOpen: true
     };
     
-    // Abrir el perfil (NO cerramos el chat)
     openProfileModal(userId);
 };
 
@@ -209,16 +356,13 @@ window.restoreChatFromProfile = function() {
     if (window._chatContext && window._chatContext.isChatOpen) {
         console.log('🔄 Restaurando chat desde perfil');
         
-        // Restaurar la conversación
         currentConversation = window._chatContext.conversation;
         messages = window._chatContext.messages;
         
-        // Asegurar que el panel de mensajes esté visible
         if (messagesPanelEl) {
             messagesPanelEl.classList.add('active');
         }
         
-        // Renderizar mensajes y restaurar scroll
         renderMessages();
         if (window._chatContext.scrollPosition) {
             setTimeout(() => {
@@ -226,13 +370,9 @@ window.restoreChatFromProfile = function() {
             }, 50);
         }
         
-        // Actualizar header del chat
         updateChatHeaderStatus(currentConversation.id);
         
-        // Limpiar el contexto
         window._chatContext = null;
-        
-        // Re-renderizar conversaciones para actualizar el estado activo
         renderConversations();
     }
 };
@@ -240,6 +380,7 @@ window.restoreChatFromProfile = function() {
 // ============================================================
 // CONFIGURAR EVENT DELEGATION PARA ENLACES
 // ============================================================
+
 function setupLinkDelegation() {
     if (!messagesContainerEl) return;
     messagesContainerEl.removeEventListener('click', openLinkFromChat);
@@ -268,7 +409,8 @@ function saveChatState(userId) {
             messages: messages.slice(-50),
             scrollPosition: messagesContainerEl?.scrollTop || 0,
             timestamp: Date.now(),
-            conversationStatus: currentConversation?.status || 'active'
+            conversationStatus: currentConversation?.status || 'active',
+            isArchived: currentConversation?.isArchived || false
         };
         localStorage.setItem(`chat_state_${userId}`, JSON.stringify(state));
     } catch (error) {
@@ -300,6 +442,7 @@ function clearChatState(userId) {
 // ============================================================
 // SHOW TOAST
 // ============================================================
+
 function showToast(message, isError = false) {
     if (typeof authShowToast === 'function') {
         authShowToast(message, isError);
@@ -321,6 +464,7 @@ function showToast(message, isError = false) {
 // ============================================================
 // UTILIDADES
 // ============================================================
+
 function formatTime(timestamp) {
     const date = new Date(timestamp);
     const now = new Date();
@@ -378,6 +522,7 @@ function showLoading(show) {
 // ============================================================
 // FUNCIONES PRINCIPALES
 // ============================================================
+
 async function fetchUserInfo(userId) {
     const token = getToken();
     if (!token) return null;
@@ -415,16 +560,18 @@ function updateChatHeaderStatus(userId) {
     const status = userStatuses.get(userId);
     if (status && status.status === 'online') {
         dot.className = 'status-dot-small status-online';
-        text.textContent = 'En línea';
+        text.textContent = t('chat.online') || 'En línea';
     } else {
         dot.className = 'status-dot-small status-offline';
-        text.textContent = status?.lastSeen ? `Último visto ${formatLastSeen(status.lastSeen)}` : 'Desconectado';
+        const lastSeenText = status?.lastSeen ? `${t('chat.lastSeen') || 'Último visto'} ${formatLastSeen(status.lastSeen)}` : (t('chat.offline') || 'Desconectado');
+        text.textContent = lastSeenText;
     }
 }
 
 // ============================================================
 // CAMBIAR TAB
 // ============================================================
+
 window.switchChatTab = function(tab) {
     currentTab = tab;
     document.querySelectorAll('.chat-tab').forEach(el => el.classList.remove('active'));
@@ -435,6 +582,7 @@ window.switchChatTab = function(tab) {
 // ============================================================
 // CARGAR CONVERSACIONES
 // ============================================================
+
 async function loadConversations() {
     const token = getToken();
     if (!token) {
@@ -481,6 +629,7 @@ async function loadConversations() {
             }
 
             renderConversations();
+            setupLongPressOnConversations();
         } else if (res.status === 401) {
             localStorage.removeItem('token');
             window.location.href = '/login.html';
@@ -492,8 +641,9 @@ async function loadConversations() {
 }
 
 // ============================================================
-// RENDERIZAR CONVERSACIONES
+// RENDERIZAR CONVERSACIONES - CON LONG PRESS Y ARCHIVADO
 // ============================================================
+
 function renderConversations() {
     if (!conversationsListEl) return;
     
@@ -513,14 +663,14 @@ function renderConversations() {
     
     if (allConversations.length === 0) {
         const emptyMessages = {
-            active: 'No hay conversaciones activas',
-            pending: 'No hay solicitudes de chat pendientes',
-            archived: 'No hay conversaciones archivadas'
+            active: t('chat.noActiveConversations') || 'No hay conversaciones activas',
+            pending: t('chat.noPendingRequests') || 'No hay solicitudes de chat pendientes',
+            archived: t('chat.noArchivedConversations') || 'No hay conversaciones archivadas'
         };
         conversationsListEl.innerHTML = `
             <div style="text-align:center;padding:60px 20px;color:rgba(255,255,255,0.08);">
                 <i class="fas fa-comments" style="font-size:36px;display:block;margin-bottom:12px;opacity:0.3;"></i>
-                <span style="font-size:14px;">${emptyMessages[currentTab] || 'No hay conversaciones'}</span>
+                <span style="font-size:14px;">${emptyMessages[currentTab] || t('chat.noConversations') || 'No hay conversaciones'}</span>
             </div>
         `;
         return;
@@ -530,18 +680,19 @@ function renderConversations() {
         const userStatus = userStatuses.get(conv.user.id) || { status: 'offline', lastSeen: null };
         const statusClass = userStatus.status === 'online' ? 'status-online' : 'status-offline';
         const isActive = currentConversation?.id === conv.user.id;
+        const isArchived = conv.isArchived || conv.status === 'archived' || false;
         
         let pendingBadge = '';
         let pendingActions = '';
         
         if (conv.isPending && currentTab === 'pending') {
-            pendingBadge = `<span class="pending-badge">Solicitud</span>`;
+            pendingBadge = `<span class="pending-badge">${t('chat.pendingRequest') || 'Solicitud'}</span>`;
             pendingActions = `
                 <div class="pending-actions">
-                    <button class="btn-accept" onclick="event.stopPropagation(); window.acceptChatRequest('${conv.user.id}')">
+                    <button class="btn-accept" title="${t('chat.accept') || 'Aceptar'}" onclick="event.stopPropagation(); window.acceptChatRequest('${conv.user.id}')">
                         <i class="fas fa-check"></i>
                     </button>
-                    <button class="btn-reject" onclick="event.stopPropagation(); window.rejectChatRequest('${conv.user.id}')">
+                    <button class="btn-reject" title="${t('chat.reject') || 'Rechazar'}" onclick="event.stopPropagation(); window.rejectChatRequest('${conv.user.id}')">
                         <i class="fas fa-times"></i>
                     </button>
                 </div>
@@ -552,8 +703,14 @@ function renderConversations() {
             ? conv.user.fullName.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)
             : 'U';
         
+        const youText = t('chat.you') || 'Tú';
+        const archivedText = t('chat.archived') || 'Archivado';
+        
         return `
-        <div class="conversation-item ${isActive ? 'active' : ''}" onclick="window.selectConversation('${conv.user.id}')">
+        <div class="conversation-item ${isActive ? 'active' : ''} ${isArchived ? 'archived' : ''}" 
+             data-user-id="${conv.user.id}" 
+             data-archived="${isArchived ? 'true' : 'false'}"
+             onclick="window.selectConversation('${conv.user.id}')">
             <div class="conversation-avatar-wrapper">
                 <div class="conversation-avatar" style="display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,#7c3aed,#db2777);color:#fff;font-weight:700;font-size:18px;">
                     ${conv.user.avatar ? `<img src="${conv.user.avatar}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;" onerror="this.style.display='none';this.parentElement.textContent='${initials}'" />` : initials}
@@ -566,25 +723,30 @@ function renderConversations() {
                         <span>${escapeHtml(conv.user.fullName || conv.user.username)}</span>
                         ${conv.user.isVerified ? '<i class="fas fa-check-circle verified-icon"></i>' : ''}
                         ${pendingBadge}
+                        ${isArchived ? `<span class="archived-badge"><i class="fas fa-archive"></i> ${archivedText}</span>` : ''}
                     </div>
                     <span class="conversation-time">${formatTimeAgo(conv.lastMessage.timestamp)}</span>
                 </div>
                 <div class="conversation-last-message">
-                    ${conv.lastMessage.fromMe ? '<span class="is-own">Tú:</span>' : ''}
+                    ${conv.lastMessage.fromMe ? `<span class="is-own">${youText}:</span>` : ''}
                     ${escapeHtml(conv.lastMessage.content?.substring(0, 50) || '')}${(conv.lastMessage.content?.length || 0) > 50 ? '...' : ''}
-                    ${conv.isPending ? ' <span style="color:#c084fc;font-size:10px;">· Solicitud de chat</span>' : ''}
-                    ${conv.status === 'archived' ? ' <span style="color:rgba(255,255,255,0.15);font-size:10px;">· Archivado</span>' : ''}
+                    ${conv.isPending ? ` <span style="color:#c084fc;font-size:10px;">· ${t('chat.pendingRequest') || 'Solicitud de chat'}</span>` : ''}
                 </div>
             </div>
             ${conv.unreadCount > 0 ? `<div class="unread-badge">${conv.unreadCount > 9 ? '9+' : conv.unreadCount}</div>` : ''}
             ${pendingActions}
         </div>
     `}).join('');
+    
+    // Configurar long press en los nuevos elementos
+    setupLongPressOnConversations();
+    setupArchiveButton();
 }
 
 // ============================================================
 // ACEPTAR/RECHAZAR SOLICITUD
 // ============================================================
+
 window.acceptChatRequest = async function(userId) {
     const token = getToken();
     if (!token) return;
@@ -635,6 +797,7 @@ window.rejectChatRequest = async function(userId) {
 // ============================================================
 // CARGAR MENSAJES
 // ============================================================
+
 async function loadMessages(userId, loadMore = false, offset = 0) {
     const token = getToken();
     if (!token) return;
@@ -644,6 +807,9 @@ async function loadMessages(userId, loadMore = false, offset = 0) {
         if (cached && cached.messages && cached.messages.length > 0) {
             console.log(`📦 Cargando ${cached.messages.length} mensajes desde caché local`);
             messages = cached.messages;
+            if (currentConversation) {
+                currentConversation.isArchived = cached.isArchived || false;
+            }
             renderMessages();
             if (cached.scrollPosition) {
                 setTimeout(() => {
@@ -675,6 +841,7 @@ async function loadMessages(userId, loadMore = false, offset = 0) {
             if (currentConversation) {
                 currentConversation.status = data.conversationStatus || 'active';
                 currentConversation.mutualFollow = data.mutualFollow || false;
+                currentConversation.isArchived = data.conversationStatus === 'archived' || false;
             }
             
             if (loadMore) {
@@ -733,8 +900,9 @@ async function refreshMessagesInBackground(userId) {
 }
 
 // ============================================================
-// 📝 RENDERIZAR MENSAJES
+// 🔥 RENDERIZAR MENSAJES - CON SOPORTE PARA MULTIMEDIA
 // ============================================================
+
 function renderMessages() {
     if (isRendering) return;
     isRendering = true;
@@ -750,15 +918,15 @@ function renderMessages() {
     const wasNearBottom = scrollHeight - (scrollTop + clientHeight) < 100;
 
     if (messages.length === 0) {
-        let emptyMessage = 'No hay mensajes';
-        let emptySubMessage = 'Envía el primer mensaje';
+        let emptyMessage = t('chat.noMessages') || 'No hay mensajes';
+        let emptySubMessage = t('chat.firstMessage') || 'Envía el primer mensaje';
         
         if (currentConversation?.status === 'pending') {
-            emptyMessage = '💬 Solicitud de chat pendiente';
-            emptySubMessage = 'Espera a que el usuario acepte tu solicitud';
-        } else if (currentConversation?.status === 'archived') {
-            emptyMessage = '📦 Conversación archivada';
-            emptySubMessage = 'Sigue al usuario para reactivar el chat';
+            emptyMessage = '💬 ' + (t('chat.pendingRequest') || 'Solicitud de chat pendiente');
+            emptySubMessage = t('chat.waitAccept') || 'Espera a que el usuario acepte tu solicitud';
+        } else if (currentConversation?.isArchived || currentConversation?.status === 'archived') {
+            emptyMessage = '📦 ' + (t('chat.archived') || 'Conversación archivada');
+            emptySubMessage = t('chat.unarchiveToChat') || 'Desarchiva la conversación para chatear';
         }
         
         messagesContainerEl.innerHTML = `
@@ -774,18 +942,51 @@ function renderMessages() {
 
     let messagesHtml = '';
     let lastDate = '';
+    const todayText = t('time.today') || 'Hoy';
+    const yesterdayText = t('time.yesterday') || 'Ayer';
 
     for (const msg of messages) {
         const msgDate = getDateDivider(msg.timestamp);
+        let displayDate = msgDate;
+        if (displayDate === 'Hoy') displayDate = todayText;
+        else if (displayDate === 'Ayer') displayDate = yesterdayText;
+        
         if (msgDate !== lastDate) {
             messagesHtml += `
-                <div class="date-divider"><span>${msgDate}</span></div>
+                <div class="date-divider"><span>${displayDate}</span></div>
             `;
             lastDate = msgDate;
         }
 
         const messageId = msg.id || `temp_${Date.now()}_${Math.random()}`;
-        const processedContent = detectAndRenderLinks(escapeHtml(msg.content));
+        let processedContent = '';
+        
+        if (msg.mediaType === 'image' && msg.mediaUrl) {
+            processedContent = `
+                <div style="display:flex;flex-direction:column;gap:4px;">
+                    ${msg.content && msg.content !== '[Imagen]' ? `<div>${escapeHtml(msg.content)}</div>` : ''}
+                    <img src="${msg.mediaUrl}" alt="Imagen" class="message-image" onclick="window.openImagePreview('${msg.mediaUrl}')" loading="lazy" />
+                </div>
+            `;
+        } else if (msg.mediaType === 'file' && msg.mediaUrl) {
+            const fileIcon = getFileIcon(msg.mimetype || '');
+            const fileSize = formatFileSize(msg.fileSize || 0);
+            processedContent = `
+                <div style="display:flex;flex-direction:column;gap:4px;">
+                    ${msg.content && !msg.content.startsWith('[') ? `<div>${escapeHtml(msg.content)}</div>` : ''}
+                    <a href="${msg.mediaUrl}" target="_blank" class="message-file" download>
+                        <span class="file-icon">${fileIcon}</span>
+                        <span class="file-info">
+                            <span class="file-name">${escapeHtml(msg.originalName || msg.filename || 'Archivo')}</span>
+                            <span class="file-size">${fileSize}</span>
+                        </span>
+                        <span class="file-download"><i class="fas fa-download"></i></span>
+                    </a>
+                </div>
+            `;
+        } else {
+            processedContent = detectAndRenderLinks(escapeHtml(msg.content));
+        }
         
         messagesHtml += `
             <div class="message ${msg.isOwn ? 'message-own' : 'message-other'}" data-message-id="${messageId}">
@@ -819,8 +1020,175 @@ function renderMessages() {
 }
 
 // ============================================================
+// 🔥 FUNCIONES AUXILIARES PARA MULTIMEDIA
+// ============================================================
+
+function getFileIcon(mimetype) {
+    if (!mimetype) return '<i class="fas fa-file"></i>';
+    if (mimetype.startsWith('image/')) return '<i class="fas fa-image" style="color:#34d399;"></i>';
+    if (mimetype.startsWith('video/')) return '<i class="fas fa-video" style="color:#f472b6;"></i>';
+    if (mimetype.startsWith('audio/')) return '<i class="fas fa-music" style="color:#60a5fa;"></i>';
+    if (mimetype === 'application/pdf') return '<i class="fas fa-file-pdf" style="color:#ff6b6b;"></i>';
+    if (mimetype.includes('word')) return '<i class="fas fa-file-word" style="color:#60a5fa;"></i>';
+    if (mimetype === 'text/plain') return '<i class="fas fa-file-alt" style="color:#fbbf24;"></i>';
+    return '<i class="fas fa-file"></i>';
+}
+
+function formatFileSize(bytes) {
+    if (bytes === 0) return '0 B';
+    const k = 1024;
+    const sizes = ['B', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+}
+
+// ============================================================
+// 🔥 SUBIR IMAGEN AL CHAT
+// ============================================================
+
+async function uploadImageToChat(file) {
+    if (!currentConversation) {
+        showToast('Selecciona una conversación primero', true);
+        return;
+    }
+
+    if (currentConversation.isArchived) {
+        showToast('📦 No puedes enviar mensajes a una conversación archivada', true);
+        return;
+    }
+
+    const token = getToken();
+    if (!token) {
+        showToast('❌ Sesión expirada', true);
+        return;
+    }
+
+    const formData = new FormData();
+    formData.append('image', file);
+
+    showToast('📤 Subiendo imagen...');
+
+    try {
+        const res = await fetch(`${API_URL}/api/chats/messages/${currentConversation.id}/image`, {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${token}` },
+            body: formData
+        });
+
+        const data = await res.json();
+
+        if (res.ok) {
+            const newMsg = {
+                ...data,
+                isOwn: true,
+                read: false
+            };
+            messages.push(newMsg);
+            appendSingleMessage(newMsg);
+            saveChatState(currentConversation.id);
+            loadConversations();
+            showToast('✅ Imagen enviada');
+        } else {
+            showToast(data.error || 'Error al enviar imagen', true);
+        }
+    } catch (error) {
+        console.error('Error subiendo imagen:', error);
+        showToast('❌ Error al enviar imagen', true);
+    }
+}
+
+// ============================================================
+// 🔥 SUBIR ARCHIVO AL CHAT
+// ============================================================
+
+async function uploadFileToChat(file) {
+    if (!currentConversation) {
+        showToast('Selecciona una conversación primero', true);
+        return;
+    }
+
+    if (currentConversation.isArchived) {
+        showToast('📦 No puedes enviar mensajes a una conversación archivada', true);
+        return;
+    }
+
+    const token = getToken();
+    if (!token) {
+        showToast('❌ Sesión expirada', true);
+        return;
+    }
+
+    const formData = new FormData();
+    formData.append('file', file);
+
+    showToast('📤 Subiendo archivo...');
+
+    try {
+        const res = await fetch(`${API_URL}/api/chats/messages/${currentConversation.id}/file`, {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${token}` },
+            body: formData
+        });
+
+        const data = await res.json();
+
+        if (res.ok) {
+            const newMsg = {
+                ...data,
+                isOwn: true,
+                read: false
+            };
+            messages.push(newMsg);
+            appendSingleMessage(newMsg);
+            saveChatState(currentConversation.id);
+            loadConversations();
+            showToast('✅ Archivo enviado');
+        } else {
+            showToast(data.error || 'Error al enviar archivo', true);
+        }
+    } catch (error) {
+        console.error('Error subiendo archivo:', error);
+        showToast('❌ Error al enviar archivo', true);
+    }
+}
+
+// ============================================================
+// 🔥 ABRIR VISTA PREVIA DE IMAGEN
+// ============================================================
+
+window.openImagePreview = function(imageUrl) {
+    const overlay = document.createElement('div');
+    overlay.style.cssText = `
+        position: fixed;
+        top: 0; left: 0; right: 0; bottom: 0;
+        background: rgba(0,0,0,0.92);
+        z-index: 99999;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        animation: fadeIn 0.3s ease;
+    `;
+    overlay.innerHTML = `
+        <img src="${imageUrl}" style="max-width:95%;max-height:95%;object-fit:contain;border-radius:8px;" />
+        <button style="position:absolute;top:20px;right:20px;background:rgba(255,255,255,0.1);border:none;color:#fff;font-size:24px;cursor:pointer;width:44px;height:44px;border-radius:50%;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(10px);">
+            <i class="fas fa-times"></i>
+        </button>
+    `;
+    
+    overlay.onclick = () => overlay.remove();
+    overlay.querySelector('button').onclick = (e) => {
+        e.stopPropagation();
+        overlay.remove();
+    };
+    
+    document.body.appendChild(overlay);
+};
+
+// ============================================================
 // ➕ AÑADIR UN SOLO MENSAJE
 // ============================================================
+
 function appendSingleMessage(msg) {
     if (!messagesContainerEl || isRendering) return;
 
@@ -840,16 +1208,49 @@ function appendSingleMessage(msg) {
     }
 
     const msgDate = getDateDivider(msg.timestamp);
+    const todayText = t('time.today') || 'Hoy';
+    const yesterdayText = t('time.yesterday') || 'Ayer';
+    let displayDate = msgDate;
+    if (displayDate === 'Hoy') displayDate = todayText;
+    else if (displayDate === 'Ayer') displayDate = yesterdayText;
+    
     let html = '';
     
     if (msgDate !== lastDate) {
         html += `
-            <div class="date-divider"><span>${msgDate}</span></div>
+            <div class="date-divider"><span>${displayDate}</span></div>
         `;
     }
 
     const messageId = msg.id || `temp_${Date.now()}_${Math.random()}`;
-    const processedContent = detectAndRenderLinks(escapeHtml(msg.content));
+    let processedContent = '';
+    
+    if (msg.mediaType === 'image' && msg.mediaUrl) {
+        processedContent = `
+            <div style="display:flex;flex-direction:column;gap:4px;">
+                ${msg.content && msg.content !== '[Imagen]' ? `<div>${escapeHtml(msg.content)}</div>` : ''}
+                <img src="${msg.mediaUrl}" alt="Imagen" class="message-image" onclick="window.openImagePreview('${msg.mediaUrl}')" loading="lazy" />
+            </div>
+        `;
+    } else if (msg.mediaType === 'file' && msg.mediaUrl) {
+        const fileIcon = getFileIcon(msg.mimetype || '');
+        const fileSize = formatFileSize(msg.fileSize || 0);
+        processedContent = `
+            <div style="display:flex;flex-direction:column;gap:4px;">
+                ${msg.content && !msg.content.startsWith('[') ? `<div>${escapeHtml(msg.content)}</div>` : ''}
+                <a href="${msg.mediaUrl}" target="_blank" class="message-file" download>
+                    <span class="file-icon">${fileIcon}</span>
+                    <span class="file-info">
+                        <span class="file-name">${escapeHtml(msg.originalName || msg.filename || 'Archivo')}</span>
+                        <span class="file-size">${fileSize}</span>
+                    </span>
+                    <span class="file-download"><i class="fas fa-download"></i></span>
+                </a>
+            </div>
+        `;
+    } else {
+        processedContent = detectAndRenderLinks(escapeHtml(msg.content));
+    }
     
     html += `
         <div class="message ${msg.isOwn ? 'message-own' : 'message-other'}" data-message-id="${messageId}" style="animation: messageIn 0.3s ease;">
@@ -872,13 +1273,40 @@ function appendSingleMessage(msg) {
 // ============================================================
 // 🔄 ACTUALIZAR UN SOLO MENSAJE
 // ============================================================
+
 function updateSingleMessage(tempId, realMessage) {
     const msgEl = document.querySelector(`.message[data-message-id="${tempId}"]`);
     if (msgEl) {
         const contentEl = msgEl.querySelector('.message-content');
         const timeEl = msgEl.querySelector('.message-time');
         if (contentEl) {
-            const processedContent = detectAndRenderLinks(escapeHtml(realMessage.content));
+            let processedContent = '';
+            if (realMessage.mediaType === 'image' && realMessage.mediaUrl) {
+                processedContent = `
+                    <div style="display:flex;flex-direction:column;gap:4px;">
+                        ${realMessage.content && realMessage.content !== '[Imagen]' ? `<div>${escapeHtml(realMessage.content)}</div>` : ''}
+                        <img src="${realMessage.mediaUrl}" alt="Imagen" class="message-image" onclick="window.openImagePreview('${realMessage.mediaUrl}')" loading="lazy" />
+                    </div>
+                `;
+            } else if (realMessage.mediaType === 'file' && realMessage.mediaUrl) {
+                const fileIcon = getFileIcon(realMessage.mimetype || '');
+                const fileSize = formatFileSize(realMessage.fileSize || 0);
+                processedContent = `
+                    <div style="display:flex;flex-direction:column;gap:4px;">
+                        ${realMessage.content && !realMessage.content.startsWith('[') ? `<div>${escapeHtml(realMessage.content)}</div>` : ''}
+                        <a href="${realMessage.mediaUrl}" target="_blank" class="message-file" download>
+                            <span class="file-icon">${fileIcon}</span>
+                            <span class="file-info">
+                                <span class="file-name">${escapeHtml(realMessage.originalName || realMessage.filename || 'Archivo')}</span>
+                                <span class="file-size">${fileSize}</span>
+                            </span>
+                            <span class="file-download"><i class="fas fa-download"></i></span>
+                        </a>
+                    </div>
+                `;
+            } else {
+                processedContent = detectAndRenderLinks(escapeHtml(realMessage.content));
+            }
             contentEl.innerHTML = processedContent;
         }
         if (timeEl) {
@@ -895,16 +1323,19 @@ function updateSingleMessage(tempId, realMessage) {
 // ============================================================
 // 🗑️ ELIMINAR UN SOLO MENSAJE
 // ============================================================
+
 function removeSingleMessage(messageId) {
     const msgEl = document.querySelector(`.message[data-message-id="${messageId}"]`);
     if (msgEl) {
         msgEl.remove();
         if (messagesContainerEl.querySelectorAll('.message').length === 0) {
+            const emptyMessage = t('chat.noMessages') || 'No hay mensajes';
+            const emptySubMessage = t('chat.firstMessage') || 'Envía el primer mensaje';
             messagesContainerEl.innerHTML = `
                 <div class="empty-state-chat">
                     <i class="fas fa-comment-dots"></i>
-                    <h3>No hay mensajes</h3>
-                    <p>Envía el primer mensaje</p>
+                    <h3>${emptyMessage}</h3>
+                    <p>${emptySubMessage}</p>
                 </div>
             `;
         }
@@ -964,6 +1395,7 @@ function handleScroll() {
 // ============================================================
 // 🔥 SELECCIONAR CONVERSACIÓN
 // ============================================================
+
 window.selectConversation = async function(userIdOrObject) {
     let userId, userData;
     if (typeof userIdOrObject === 'string') {
@@ -982,12 +1414,18 @@ window.selectConversation = async function(userIdOrObject) {
         saveChatState(currentConversation.id);
     }
 
+    // Verificar si está archivado
+    const allConvs = [...conversations.active, ...conversations.pending, ...conversations.archived];
+    const existingConv = allConvs.find(c => c.user.id === userId);
+    const isArchived = existingConv?.isArchived || existingConv?.status === 'archived' || false;
+
     currentConversation = {
         id: userData.id,
         fullName: userData.fullName,
         username: userData.username,
         avatar: userData.avatar,
-        status: 'active'
+        status: 'active',
+        isArchived: isArchived
     };
 
     await fetchUserStatus(userId);
@@ -997,11 +1435,13 @@ window.selectConversation = async function(userIdOrObject) {
     await loadMessages(userId, false, 0);
     showMessagesPanel();
     updateChatHeaderStatus(userId);
+    updateArchiveButtonState(isArchived);
 };
 
 // ============================================================
 // 🔥 MOSTRAR PANEL DE MENSAJES
 // ============================================================
+
 function showMessagesPanel() {
     if (!messagesPanelEl) return;
     messagesPanelEl.classList.add('active');
@@ -1014,7 +1454,6 @@ function showMessagesPanel() {
         ? currentConversation.fullName.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)
         : 'U';
 
-    // Limpiar avatar anterior
     const avatarContainer = avatar?.parentElement;
     if (avatarContainer) {
         const oldInitials = avatarContainer.querySelector('.avatar-initials');
@@ -1066,18 +1505,18 @@ function showMessagesPanel() {
             if (currentConversation) {
                 saveChatState(currentConversation.id);
             }
-            // 🔥 LIMPIAR CONVERSACIÓN ACTUAL
             currentConversation = null;
             window._chatContext = null;
             messagesPanelEl.classList.remove('active');
+            const emptyMessage = t('chat.noMessages') || 'No hay mensajes';
+            const emptySubMessage = t('chat.selectConversation') || 'Selecciona una conversación';
             messagesContainerEl.innerHTML = `
                 <div class="empty-state-chat">
                     <i class="fas fa-comment-dots"></i>
-                    <h3>No hay mensajes</h3>
-                    <p>Selecciona una conversación</p>
+                    <h3>${emptyMessage}</h3>
+                    <p>${emptySubMessage}</p>
                 </div>
             `;
-            // Limpiar avatar del header
             const avatarEl = document.getElementById('chatAvatar');
             if (avatarEl) {
                 avatarEl.src = '';
@@ -1106,6 +1545,10 @@ function showMessagesPanel() {
         setTimeout(() => messageInput.focus(), 300);
     }
 
+    // Configurar botón de archivar
+    setupArchiveButton();
+    updateArchiveButtonState(currentConversation?.isArchived || false);
+
     setupInfiniteScroll();
     setupLinkDelegation();
     ensureScrollAtBottom();
@@ -1114,8 +1557,15 @@ function showMessagesPanel() {
 // ============================================================
 // ENVIAR MENSAJE
 // ============================================================
+
 window.sendMessage = async function() {
     if (!messageInput || !messageInput.value.trim() || !currentConversation) return;
+    
+    if (currentConversation.isArchived) {
+        showToast('📦 No puedes enviar mensajes a una conversación archivada', true);
+        return;
+    }
+    
     const content = messageInput.value.trim();
     messageInput.value = '';
     const sendBtn = document.getElementById('sendBtn');
@@ -1167,6 +1617,7 @@ window.sendMessage = async function() {
 // ============================================================
 // ELIMINAR MENSAJE
 // ============================================================
+
 window.deleteMessage = async function(messageId) {
     const token = getToken();
     if (!token) return;
@@ -1193,6 +1644,7 @@ window.deleteMessage = async function(messageId) {
 // ============================================================
 // TYPING
 // ============================================================
+
 function handleTyping() {
     if (!socket || !socket.connected || !currentConversation) return;
     if (typingTimeout) clearTimeout(typingTimeout);
@@ -1211,6 +1663,7 @@ function handleTyping() {
 // ============================================================
 // SOCKET
 // ============================================================
+
 function initSocket() {
     const token = getToken();
     if (!token) return;
@@ -1329,9 +1782,596 @@ function initSocket() {
 }
 
 // ============================================================
+// 🔥 CONFIGURAR EVENTOS DE SUBIDA DE ARCHIVOS
+// ============================================================
+
+function setupFileUploads() {
+    const attachBtn = document.getElementById('attachBtn');
+    const attachMenu = document.getElementById('attachMenu');
+    
+    if (attachBtn && attachMenu) {
+        attachBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            attachMenu.classList.toggle('show');
+        });
+        
+        document.addEventListener('click', () => {
+            attachMenu.classList.remove('show');
+        });
+        
+        attachMenu.addEventListener('click', (e) => {
+            e.stopPropagation();
+        });
+    }
+    
+    const imageInput = document.getElementById('fileInputImage');
+    if (imageInput) {
+        imageInput.addEventListener('change', (e) => {
+            const files = e.target.files;
+            if (files && files.length > 0) {
+                for (const file of files) {
+                    uploadImageToChat(file);
+                }
+            }
+            imageInput.value = '';
+            document.getElementById('attachMenu')?.classList.remove('show');
+        });
+    }
+    
+    const fileInput = document.getElementById('fileInputFile');
+    if (fileInput) {
+        fileInput.addEventListener('change', (e) => {
+            const files = e.target.files;
+            if (files && files.length > 0) {
+                for (const file of files) {
+                    uploadFileToChat(file);
+                }
+            }
+            fileInput.value = '';
+            document.getElementById('attachMenu')?.classList.remove('show');
+        });
+    }
+    
+    const cameraInput = document.getElementById('fileInputCamera');
+    if (cameraInput) {
+        cameraInput.addEventListener('change', (e) => {
+            const files = e.target.files;
+            if (files && files.length > 0) {
+                uploadImageToChat(files[0]);
+            }
+            cameraInput.value = '';
+            document.getElementById('attachMenu')?.classList.remove('show');
+        });
+    }
+    
+    const attachImageBtn = document.getElementById('attachImageBtn');
+    const attachFileBtn = document.getElementById('attachFileBtn');
+    const attachCameraBtn = document.getElementById('attachCameraBtn');
+    
+    if (attachImageBtn) {
+        attachImageBtn.addEventListener('click', () => {
+            imageInput?.click();
+        });
+    }
+    
+    if (attachFileBtn) {
+        attachFileBtn.addEventListener('click', () => {
+            fileInput?.click();
+        });
+    }
+    
+    if (attachCameraBtn) {
+        attachCameraBtn.addEventListener('click', () => {
+            cameraInput?.click();
+        });
+    }
+}
+
+// ============================================================
+// 🔥 LONG PRESS - FUNCIONES DE ARCHIVADO
+// ============================================================
+
+// ============================================================
+// 🔥 ARCHIVAR CONVERSACIÓN
+// ============================================================
+
+window.archiveConversation = async function(userId) {
+    if (!userId) {
+        showToast('No hay conversación seleccionada', true);
+        return;
+    }
+
+    const token = getToken();
+    if (!token) return;
+
+    closeLongPressMenu();
+
+    try {
+        const res = await fetch(`${API_URL}/api/chats/conversations/${userId}/archive`, {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+
+        if (res.ok) {
+            showToast('📦 Conversación archivada');
+            
+            if (currentConversation && currentConversation.id === userId) {
+                currentConversation.isArchived = true;
+                updateArchiveButtonState(true);
+                if (messagesPanelEl) {
+                    messagesPanelEl.classList.remove('active');
+                }
+                currentConversation = null;
+                window._chatContext = null;
+            }
+            
+            await loadConversations();
+            
+        } else {
+            const data = await res.json();
+            showToast(data.error || 'Error al archivar', true);
+        }
+    } catch (error) {
+        console.error('Error archivando conversación:', error);
+        showToast('❌ Error al archivar', true);
+    }
+};
+
+// ============================================================
+// 🔥 DESARCHIVAR CONVERSACIÓN
+// ============================================================
+
+window.unarchiveConversation = async function(userId) {
+    if (!userId) {
+        showToast('No hay conversación seleccionada', true);
+        return;
+    }
+
+    const token = getToken();
+    if (!token) return;
+
+    closeLongPressMenu();
+
+    try {
+        const res = await fetch(`${API_URL}/api/chats/conversations/${userId}/unarchive`, {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+
+        if (res.ok) {
+            showToast('📤 Conversación desarchivada');
+            
+            if (currentConversation && currentConversation.id === userId) {
+                currentConversation.isArchived = false;
+                updateArchiveButtonState(false);
+            }
+            
+            await loadConversations();
+            
+        } else {
+            const data = await res.json();
+            showToast(data.error || 'Error al desarchivar', true);
+        }
+    } catch (error) {
+        console.error('Error desarchivando conversación:', error);
+        showToast('❌ Error al desarchivar', true);
+    }
+};
+
+// ============================================================
+// 🔥 ELIMINAR CONVERSACIÓN
+// ============================================================
+
+window.deleteConversation = async function(userId) {
+    if (!userId) {
+        showToast('No hay conversación seleccionada', true);
+        return;
+    }
+
+    if (!confirm('¿Eliminar toda la conversación? Esta acción no se puede deshacer.')) {
+        return;
+    }
+
+    const token = getToken();
+    if (!token) return;
+
+    closeLongPressMenu();
+
+    try {
+        const res = await fetch(`${API_URL}/api/chats/conversations/${userId}`, {
+            method: 'DELETE',
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+
+        if (res.ok) {
+            showToast('🗑️ Conversación eliminada');
+            
+            if (currentConversation && currentConversation.id === userId) {
+                messages = [];
+                if (messagesPanelEl) {
+                    messagesPanelEl.classList.remove('active');
+                }
+                currentConversation = null;
+                window._chatContext = null;
+                renderMessages();
+            }
+            
+            await loadConversations();
+            
+        } else {
+            const data = await res.json();
+            showToast(data.error || 'Error al eliminar', true);
+        }
+    } catch (error) {
+        console.error('Error eliminando conversación:', error);
+        showToast('❌ Error al eliminar', true);
+    }
+};
+
+// ============================================================
+// 🔥 CREAR MENÚ CONTEXTUAL DE LONG PRESS
+// ============================================================
+
+function createLongPressMenu(userId, isArchived, x, y) {
+    closeLongPressMenu();
+
+    const menu = document.createElement('div');
+    menu.className = 'long-press-menu show';
+    menu.id = 'longPressMenu';
+    
+    const menuWidth = 200;
+    const menuHeight = 180;
+    const viewportWidth = window.innerWidth;
+    const viewportHeight = window.innerHeight;
+    
+    let left = x;
+    let top = y;
+    
+    if (x + menuWidth > viewportWidth) {
+        left = viewportWidth - menuWidth - 10;
+    }
+    if (y + menuHeight > viewportHeight) {
+        top = viewportHeight - menuHeight - 10;
+    }
+    if (left < 10) left = 10;
+    if (top < 10) top = 10;
+    
+    menu.style.left = left + 'px';
+    menu.style.top = top + 'px';
+
+    const archiveText = isArchived ? (t('chat.unarchive') || 'Desarchivar') : (t('chat.archive') || 'Archivar');
+    const archiveIcon = isArchived ? 'fa-inbox' : 'fa-archive';
+    const archiveIconClass = isArchived ? 'icon-unarchive' : 'icon-archive';
+    
+    let menuItems = `
+        <button class="menu-item" data-action="${isArchived ? 'unarchive' : 'archive'}">
+            <i class="fas ${archiveIcon} ${archiveIconClass}"></i>
+            <span>${archiveText} conversación</span>
+        </button>
+        <div class="menu-divider"></div>
+        <button class="menu-item" data-action="open">
+            <i class="fas fa-comment"></i>
+            <span>Abrir chat</span>
+        </button>
+        <button class="menu-item" data-action="delete">
+            <i class="fas fa-trash-alt icon-delete"></i>
+            <span>Eliminar conversación</span>
+        </button>
+    `;
+    
+    menu.innerHTML = menuItems;
+
+    menu.querySelectorAll('.menu-item').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const action = btn.dataset.action;
+            
+            switch(action) {
+                case 'archive':
+                    window.archiveConversation(userId);
+                    break;
+                case 'unarchive':
+                    window.unarchiveConversation(userId);
+                    break;
+                case 'open':
+                    closeLongPressMenu();
+                    window.selectConversation(userId);
+                    break;
+                case 'delete':
+                    window.deleteConversation(userId);
+                    break;
+                default:
+                    closeLongPressMenu();
+            }
+        });
+    });
+
+    document.body.appendChild(menu);
+    longPressMenu = menu;
+    
+    setTimeout(() => {
+        document.addEventListener('click', closeLongPressMenu);
+        document.addEventListener('touchstart', closeLongPressMenu);
+    }, 10);
+}
+
+// ============================================================
+// 🔥 CERRAR MENÚ CONTEXTUAL
+// ============================================================
+
+function closeLongPressMenu() {
+    if (longPressMenu) {
+        longPressMenu.remove();
+        longPressMenu = null;
+    }
+    document.removeEventListener('click', closeLongPressMenu);
+    document.removeEventListener('touchstart', closeLongPressMenu);
+    
+    if (longPressTarget) {
+        longPressTarget.classList.remove('long-press-active');
+        longPressTarget = null;
+    }
+    if (longPressTimer) {
+        clearTimeout(longPressTimer);
+        longPressTimer = null;
+    }
+    isLongPressTriggered = false;
+}
+
+// ============================================================
+// 🔥 CONFIGURAR LONG PRESS EN CONVERSACIONES
+// ============================================================
+
+function setupLongPressOnConversations() {
+    const items = document.querySelectorAll('.conversation-item');
+    
+    items.forEach(item => {
+        item.removeEventListener('touchstart', handleTouchStart);
+        item.removeEventListener('touchmove', handleTouchMove);
+        item.removeEventListener('touchend', handleTouchEnd);
+        item.removeEventListener('touchcancel', handleTouchEnd);
+        item.removeEventListener('mousedown', handleMouseDown);
+        item.removeEventListener('mouseup', handleMouseUp);
+        item.removeEventListener('mouseleave', handleMouseUp);
+        item.removeEventListener('contextmenu', handleContextMenu);
+        
+        item.addEventListener('touchstart', handleTouchStart, { passive: false });
+        item.addEventListener('touchmove', handleTouchMove, { passive: true });
+        item.addEventListener('touchend', handleTouchEnd, { passive: true });
+        item.addEventListener('touchcancel', handleTouchEnd, { passive: true });
+        item.addEventListener('mousedown', handleMouseDown);
+        item.addEventListener('mouseup', handleMouseUp);
+        item.addEventListener('mouseleave', handleMouseUp);
+        item.addEventListener('contextmenu', handleContextMenu);
+    });
+}
+
+// ============================================================
+// 🔥 MANEJADORES DE LONG PRESS
+// ============================================================
+
+function handleTouchStart(e) {
+    const item = e.currentTarget;
+    const touch = e.touches[0];
+    
+    const userId = getUserIdFromItem(item);
+    if (!userId) return;
+    
+    if (messagesPanelEl && messagesPanelEl.classList.contains('active')) {
+        return;
+    }
+    
+    if (e.target.closest('.pending-actions') || e.target.closest('button')) {
+        return;
+    }
+    
+    longPressTarget = item;
+    isLongPressTriggered = false;
+    longPressStartX = touch.clientX;
+    longPressStartY = touch.clientY;
+    
+    longPressTimer = setTimeout(() => {
+        if (longPressTarget && !isLongPressTriggered) {
+            isLongPressTriggered = true;
+            longPressTarget.classList.add('long-press-active');
+            
+            if (navigator.vibrate) {
+                navigator.vibrate(30);
+            }
+            
+            const rect = longPressTarget.getBoundingClientRect();
+            const isArchived = longPressTarget.dataset.archived === 'true';
+            
+            createLongPressMenu(userId, isArchived, touch.clientX, touch.clientY);
+        }
+    }, LONG_PRESS_DELAY);
+}
+
+function handleTouchMove(e) {
+    if (longPressTimer && !isLongPressTriggered) {
+        const touch = e.touches[0];
+        const deltaX = Math.abs(touch.clientX - longPressStartX);
+        const deltaY = Math.abs(touch.clientY - longPressStartY);
+        
+        if (deltaX > 10 || deltaY > 10) {
+            clearTimeout(longPressTimer);
+            longPressTimer = null;
+            if (longPressTarget) {
+                longPressTarget.classList.remove('long-press-active');
+            }
+        }
+    }
+}
+
+function handleTouchEnd(e) {
+    if (longPressTimer) {
+        clearTimeout(longPressTimer);
+        longPressTimer = null;
+    }
+    
+    if (!isLongPressTriggered && longPressTarget) {
+        setTimeout(() => {
+            longPressTarget.classList.remove('long-press-active');
+        }, 100);
+    }
+}
+
+function handleMouseDown(e) {
+    if (e.button === 2) {
+        e.preventDefault();
+        const item = e.currentTarget;
+        const userId = getUserIdFromItem(item);
+        if (!userId) return;
+        
+        if (messagesPanelEl && messagesPanelEl.classList.contains('active')) {
+            return;
+        }
+        
+        if (e.target.closest('.pending-actions') || e.target.closest('button')) {
+            return;
+        }
+        
+        const isArchived = item.dataset.archived === 'true';
+        createLongPressMenu(userId, isArchived, e.clientX, e.clientY);
+        return;
+    }
+    
+    if (e.button !== 0) return;
+    
+    const item = e.currentTarget;
+    const userId = getUserIdFromItem(item);
+    if (!userId) return;
+    
+    if (messagesPanelEl && messagesPanelEl.classList.contains('active')) {
+        return;
+    }
+    
+    if (e.target.closest('.pending-actions') || e.target.closest('button')) {
+        return;
+    }
+    
+    longPressTarget = item;
+    isLongPressTriggered = false;
+    longPressStartX = e.clientX;
+    longPressStartY = e.clientY;
+    
+    longPressTimer = setTimeout(() => {
+        if (longPressTarget && !isLongPressTriggered) {
+            isLongPressTriggered = true;
+            longPressTarget.classList.add('long-press-active');
+            
+            const rect = longPressTarget.getBoundingClientRect();
+            const isArchived = longPressTarget.dataset.archived === 'true';
+            
+            createLongPressMenu(userId, isArchived, e.clientX, e.clientY);
+        }
+    }, LONG_PRESS_DELAY);
+}
+
+function handleMouseUp(e) {
+    if (longPressTimer) {
+        clearTimeout(longPressTimer);
+        longPressTimer = null;
+    }
+    
+    if (longPressTarget && !isLongPressTriggered) {
+        setTimeout(() => {
+            longPressTarget.classList.remove('long-press-active');
+        }, 100);
+    }
+}
+
+function handleContextMenu(e) {
+    e.preventDefault();
+    const item = e.currentTarget;
+    const userId = getUserIdFromItem(item);
+    if (!userId) return;
+    
+    if (messagesPanelEl && messagesPanelEl.classList.contains('active')) {
+        return;
+    }
+    
+    if (e.target.closest('.pending-actions') || e.target.closest('button')) {
+        return;
+    }
+    
+    const isArchived = item.dataset.archived === 'true';
+    createLongPressMenu(userId, isArchived, e.clientX, e.clientY);
+}
+
+// ============================================================
+// 🔥 OBTENER USER ID DEL ELEMENTO
+// ============================================================
+
+function getUserIdFromItem(item) {
+    if (item.dataset.userId) {
+        return item.dataset.userId;
+    }
+    
+    const onclick = item.getAttribute('onclick');
+    if (onclick) {
+        const match = onclick.match(/selectConversation\('([^']+)'\)/);
+        if (match) {
+            return match[1];
+        }
+    }
+    
+    return null;
+}
+
+// ============================================================
+// 🔥 BOTÓN DE ARCHIVAR EN EL HEADER
+// ============================================================
+
+function setupArchiveButton() {
+    const archiveBtn = document.getElementById('archiveChatBtn');
+    if (!archiveBtn) return;
+    
+    const newBtn = archiveBtn.cloneNode(true);
+    archiveBtn.parentNode.replaceChild(newBtn, archiveBtn);
+    
+    newBtn.addEventListener('click', function(e) {
+        e.stopPropagation();
+        
+        if (!currentConversation) {
+            showToast('No hay conversación seleccionada', true);
+            return;
+        }
+        
+        const isArchived = currentConversation.isArchived || false;
+        if (isArchived) {
+            window.unarchiveConversation(currentConversation.id);
+        } else {
+            window.archiveConversation(currentConversation.id);
+        }
+    });
+}
+
+function updateArchiveButtonState(isArchived) {
+    const btn = document.getElementById('archiveChatBtn');
+    if (!btn) return;
+    
+    const icon = btn.querySelector('i');
+    if (icon) {
+        icon.className = 'fas fa-archive';
+    }
+    
+    if (isArchived) {
+        btn.classList.add('is-archived');
+        btn.title = t('chat.unarchive') || 'Desarchivar conversación';
+    } else {
+        btn.classList.remove('is-archived');
+        btn.title = t('chat.archive') || 'Archivar conversación';
+    }
+}
+
+// ============================================================
 // INICIALIZAR
 // ============================================================
+
 async function init() {
+    initI18nForChat();
+    
     currentUser = getCurrentUser();
     if (!currentUser) {
         const token = getToken();
@@ -1364,7 +2404,13 @@ async function init() {
     }
 
     setupLinkDelegation();
-    console.log('📱 Chat mobile optimizado - con detección de enlaces corregida y perfil');
+    setupFileUploads();
+    setupArchiveButton();
+    
+    setTimeout(translateChatUI, 100);
+    
+    console.log('📱 Chat mobile optimizado - con detección de enlaces corregida, perfil y multimedia');
+    console.log('📦 Long press para archivar conversaciones activado');
 }
 
 // Exponer funciones globales
@@ -1377,5 +2423,10 @@ window.rejectChatRequest = window.rejectChatRequest;
 window.openLinkFromChat = openLinkFromChat;
 window.openProfileFromChat = openProfileFromChat;
 window.restoreChatFromProfile = restoreChatFromProfile;
+window.openImagePreview = window.openImagePreview;
+window.archiveConversation = archiveConversation;
+window.unarchiveConversation = unarchiveConversation;
+window.deleteConversation = deleteConversation;
+window.closeLongPressMenu = closeLongPressMenu;
 
 document.addEventListener('DOMContentLoaded', init);

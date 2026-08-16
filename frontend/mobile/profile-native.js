@@ -1,6 +1,8 @@
 // profile-native.js - Perfil nativo del usuario (SECCIÓN NATIVA)
 // OPTIMIZADO: Sin estado de carga, con precarga y actualización en tiempo real
 // 🔥 NAVEGACIÓN: Soporte para followers-modal con fromNative=true
+// 🔥 INTEGRADO CON i18n PARA TRADUCCIÓN DE INTERFAZ
+// 🔥 CORREGIDO: Soporte para miniaturas de video y encuestas
 // ============================================================
 
 import {
@@ -9,6 +11,9 @@ import {
 } from './auth.js';
 
 import { formatNumber } from './utils.js';
+
+// 🔥 IMPORTAR SISTEMA i18n
+import { t, onLocaleChange, translateAll } from './i18n.js';
 
 const API_URL = window.location.origin;
 
@@ -20,6 +25,7 @@ let currentProfileUserId = null;
 let currentProfileData = null;
 let isProfileSectionVisible = false;
 let refreshInterval = null;
+let localeUnsubscribe = null;
 
 // ============================================================
 // CACHÉ
@@ -47,6 +53,23 @@ function clearProfileCache(userId) {
         profileCache.delete(userId);
         storiesCache.delete(userId);
     }
+}
+
+// ============================================================
+// 🔥 ESCUCHAR CAMBIOS DE IDIOMA
+// ============================================================
+
+function initI18nForProfileNative() {
+    if (localeUnsubscribe) {
+        localeUnsubscribe();
+    }
+    
+    localeUnsubscribe = onLocaleChange(() => {
+        if (isProfileSectionVisible && currentProfileData) {
+            const stories = storiesCache.get(currentProfileUserId) || [];
+            updateProfileNativeUI(currentProfileData, stories);
+        }
+    });
 }
 
 // ============================================================
@@ -102,13 +125,13 @@ function preloadCurrentUserProfile() {
 
 function showProfileNative(userId) {
     if (!userId) {
-        showToast('Usuario no encontrado', true);
+        showToast(t('error.notFound') || 'Usuario no encontrado', true);
         return;
     }
 
     const token = getToken();
     if (!token) {
-        showToast('Inicia sesión para ver tu perfil', true);
+        showToast(t('error.unauthorized') || 'Inicia sesión para ver tu perfil', true);
         setTimeout(() => {
             window.location.href = '/login.html';
         }, 500);
@@ -117,36 +140,31 @@ function showProfileNative(userId) {
 
     console.log(`👤 Mostrando perfil nativo: ${userId}`);
 
+    initI18nForProfileNative();
+
     currentProfileUserId = userId;
     isProfileSectionVisible = true;
 
-    // Mostrar la sección de perfil
     const section = document.getElementById('sectionProfile');
     if (section) {
         section.classList.remove('hidden');
     }
 
-    // Activar el botón de perfil en la navegación
     document.querySelectorAll('.bottom-nav button').forEach(b => b.classList.remove('active'));
     const navProfile = document.getElementById('navProfile');
     if (navProfile) navProfile.classList.add('active');
 
-    // 🔥 Verificar caché primero
     if (profileCache.has(userId) && storiesCache.has(userId)) {
         console.log(`📦 Usando caché para perfil nativo de ${userId}`);
         const user = profileCache.get(userId);
         const stories = storiesCache.get(userId);
         updateProfileNativeUI(user, stories);
         currentProfileData = user;
-        
-        // Actualizar en segundo plano
         refreshProfileInBackgroundNative(userId);
     } else {
-        // Cargar datos frescos
         loadProfileDataNative(userId);
     }
 
-    // Iniciar refresco en segundo plano (cada 10 segundos para el perfil nativo)
     if (refreshInterval) {
         clearInterval(refreshInterval);
         refreshInterval = null;
@@ -159,7 +177,7 @@ function showProfileNative(userId) {
             clearInterval(refreshInterval);
             refreshInterval = null;
         }
-    }, 10000); // 10 segundos
+    }, 10000);
 }
 
 // ============================================================
@@ -174,17 +192,20 @@ function hideProfileNative() {
         refreshInterval = null;
     }
 
+    if (localeUnsubscribe) {
+        localeUnsubscribe();
+        localeUnsubscribe = null;
+    }
+
     isProfileSectionVisible = false;
     currentProfileUserId = null;
     currentProfileData = null;
 
-    // Ocultar la sección de perfil
     const section = document.getElementById('sectionProfile');
     if (section) {
         section.classList.add('hidden');
     }
 
-    // Activar el botón de inicio
     document.querySelectorAll('.bottom-nav button').forEach(b => b.classList.remove('active'));
     const navFeed = document.getElementById('navFeed');
     if (navFeed) navFeed.classList.add('active');
@@ -197,7 +218,7 @@ function hideProfileNative() {
 async function loadProfileDataNative(userId) {
     const token = getToken();
     if (!token) {
-        showToast('Inicia sesión para ver tu perfil', true);
+        showToast(t('error.unauthorized') || 'Inicia sesión para ver tu perfil', true);
         return;
     }
 
@@ -212,11 +233,11 @@ async function loadProfileDataNative(userId) {
 
         if (!res.ok) {
             if (res.status === 404) {
-                showToast('Usuario no encontrado', true);
+                showToast(t('error.notFound') || 'Usuario no encontrado', true);
             } else if (res.status === 403) {
-                showToast('Este perfil es privado', true);
+                showToast(t('profile.private') || 'Este perfil es privado', true);
             } else {
-                showToast('Error al cargar el perfil', true);
+                showToast(t('error.general') || 'Error al cargar el perfil', true);
             }
             return;
         }
@@ -242,12 +263,12 @@ async function loadProfileDataNative(userId) {
 
     } catch (error) {
         console.error('Error loading profile native:', error);
-        showToast('Error al cargar el perfil', true);
+        showToast(t('error.general') || 'Error al cargar el perfil', true);
     }
 }
 
 // ============================================================
-// 🔥 REFRESCAR PERFIL EN SEGUNDO PLANO (ACTUALIZACIÓN EN TIEMPO REAL)
+// 🔥 REFRESCAR PERFIL EN SEGUNDO PLANO
 // ============================================================
 
 async function refreshProfileInBackgroundNative(userId) {
@@ -275,7 +296,6 @@ async function refreshProfileInBackgroundNative(userId) {
             }
 
             if (isProfileSectionVisible && currentProfileUserId === userId) {
-                // Actualizar solo la UI si cambió algo
                 updateProfileNativeUI(user, stories);
             }
 
@@ -287,69 +307,91 @@ async function refreshProfileInBackgroundNative(userId) {
 }
 
 // ============================================================
-// ACTUALIZAR SOLO HISTORIAS (SIN RECARGAR TODO)
+// 🔥 GENERAR MINIATURA DE HISTORIA - SOPORTE PARA TODOS LOS TIPOS
 // ============================================================
 
-function updateStoriesOnlyNative(stories) {
-    const container = document.getElementById('profileNativeContent');
-    if (!container) return;
-
-    const storiesSection = container.querySelector('.profile-stories-native');
-    if (!storiesSection) return;
-
-    const grid = storiesSection.querySelector('.profile-stories-grid-native');
-    if (!grid) return;
-
-    let storiesHtml = '';
-    if (stories && stories.length > 0) {
-        const displayStories = stories.slice(0, 6);
-
-        const thumbnails = displayStories.map(story => {
-            if (story.mediaType === 'image' && story.mediaUrl) {
-                return `
-                    <div class="profile-story-thumb-native" onclick="window.openStoryFromProfileNative('${story.id}', '${currentProfileUserId}')">
-                        <img src="${story.mediaUrl}" alt="Historia" loading="lazy" decoding="async" />
-                        <div class="thumb-overlay">
-                            <i class="fas fa-heart"></i> ${formatNumber(story.likes?.length || 0)}
-                        </div>
+function generateStoryThumbnail(story, userId) {
+    const storyId = story.id;
+    const mediaType = story.mediaType || 'image';
+    
+    // 🔥 Para encuestas
+    if (mediaType === 'survey' && story.surveyData) {
+        const survey = story.surveyData;
+        const question = survey.question || '📊 Encuesta';
+        const totalVotes = survey.options?.reduce((sum, o) => sum + (o.votes || 0), 0) || 0;
+        return `
+            <div class="profile-story-thumb-native" onclick="window.openStoryFromProfileNative('${storyId}', '${userId}')">
+                <div class="text-thumb" style="background:linear-gradient(135deg, rgba(192,132,252,0.1), rgba(219,39,119,0.05));">
+                    <div style="display:flex;flex-direction:column;align-items:center;gap:2px;">
+                        <span style="font-size:20px;">📊</span>
+                        <span style="font-size:10px;color:rgba(255,255,255,0.6);font-weight:600;text-align:center;line-height:1.2;max-width:80px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
+                            ${escapeHtml(question.substring(0, 20))}${question.length > 20 ? '…' : ''}
+                        </span>
+                        <span style="font-size:8px;color:rgba(255,255,255,0.2);">${totalVotes} ${t('survey.votes') || 'votos'}</span>
                     </div>
-                `;
-            } else if (story.mediaType === 'text' && story.textContent) {
-                return `
-                    <div class="profile-story-thumb-native" onclick="window.openStoryFromProfileNative('${story.id}', '${currentProfileUserId}')">
-                        <div class="text-thumb">${escapeHtml(story.textContent.substring(0, 20))}${story.textContent.length > 20 ? '...' : ''}</div>
-                    </div>
-                `;
-            } else {
-                return `
-                    <div class="profile-story-thumb-native" onclick="window.openStoryFromProfileNative('${story.id}', '${currentProfileUserId}')">
-                        <div class="text-thumb">
-                            <i class="fas fa-file" style="font-size:14px;color:rgba(255,255,255,0.1);"></i>
-                        </div>
-                    </div>
-                `;
-            }
-        }).join('');
-
-        storiesHtml = `<div class="profile-stories-grid-native">${thumbnails}</div>`;
-
-        if (stories.length > 6) {
-            storiesHtml += `
-                <div style="text-align:center;font-size:9px;color:rgba(255,255,255,0.15);padding:2px 0;">
-                    +${stories.length - 6} más
                 </div>
-            `;
-        }
-    } else {
-        storiesHtml = `
-            <div class="profile-no-stories-native">
-                <i class="fas fa-camera"></i>
-                <span>No hay historias</span>
+                <div class="thumb-overlay" style="background:linear-gradient(0deg, rgba(192,132,252,0.3), transparent);">
+                    <i class="fas fa-chart-pie"></i> ${formatNumber(totalVotes)}
+                </div>
             </div>
         `;
     }
-
-    grid.innerHTML = storiesHtml;
+    
+    // 🔥 Para imágenes
+    if (mediaType === 'image' && story.mediaUrl) {
+        return `
+            <div class="profile-story-thumb-native" onclick="window.openStoryFromProfileNative('${storyId}', '${userId}')">
+                <img src="${story.mediaUrl}" alt="Historia" loading="lazy" decoding="async" />
+                <div class="thumb-overlay">
+                    <i class="fas fa-heart"></i> ${formatNumber(story.likes?.length || 0)}
+                </div>
+            </div>
+        `;
+    }
+    
+    // 🔥 Para videos
+    if (mediaType === 'video' && story.mediaUrl) {
+        return `
+            <div class="profile-story-thumb-native" onclick="window.openStoryFromProfileNative('${storyId}', '${userId}')">
+                <div class="text-thumb" style="background:linear-gradient(135deg, rgba(96,165,250,0.1), rgba(6,182,212,0.05));">
+                    <div style="display:flex;flex-direction:column;align-items:center;gap:2px;">
+                        <span style="font-size:24px;">🎬</span>
+                        <span style="font-size:9px;color:rgba(255,255,255,0.3);font-weight:500;">${t('story.video') || 'Video'}</span>
+                        ${story.hasSubtitles ? `<span style="font-size:7px;color:rgba(192,132,252,0.3);">CC</span>` : ''}
+                    </div>
+                </div>
+                <div class="thumb-overlay">
+                    <i class="fas fa-play"></i>
+                    <i class="fas fa-heart" style="margin-left:6px;"></i> ${formatNumber(story.likes?.length || 0)}
+                </div>
+            </div>
+        `;
+    }
+    
+    // 🔥 Para texto
+    if (mediaType === 'text' && story.textContent) {
+        const text = story.textContent || '';
+        return `
+            <div class="profile-story-thumb-native" onclick="window.openStoryFromProfileNative('${storyId}', '${userId}')">
+                <div class="text-thumb" style="background:${story.textBgColor || '#1a1a2e'}">
+                    ${escapeHtml(text.substring(0, 25))}${text.length > 25 ? '…' : ''}
+                </div>
+                <div class="thumb-overlay">
+                    <i class="fas fa-font"></i>
+                    <i class="fas fa-heart" style="margin-left:6px;"></i> ${formatNumber(story.likes?.length || 0)}
+                </div>
+            </div>
+        `;
+    }
+    
+    // 🔥 Fallback genérico
+    return `
+        <div class="profile-story-thumb-native" onclick="window.openStoryFromProfileNative('${storyId}', '${userId}')">
+            <div class="text-thumb" style="background:rgba(255,255,255,0.02);">
+                <i class="fas fa-file" style="font-size:24px;color:rgba(255,255,255,0.05);"></i>
+            </div>
+        </div>
+    `;
 }
 
 // ============================================================
@@ -361,23 +403,85 @@ function getVerificationBadgeNative(user) {
 
     if (user.isVerified) {
         if (user.role === 'admin') {
-            return `<span class="verified-badge" title="Administrador verificado"><i class="fas fa-shield-alt"></i></span>`;
+            return `<span class="verified-badge" title="${t('profile.adminVerified') || 'Administrador verificado'}"><i class="fas fa-shield-alt"></i></span>`;
         } else if (user.accountType === 'business_verified' || user.accountType === 'business') {
-            return `<span class="verified-badge" title="Empresa verificada"><i class="fas fa-building"></i></span>`;
+            return `<span class="verified-badge" title="${t('profile.businessVerified') || 'Empresa verificada'}"><i class="fas fa-building"></i></span>`;
         } else {
-            return `<span class="verified-badge" title="Cuenta verificada"><i class="fas fa-check-circle"></i></span>`;
+            return `<span class="verified-badge" title="${t('profile.verified') || 'Cuenta verificada'}"><i class="fas fa-check-circle"></i></span>`;
         }
     }
 
     if (user.role === 'admin') {
-        return `<span class="verified-badge" title="Administrador"><i class="fas fa-shield-alt"></i></span>`;
+        return `<span class="verified-badge" title="${t('profile.admin') || 'Administrador'}"><i class="fas fa-shield-alt"></i></span>`;
     }
 
     return '';
 }
 
 // ============================================================
-// ACTUALIZAR UI DEL PERFIL NATIVO
+// TRADUCIR UI DEL PERFIL NATIVO
+// ============================================================
+
+function translateProfileNativeUI() {
+    const container = document.getElementById('profileNativeContent');
+    if (!container) return;
+
+    const statLabels = container.querySelectorAll('.profile-stats-native .stat .label');
+    const labelKeys = ['profile.followers', 'profile.following', 'profile.stories'];
+    statLabels.forEach((label, index) => {
+        if (index < labelKeys.length) {
+            const text = t(labelKeys[index]);
+            if (text && text !== labelKeys[index]) {
+                label.textContent = text;
+            }
+        }
+    });
+
+    const sectionTitle = container.querySelector('.profile-stories-native .section-title');
+    if (sectionTitle) {
+        const textNode = sectionTitle.childNodes[1];
+        if (textNode && textNode.nodeType === Node.TEXT_NODE) {
+            const text = t('profile.stories');
+            if (text && text !== 'profile.stories') {
+                textNode.textContent = text;
+            }
+        }
+    }
+
+    const followBtn = container.querySelector('#profileFollowBtnNative');
+    if (followBtn) {
+        const isFollowing = followBtn.classList.contains('following');
+        const isOwnProfile = followBtn.getAttribute('data-own') === 'true';
+        
+        if (isOwnProfile) {
+            const text = t('profile.edit');
+            if (text && text !== 'profile.edit') {
+                followBtn.innerHTML = '<i class="fas fa-pen"></i> ' + text;
+            }
+        } else if (isFollowing) {
+            const text = t('profile.unfollow');
+            if (text && text !== 'profile.unfollow') {
+                followBtn.innerHTML = '<i class="fas fa-check"></i> ' + text;
+            }
+        } else {
+            const text = t('profile.follow');
+            if (text && text !== 'profile.follow') {
+                followBtn.innerHTML = '<i class="fas fa-user-plus"></i> ' + text;
+            }
+        }
+    }
+
+    const noStories = container.querySelector('.profile-no-stories-native span');
+    if (noStories) {
+        const text = t('profile.noStories');
+        if (text && text !== 'profile.noStories') {
+            noStories.textContent = text;
+        }
+    }
+}
+
+// ============================================================
+// ACTUALIZAR UI DEL PERFIL NATIVO - CON SOPORTE PARA TODOS LOS TIPOS
 // ============================================================
 
 function updateProfileNativeUI(user, stories) {
@@ -397,40 +501,13 @@ function updateProfileNativeUI(user, stories) {
     let storiesHtml = '';
     if (stories && stories.length > 0) {
         const displayStories = stories.slice(0, 6);
-
-        const thumbnails = displayStories.map(story => {
-            if (story.mediaType === 'image' && story.mediaUrl) {
-                return `
-                    <div class="profile-story-thumb-native" onclick="window.openStoryFromProfileNative('${story.id}', '${user.id}')">
-                        <img src="${story.mediaUrl}" alt="Historia" loading="lazy" decoding="async" />
-                        <div class="thumb-overlay">
-                            <i class="fas fa-heart"></i> ${formatNumber(story.likes?.length || 0)}
-                        </div>
-                    </div>
-                `;
-            } else if (story.mediaType === 'text' && story.textContent) {
-                return `
-                    <div class="profile-story-thumb-native" onclick="window.openStoryFromProfileNative('${story.id}', '${user.id}')">
-                        <div class="text-thumb">${escapeHtml(story.textContent.substring(0, 20))}${story.textContent.length > 20 ? '...' : ''}</div>
-                    </div>
-                `;
-            } else {
-                return `
-                    <div class="profile-story-thumb-native" onclick="window.openStoryFromProfileNative('${story.id}', '${user.id}')">
-                        <div class="text-thumb">
-                            <i class="fas fa-file" style="font-size:14px;color:rgba(255,255,255,0.1);"></i>
-                        </div>
-                    </div>
-                `;
-            }
-        }).join('');
-
+        const thumbnails = displayStories.map(story => generateStoryThumbnail(story, user.id)).join('');
         storiesHtml = `<div class="profile-stories-grid-native">${thumbnails}</div>`;
 
         if (stories.length > 6) {
             storiesHtml += `
                 <div style="text-align:center;font-size:9px;color:rgba(255,255,255,0.15);padding:2px 0;">
-                    +${stories.length - 6} más
+                    +${stories.length - 6} ${t('profile.more') || 'más'}
                 </div>
             `;
         }
@@ -438,31 +515,35 @@ function updateProfileNativeUI(user, stories) {
         storiesHtml = `
             <div class="profile-no-stories-native">
                 <i class="fas fa-camera"></i>
-                <span>No hay historias</span>
+                <span>${t('profile.noStories') || 'No hay historias'}</span>
             </div>
         `;
     }
 
-    let followText = 'Seguir';
+    let followText = t('profile.follow') || 'Seguir';
     let followClass = 'profile-follow-btn-native';
     let followDisabled = false;
     let followIcon = '<i class="fas fa-user-plus"></i>';
     let followOnClick = `window.handleProfileFollowNative()`;
+    let dataOwn = 'false';
 
     if (isOwnProfile) {
-        followText = 'Editar perfil';
+        followText = t('profile.edit') || 'Editar perfil';
         followClass = 'profile-follow-btn-native';
         followDisabled = false;
         followIcon = '<i class="fas fa-pen"></i>';
         followOnClick = `window.openEditProfileFromNative()`;
+        dataOwn = 'true';
     } else if (isFollowing) {
-        followText = 'Siguiendo';
+        followText = t('profile.unfollow') || 'Siguiendo';
         followClass = 'profile-follow-btn-native following';
         followIcon = '<i class="fas fa-check"></i>';
+        dataOwn = 'false';
     } else if (hasPendingRequest) {
-        followText = 'Solicitud enviada';
+        followText = t('profile.requestSent') || 'Solicitud enviada';
         followClass = 'profile-follow-btn-native';
         followIcon = '<i class="fas fa-clock"></i>';
+        dataOwn = 'false';
     }
 
     const avatarUrl = user.avatar || getAvatar(user.fullName);
@@ -485,7 +566,7 @@ function updateProfileNativeUI(user, stories) {
                 <div class="profile-username-native">@${username}</div>
                 ${bio ? `<div class="profile-bio-native">${bio}</div>` : ''}
                 ${countryName ? `<div class="profile-country-native"><i class="fas fa-map-marker-alt"></i> ${countryName}</div>` : ''}
-                <button class="${followClass}" id="profileFollowBtnNative" ${followDisabled ? 'disabled' : ''} onclick="${followOnClick}">
+                <button class="${followClass}" id="profileFollowBtnNative" ${followDisabled ? 'disabled' : ''} onclick="${followOnClick}" data-own="${dataOwn}">
                     ${followIcon}
                     ${followText}
                 </button>
@@ -494,27 +575,29 @@ function updateProfileNativeUI(user, stories) {
             <div class="profile-stats-native">
                 <div class="stat" onclick="window.openFollowersFromNative('followers')" style="cursor:pointer;">
                     <span class="number">${formatNumber(followersCount)}</span>
-                    <span class="label">Seguidores</span>
+                    <span class="label">${t('profile.followers') || 'Seguidores'}</span>
                 </div>
                 <div class="stat" onclick="window.openFollowersFromNative('following')" style="cursor:pointer;">
                     <span class="number">${formatNumber(followingCount)}</span>
-                    <span class="label">Siguiendo</span>
+                    <span class="label">${t('profile.following') || 'Siguiendo'}</span>
                 </div>
                 <div class="stat">
                     <span class="number">${formatNumber(stories?.length || 0)}</span>
-                    <span class="label">Historias</span>
+                    <span class="label">${t('profile.stories') || 'Historias'}</span>
                 </div>
             </div>
 
             <div class="profile-stories-native">
                 <div class="section-title">
-                    <i class="fas fa-images"></i> Historias
+                    <i class="fas fa-images"></i> ${t('profile.stories') || 'Historias'}
                     <span style="font-size:9px;color:rgba(255,255,255,0.15);margin-left:auto;">${stories?.length || 0}</span>
                 </div>
                 ${storiesHtml}
             </div>
         </div>
     `;
+
+    setTimeout(translateProfileNativeUI, 50);
 }
 
 // ============================================================
@@ -526,7 +609,7 @@ window.handleProfileFollowNative = async function() {
 
     const token = getToken();
     if (!token) {
-        showToast('Inicia sesión para seguir', true);
+        showToast(t('error.unauthorized') || 'Inicia sesión para seguir', true);
         return;
     }
 
@@ -550,16 +633,19 @@ window.handleProfileFollowNative = async function() {
         if (res.ok) {
             if (data.status === 'following' || data.following) {
                 btn.classList.add('following');
-                btn.innerHTML = '<i class="fas fa-check"></i> Siguiendo';
-                showToast(`✅ Siguiendo a ${currentProfileData?.fullName}`);
+                btn.innerHTML = `<i class="fas fa-check"></i> ${t('profile.unfollow') || 'Siguiendo'}`;
+                btn.setAttribute('data-own', 'false');
+                showToast(`✅ ${t('profile.followed') || 'Siguiendo a'} ${currentProfileData?.fullName}`);
             } else if (data.status === 'pending_sent') {
                 btn.classList.remove('following');
-                btn.innerHTML = '<i class="fas fa-clock"></i> Solicitud enviada';
-                showToast(`📨 Solicitud enviada a ${currentProfileData?.fullName}`);
+                btn.innerHTML = `<i class="fas fa-clock"></i> ${t('profile.requestSent') || 'Solicitud enviada'}`;
+                btn.setAttribute('data-own', 'false');
+                showToast(`📨 ${t('profile.requestSentTo') || 'Solicitud enviada a'} ${currentProfileData?.fullName}`);
             } else {
                 btn.classList.remove('following');
-                btn.innerHTML = '<i class="fas fa-user-plus"></i> Seguir';
-                showToast('❌ Dejaste de seguir');
+                btn.innerHTML = `<i class="fas fa-user-plus"></i> ${t('profile.follow') || 'Seguir'}`;
+                btn.setAttribute('data-own', 'false');
+                showToast(`❌ ${t('profile.unfollowed') || 'Dejaste de seguir'}`);
             }
 
             const followersEl = document.querySelector('.profile-stats-native .stat:first-child .number');
@@ -571,11 +657,11 @@ window.handleProfileFollowNative = async function() {
 
             clearProfileCache(currentProfileUserId);
         } else {
-            showToast(data.error || 'Error al seguir', true);
+            showToast(data.error || t('error.general') || 'Error al seguir', true);
         }
     } catch (error) {
         console.error('Error following user:', error);
-        showToast('Error al seguir', true);
+        showToast(t('error.general') || 'Error al seguir', true);
     }
 };
 
@@ -591,29 +677,28 @@ window.openEditProfileFromNative = function() {
         if (typeof window.openEditProfileModal === 'function') {
             window.openEditProfileModal(currentProfileData);
         } else {
-            showToast('Error al abrir edición de perfil', true);
+            showToast(t('error.general') || 'Error al abrir edición de perfil', true);
         }
     });
 };
 
 // ============================================================
-// 🔥 ABRIR SEGUIDORES DESDE NATIVO - CORREGIDO
+// 🔥 ABRIR SEGUIDORES DESDE NATIVO
 // ============================================================
 
 window.openFollowersFromNative = function(filter) {
     if (!currentProfileUserId) {
-        showToast('Usuario no encontrado', true);
+        showToast(t('error.notFound') || 'Usuario no encontrado', true);
         return;
     }
 
     console.log(`📊 Abriendo ${filter} desde perfil nativo para: ${currentProfileUserId}`);
 
     import('./followers-modal.js').then(({ openFollowersModal }) => {
-        // 🔥 CORREGIDO: pasar fromNative = true (4to parámetro)
         openFollowersModal(currentProfileUserId, filter, true, true);
     }).catch((err) => {
         console.error('❌ Error cargando followers-modal:', err);
-        showToast('Error al abrir seguidores', true);
+        showToast(t('error.general') || 'Error al abrir seguidores', true);
     });
 };
 
@@ -653,5 +738,7 @@ export {
     updateProfileNativeUI,
     getVerificationBadgeNative,
     clearProfileCache,
-    preloadCurrentUserProfile
+    preloadCurrentUserProfile,
+    translateProfileNativeUI,
+    initI18nForProfileNative
 };

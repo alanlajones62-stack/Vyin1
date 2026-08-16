@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>Vyin · Mensajes</title>
+    <title>Vygora · Mensajes</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
@@ -16,6 +16,473 @@
     
     <!-- Estilos del chat -->
     <link rel="stylesheet" href="./chats.css">
+    
+    <style>
+        /* ============================================================
+           ESTILOS PARA MENSAJES CON MULTIMEDIA
+        ============================================================ */
+        .message-image {
+            max-width: 200px;
+            max-height: 200px;
+            border-radius: 12px;
+            margin-top: 4px;
+            cursor: pointer;
+            object-fit: cover;
+            border: 1px solid rgba(255,255,255,0.05);
+        }
+        .message-image:hover {
+            opacity: 0.9;
+        }
+        
+        .message-file {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            background: rgba(255,255,255,0.04);
+            border: 1px solid rgba(255,255,255,0.06);
+            border-radius: 10px;
+            padding: 10px 14px;
+            margin-top: 4px;
+            cursor: pointer;
+            transition: all 0.2s;
+            text-decoration: none;
+            color: rgba(255,255,255,0.8);
+            max-width: 220px;
+        }
+        .message-file:hover {
+            background: rgba(255,255,255,0.08);
+            border-color: rgba(192,132,252,0.2);
+        }
+        .message-file .file-icon {
+            font-size: 28px;
+            color: #c084fc;
+            flex-shrink: 0;
+        }
+        .message-file .file-info {
+            flex: 1;
+            min-width: 0;
+        }
+        .message-file .file-info .file-name {
+            font-size: 12px;
+            font-weight: 500;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .message-file .file-info .file-size {
+            font-size: 10px;
+            color: rgba(255,255,255,0.2);
+        }
+        .message-file .file-download {
+            color: rgba(255,255,255,0.15);
+            font-size: 14px;
+        }
+
+        /* ============================================================
+           BOTÓN DE SUBIR ARCHIVO
+        ============================================================ */
+        .messages-input-wrapper {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            padding: 8px 12px;
+            border-top: 1px solid rgba(255, 255, 255, 0.04);
+            background: rgba(10, 10, 26, 0.8);
+            backdrop-filter: blur(10px);
+        }
+        .messages-input-wrapper .attach-btn {
+            background: none;
+            border: none;
+            color: rgba(255,255,255,0.2);
+            font-size: 20px;
+            cursor: pointer;
+            padding: 6px;
+            border-radius: 50%;
+            transition: all 0.3s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 38px;
+            height: 38px;
+        }
+        .messages-input-wrapper .attach-btn:hover {
+            color: rgba(255,255,255,0.4);
+            background: rgba(255,255,255,0.05);
+        }
+        .messages-input-wrapper .attach-btn:active {
+            transform: scale(0.88);
+        }
+        .messages-input-wrapper .attach-menu {
+            display: none;
+            position: absolute;
+            bottom: 64px;
+            left: 12px;
+            background: rgba(20,20,35,0.95);
+            backdrop-filter: blur(20px);
+            border-radius: 14px;
+            border: 1px solid rgba(255,255,255,0.06);
+            padding: 8px;
+            box-shadow: 0 12px 48px rgba(0,0,0,0.5);
+            min-width: 160px;
+            z-index: 20;
+        }
+        .messages-input-wrapper .attach-menu.show {
+            display: block;
+            animation: slideUp 0.2s ease;
+        }
+        @keyframes slideUp {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .messages-input-wrapper .attach-menu button {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            background: none;
+            border: none;
+            color: rgba(255,255,255,0.7);
+            padding: 10px 14px;
+            border-radius: 10px;
+            cursor: pointer;
+            width: 100%;
+            font-family: inherit;
+            font-size: 13px;
+            transition: all 0.2s;
+        }
+        .messages-input-wrapper .attach-menu button:hover {
+            background: rgba(255,255,255,0.05);
+            color: #fff;
+        }
+        .messages-input-wrapper .attach-menu button i {
+            font-size: 18px;
+            width: 24px;
+            text-align: center;
+        }
+        .messages-input-wrapper .attach-menu button .icon-image { color: #34d399; }
+        .messages-input-wrapper .attach-menu button .icon-file { color: #60a5fa; }
+        .messages-input-wrapper .attach-menu button .icon-camera { color: #f472b6; }
+
+        .messages-input-wrapper .input-field {
+            flex: 1;
+            display: flex;
+            gap: 8px;
+            align-items: center;
+            background: rgba(255,255,255,0.04);
+            border: 1px solid rgba(255,255,255,0.06);
+            border-radius: 50px;
+            padding: 4px 4px 4px 16px;
+            transition: all 0.3s;
+        }
+        .messages-input-wrapper .input-field:focus-within {
+            border-color: rgba(192,132,252,0.2);
+            background: rgba(255,255,255,0.06);
+        }
+        .messages-input-wrapper .input-field input {
+            flex: 1;
+            background: transparent;
+            border: none;
+            padding: 8px 0;
+            color: #fff;
+            font-size: 14px;
+            outline: none;
+            font-family: inherit;
+            min-height: 34px;
+        }
+        .messages-input-wrapper .input-field input::placeholder {
+            color: rgba(255,255,255,0.15);
+        }
+        .messages-input-wrapper .input-field .send-btn {
+            background: linear-gradient(135deg, #c084fc, #db2777);
+            border: none;
+            border-radius: 50%;
+            width: 38px;
+            height: 38px;
+            color: #fff;
+            font-size: 15px;
+            cursor: pointer;
+            transition: all 0.3s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+        }
+        .messages-input-wrapper .input-field .send-btn:hover {
+            transform: scale(1.05);
+            box-shadow: 0 4px 20px rgba(192,132,252,0.3);
+        }
+        .messages-input-wrapper .input-field .send-btn:active {
+            transform: scale(0.92);
+        }
+        .messages-input-wrapper .input-field .send-btn:disabled {
+            opacity: 0.3;
+            cursor: not-allowed;
+            transform: none !important;
+        }
+
+        /* ============================================================
+           RESPONSIVE
+        ============================================================ */
+        @media (max-width: 480px) {
+            .message-image {
+                max-width: 160px;
+                max-height: 160px;
+            }
+            .message-file {
+                max-width: 180px;
+                padding: 8px 12px;
+            }
+            .message-file .file-icon {
+                font-size: 22px;
+            }
+            .messages-input-wrapper {
+                padding: 6px 10px;
+            }
+            .messages-input-wrapper .attach-btn {
+                width: 32px;
+                height: 32px;
+                font-size: 16px;
+            }
+            .messages-input-wrapper .input-field {
+                padding: 2px 2px 2px 12px;
+            }
+            .messages-input-wrapper .input-field input {
+                font-size: 13px;
+                padding: 6px 0;
+                min-height: 30px;
+            }
+            .messages-input-wrapper .input-field .send-btn {
+                width: 32px;
+                height: 32px;
+                font-size: 13px;
+            }
+            .messages-input-wrapper .attach-menu {
+                left: 6px;
+                bottom: 56px;
+                min-width: 140px;
+            }
+            .messages-input-wrapper .attach-menu button {
+                font-size: 12px;
+                padding: 8px 12px;
+            }
+        }
+
+        @media (max-width: 380px) {
+            .message-image {
+                max-width: 130px;
+                max-height: 130px;
+            }
+            .message-file {
+                max-width: 150px;
+                padding: 6px 10px;
+            }
+            .message-file .file-icon {
+                font-size: 18px;
+            }
+            .messages-input-wrapper .attach-btn {
+                width: 28px;
+                height: 28px;
+                font-size: 14px;
+            }
+            .messages-input-wrapper .input-field input {
+                font-size: 12px;
+                min-height: 26px;
+            }
+            .messages-input-wrapper .input-field .send-btn {
+                width: 28px;
+                height: 28px;
+                font-size: 12px;
+            }
+        }
+
+        @media (orientation: landscape) and (max-height: 500px) {
+            .messages-input-wrapper {
+                padding: 4px 8px;
+            }
+            .messages-input-wrapper .attach-btn {
+                width: 28px;
+                height: 28px;
+                font-size: 14px;
+            }
+            .messages-input-wrapper .input-field input {
+                font-size: 13px;
+                min-height: 26px;
+            }
+            .messages-input-wrapper .input-field .send-btn {
+                width: 30px;
+                height: 30px;
+                font-size: 13px;
+            }
+            .message-image {
+                max-width: 120px;
+                max-height: 120px;
+            }
+        }
+
+        .file-input-hidden {
+            display: none !important;
+        }
+
+        /* ============================================================
+           🔥 BOTÓN DE ARCHIVAR EN HEADER
+        ============================================================ */
+        .archive-chat-btn {
+            background: rgba(255, 255, 255, 0.05);
+            border: none;
+            width: 38px;
+            height: 38px;
+            border-radius: 50%;
+            color: rgba(255, 255, 255, 0.25);
+            font-size: 16px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.3s ease;
+            flex-shrink: 0;
+            margin-left: 4px;
+        }
+        .archive-chat-btn:hover {
+            color: rgba(255, 255, 255, 0.5);
+            background: rgba(255, 255, 255, 0.08);
+        }
+        .archive-chat-btn:active {
+            transform: scale(0.88);
+        }
+        .archive-chat-btn.is-archived {
+            color: #c084fc;
+            background: rgba(192, 132, 252, 0.12);
+            box-shadow: 0 0 20px rgba(192, 132, 252, 0.05);
+        }
+        .archive-chat-btn.is-archived:hover {
+            background: rgba(192, 132, 252, 0.18);
+        }
+
+        /* ============================================================
+           🔥 MENÚ CONTEXTUAL LONG PRESS
+        ============================================================ */
+        .long-press-menu {
+            position: fixed;
+            background: rgba(20, 20, 40, 0.96);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border-radius: 16px;
+            border: 1px solid rgba(255, 255, 255, 0.06);
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.6);
+            padding: 8px;
+            z-index: 1000;
+            min-width: 180px;
+            animation: menuSlideIn 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+            display: none;
+        }
+        .long-press-menu.show {
+            display: block;
+        }
+
+        @keyframes menuSlideIn {
+            0% {
+                opacity: 0;
+                transform: scale(0.92) translateY(4px);
+            }
+            100% {
+                opacity: 1;
+                transform: scale(1) translateY(0);
+            }
+        }
+
+        .long-press-menu .menu-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 10px 16px;
+            background: none;
+            border: none;
+            color: rgba(255, 255, 255, 0.7);
+            font-family: 'Inter', sans-serif;
+            font-size: 13px;
+            font-weight: 500;
+            cursor: pointer;
+            border-radius: 10px;
+            transition: all 0.2s ease;
+            width: 100%;
+            text-align: left;
+        }
+        .long-press-menu .menu-item:hover {
+            background: rgba(255, 255, 255, 0.05);
+            color: #fff;
+        }
+        .long-press-menu .menu-item:active {
+            transform: scale(0.96);
+        }
+        .long-press-menu .menu-item i {
+            font-size: 18px;
+            width: 24px;
+            text-align: center;
+        }
+        .long-press-menu .menu-item .icon-archive {
+            color: #c084fc;
+        }
+        .long-press-menu .menu-item .icon-unarchive {
+            color: #34d399;
+        }
+        .long-press-menu .menu-item .icon-delete {
+            color: #ff6b6b;
+        }
+        .long-press-menu .menu-divider {
+            height: 1px;
+            background: rgba(255, 255, 255, 0.04);
+            margin: 4px 8px;
+        }
+
+        .conversation-item.long-press-active {
+            background: rgba(192, 132, 252, 0.08);
+            border: 1px solid rgba(192, 132, 252, 0.1);
+            transform: scale(0.98);
+            transition: all 0.15s ease;
+        }
+
+        .conversation-item .archived-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            font-size: 9px;
+            color: rgba(255, 255, 255, 0.2);
+            background: rgba(255, 255, 255, 0.04);
+            padding: 1px 8px;
+            border-radius: 10px;
+            margin-left: 6px;
+        }
+        .conversation-item .archived-badge i {
+            font-size: 8px;
+        }
+
+        @media (max-width: 480px) {
+            .archive-chat-btn {
+                width: 32px;
+                height: 32px;
+                font-size: 14px;
+            }
+            .long-press-menu {
+                min-width: 150px;
+                padding: 6px;
+            }
+            .long-press-menu .menu-item {
+                padding: 8px 12px;
+                font-size: 12px;
+            }
+            .long-press-menu .menu-item i {
+                font-size: 16px;
+                width: 20px;
+            }
+        }
+
+        @media (max-width: 380px) {
+            .archive-chat-btn {
+                width: 28px;
+                height: 28px;
+                font-size: 12px;
+            }
+        }
+    </style>
 </head>
 <body>
 
@@ -28,7 +495,7 @@
             <i class="fas fa-arrow-left"></i>
         </button>
         <div class="title">
-            <i class="fas fa-comment-dots"></i> Mensajes
+            <i class="fas fa-comment-dots"></i> <span data-i18n="chat.title">Mensajes</span>
         </div>
         <div class="header-right">
         </div>
@@ -38,36 +505,39 @@
         <div class="conversations-panel" id="conversationsPanel">
             <div class="conversations-header">
                 <h2>
-                    <i class="fas fa-comment-dots"></i> Conversaciones
-                    <span class="subtitle">· Tus chats</span>
+                    <i class="fas fa-comment-dots"></i> <span data-i18n="chat.conversations">Conversaciones</span>
+                    <span class="subtitle">· <span data-i18n="chat.yourChats">Tus chats</span></span>
                 </h2>
             </div>
 
             <div class="chat-tabs">
                 <button class="chat-tab active" data-tab="active" onclick="switchChatTab('active')">
-                    <i class="fas fa-comment"></i> Activos
+                    <i class="fas fa-comment"></i> <span data-i18n="chat.active">Activos</span>
                 </button>
                 <button class="chat-tab" data-tab="pending" onclick="switchChatTab('pending')">
-                    <i class="fas fa-clock"></i> Pendientes
+                    <i class="fas fa-clock"></i> <span data-i18n="chat.pending">Pendientes</span>
                     <span class="tab-badge" id="pendingCount">0</span>
                 </button>
                 <button class="chat-tab" data-tab="archived" onclick="switchChatTab('archived')">
-                    <i class="fas fa-archive"></i> Archivados
+                    <i class="fas fa-archive"></i> <span data-i18n="chat.archived">Archivados</span>
                 </button>
             </div>
 
             <div class="search-conversations">
                 <i class="fas fa-search search-icon"></i>
-                <input type="text" id="searchConversations" placeholder="Buscar conversaciones..." />
+                <input type="text" id="searchConversations" data-i18n-placeholder="chat.searchPlaceholder" placeholder="Buscar conversaciones..." />
             </div>
             <div class="conversations-list" id="conversationsList">
                 <div class="loading-spinner">
-                    <i class="fas fa-spinner fa-pulse"></i> Cargando conversaciones...
+                    <i class="fas fa-spinner fa-pulse"></i> <span data-i18n="chat.loading">Cargando conversaciones...</span>
                 </div>
             </div>
         </div>
 
         <div class="messages-panel" id="messagesPanel">
+            <!-- ============================================================
+            🔥 HEADER DEL CHAT CON BOTÓN DE ARCHIVAR
+            ============================================================ -->
             <div class="messages-header" id="messagesHeader">
                 <button class="back-chat-btn" id="backChatBtn">
                     <i class="fas fa-arrow-left"></i>
@@ -77,28 +547,62 @@
                     <div class="messages-header-name" id="chatName">Usuario</div>
                     <div class="messages-header-status" id="chatStatus">
                         <span class="status-dot-small status-offline"></span>
-                        <span>Desconectado</span>
+                        <span id="chatStatusText" data-i18n="chat.offline">Desconectado</span>
                     </div>
                     <div class="typing-indicator" id="typingIndicator">
-                        <i class="fas fa-pencil-alt"></i> Escribiendo...
+                        <i class="fas fa-pencil-alt"></i> <span data-i18n="chat.typing">Escribiendo...</span>
                     </div>
                 </div>
+                <!-- 🔥 BOTÓN DE ARCHIVAR EN EL HEADER -->
+                <button class="archive-chat-btn" id="archiveChatBtn" title="Archivar conversación">
+                    <i class="fas fa-archive"></i>
+                </button>
             </div>
 
             <div class="messages-container" id="messagesContainer">
                 <div class="empty-state-chat">
                     <i class="fas fa-comment-dots"></i>
-                    <h3>No hay mensajes</h3>
-                    <p>Envía el primer mensaje</p>
+                    <h3 data-i18n="chat.noMessages">No hay mensajes</h3>
+                    <p data-i18n="chat.firstMessage">Envía el primer mensaje</p>
                 </div>
             </div>
 
-            <div class="messages-input">
-                <input type="text" id="messageInput" placeholder="Escribe un mensaje..." autocomplete="off" />
-                <button class="send-btn" id="sendBtn" onclick="sendMessage()">
-                    <i class="fas fa-paper-plane"></i>
+            <!-- ============================================================
+            🔥 INPUT MEJORADO CON BOTÓN DE SUBIR ARCHIVO
+            ============================================================ -->
+            <div class="messages-input-wrapper">
+                <button class="attach-btn" id="attachBtn" title="Adjuntar archivo">
+                    <i class="fas fa-paperclip"></i>
                 </button>
+
+                <!-- Menú de adjuntos -->
+                <div class="attach-menu" id="attachMenu">
+                    <button id="attachImageBtn">
+                        <i class="fas fa-image icon-image"></i>
+                        <span data-i18n="chat.attachImage">Imagen</span>
+                    </button>
+                    <button id="attachFileBtn">
+                        <i class="fas fa-file icon-file"></i>
+                        <span data-i18n="chat.attachFile">Archivo</span>
+                    </button>
+                    <button id="attachCameraBtn">
+                        <i class="fas fa-camera icon-camera"></i>
+                        <span data-i18n="chat.takePhoto">Tomar foto</span>
+                    </button>
+                </div>
+
+                <div class="input-field">
+                    <input type="text" id="messageInput" data-i18n-placeholder="chat.writeMessage" placeholder="Escribe un mensaje..." autocomplete="off" />
+                    <button class="send-btn" id="sendBtn" onclick="sendMessage()">
+                        <i class="fas fa-paper-plane"></i>
+                    </button>
+                </div>
             </div>
+
+            <!-- Inputs ocultos para subir archivos -->
+            <input type="file" id="fileInputImage" class="file-input-hidden" accept="image/*" multiple />
+            <input type="file" id="fileInputFile" class="file-input-hidden" accept="*/*" multiple />
+            <input type="file" id="fileInputCamera" class="file-input-hidden" accept="image/*" capture="environment" />
         </div>
     </div>
 

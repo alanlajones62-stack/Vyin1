@@ -23,10 +23,10 @@
     "pendingSent": [],
     "avatar": "https://ui-avatars.com/api/?name=Demo&background=a855f7&color=fff",
     "createdAt": "2026-07-03T23:50:22.538Z",
-    "lastSeen": "2026-08-09T01:11:28.277Z",
+    "lastSeen": "2026-08-16T05:50:10.126Z",
     "birthDate": "2000-01-01",
     "age": 24,
-    "language": "es",
+    "language": "en",
     "region": "south_america",
     "country": "EC",
     "countryName": "Ecuador",
@@ -48,7 +48,12 @@
     "suspensionReason": null,
     "suspendedAt": null,
     "verifiedAt": "2026-08-03T18:13:53.021Z",
-    "verifiedBadge": "verified"
+    "verifiedBadge": "verified",
+    "blocked": [],
+    "blockedBy": [],
+    "interests": [],
+    "firstLogin": true,
+    "interestPercentage": 0
   },
   {
     "id": "1783122699381",
@@ -87,7 +92,12 @@
     "suspended": false,
     "suspendedUntil": null,
     "suspensionReason": null,
-    "suspendedAt": null
+    "suspendedAt": null,
+    "blocked": [],
+    "blockedBy": [],
+    "interests": [],
+    "firstLogin": true,
+    "interestPercentage": 0
   },
   {
     "id": "1783122717761",
@@ -128,7 +138,12 @@
     "suspended": false,
     "suspendedUntil": null,
     "suspensionReason": null,
-    "suspendedAt": null
+    "suspendedAt": null,
+    "blocked": [],
+    "blockedBy": [],
+    "interests": [],
+    "firstLogin": true,
+    "interestPercentage": 0
   },
   {
     "id": "1783123153150",
@@ -167,7 +182,12 @@
     "suspended": false,
     "suspendedUntil": null,
     "suspensionReason": null,
-    "suspendedAt": null
+    "suspendedAt": null,
+    "blocked": [],
+    "blockedBy": [],
+    "interests": [],
+    "firstLogin": true,
+    "interestPercentage": 0
   },
   {
     "id": "1783124175103",
@@ -206,7 +226,12 @@
     "suspended": false,
     "suspendedUntil": null,
     "suspensionReason": null,
-    "suspendedAt": null
+    "suspendedAt": null,
+    "blocked": [],
+    "blockedBy": [],
+    "interests": [],
+    "firstLogin": true,
+    "interestPercentage": 0
   },
   {
     "id": "1783124781799",
@@ -245,7 +270,12 @@
     "suspended": false,
     "suspendedUntil": null,
     "suspensionReason": null,
-    "suspendedAt": null
+    "suspendedAt": null,
+    "blocked": [],
+    "blockedBy": [],
+    "interests": [],
+    "firstLogin": true,
+    "interestPercentage": 0
   },
   {
     "id": "1783124836198",
@@ -284,7 +314,12 @@
     "suspended": false,
     "suspendedUntil": null,
     "suspensionReason": null,
-    "suspendedAt": null
+    "suspendedAt": null,
+    "blocked": [],
+    "blockedBy": [],
+    "interests": [],
+    "firstLogin": true,
+    "interestPercentage": 0
   },
   {
     "id": "1783125915073",
@@ -325,7 +360,12 @@
     "suspended": false,
     "suspendedUntil": null,
     "suspensionReason": null,
-    "suspendedAt": null
+    "suspendedAt": null,
+    "blocked": [],
+    "blockedBy": [],
+    "interests": [],
+    "firstLogin": true,
+    "interestPercentage": 0
   },
   {
     "id": "1783179642841",
@@ -364,7 +404,12 @@
     "suspended": false,
     "suspendedUntil": null,
     "suspensionReason": null,
-    "suspendedAt": null
+    "suspendedAt": null,
+    "blocked": [],
+    "blockedBy": [],
+    "interests": [],
+    "firstLogin": true,
+    "interestPercentage": 0
   },
   {
     "id": "1783180039850",
@@ -403,7 +448,12 @@
     "suspended": false,
     "suspendedUntil": null,
     "suspensionReason": null,
-    "suspendedAt": null
+    "suspendedAt": null,
+    "blocked": [],
+    "blockedBy": [],
+    "interests": [],
+    "firstLogin": true,
+    "interestPercentage": 0
   },
   {
     "id": "1783180165001",
@@ -442,7 +492,12 @@
     "suspended": false,
     "suspendedUntil": null,
     "suspensionReason": null,
-    "suspendedAt": null
+    "suspendedAt": null,
+    "blocked": [],
+    "blockedBy": [],
+    "interests": [],
+    "firstLogin": true,
+    "interestPercentage": 0
   },
   {
     "id": "1783180394720",
@@ -481,7 +536,12 @@
     "suspended": false,
     "suspendedUntil": null,
     "suspensionReason": null,
-    "suspendedAt": null
+    "suspendedAt": null,
+    "blocked": [],
+    "blockedBy": [],
+    "interests": [],
+    "firstLogin": true,
+    "interestPercentage": 0
   },
   {
     "id": "1783181162973",
@@ -520,7 +580,12 @@
     "suspended": false,
     "suspendedUntil": null,
     "suspensionReason": null,
-    "suspendedAt": null
+    "suspendedAt": null,
+    "blocked": [],
+    "blockedBy": [],
+    "interests": [],
+    "firstLogin": true,
+    "interestPercentage": 0
   },
   {
     "id": "1783181742306",
@@ -559,7 +624,12 @@
     "suspended": false,
     "suspendedUntil": null,
     "suspensionReason": null,
-    "suspendedAt": null
+    "suspendedAt": null,
+    "blocked": [],
+    "blockedBy": [],
+    "interests": [],
+    "firstLogin": true,
+    "interestPercentage": 0
   },
   {
     "id": "1783181905378",
@@ -598,7 +668,12 @@
     "suspended": false,
     "suspendedUntil": null,
     "suspensionReason": null,
-    "suspendedAt": null
+    "suspendedAt": null,
+    "blocked": [],
+    "blockedBy": [],
+    "interests": [],
+    "firstLogin": true,
+    "interestPercentage": 0
   },
   {
     "id": "1783217356848",
@@ -637,7 +712,12 @@
     "suspended": false,
     "suspendedUntil": null,
     "suspensionReason": null,
-    "suspendedAt": null
+    "suspendedAt": null,
+    "blocked": [],
+    "blockedBy": [],
+    "interests": [],
+    "firstLogin": true,
+    "interestPercentage": 0
   },
   {
     "id": "1783217379059",
@@ -678,7 +758,12 @@
     "suspended": false,
     "suspendedUntil": null,
     "suspensionReason": null,
-    "suspendedAt": null
+    "suspendedAt": null,
+    "blocked": [],
+    "blockedBy": [],
+    "interests": [],
+    "firstLogin": true,
+    "interestPercentage": 0
   },
   {
     "id": "1783222433818",
@@ -717,7 +802,12 @@
     "suspended": false,
     "suspendedUntil": null,
     "suspensionReason": null,
-    "suspendedAt": null
+    "suspendedAt": null,
+    "blocked": [],
+    "blockedBy": [],
+    "interests": [],
+    "firstLogin": true,
+    "interestPercentage": 0
   },
   {
     "id": "1783224198455",
@@ -756,7 +846,12 @@
     "suspended": false,
     "suspendedUntil": null,
     "suspensionReason": null,
-    "suspendedAt": null
+    "suspendedAt": null,
+    "blocked": [],
+    "blockedBy": [],
+    "interests": [],
+    "firstLogin": true,
+    "interestPercentage": 0
   },
   {
     "id": "1783370679935",
@@ -800,7 +895,12 @@
     "suspensionReason": null,
     "suspendedAt": null,
     "verifiedAt": "2026-08-03T18:13:53.028Z",
-    "verifiedBadge": "verified"
+    "verifiedBadge": "verified",
+    "blocked": [],
+    "blockedBy": [],
+    "interests": [],
+    "firstLogin": true,
+    "interestPercentage": 0
   },
   {
     "id": "1783371502790",
@@ -839,7 +939,12 @@
     "suspended": false,
     "suspendedUntil": null,
     "suspensionReason": null,
-    "suspendedAt": null
+    "suspendedAt": null,
+    "blocked": [],
+    "blockedBy": [],
+    "interests": [],
+    "firstLogin": true,
+    "interestPercentage": 0
   },
   {
     "id": "1783376054773",
@@ -878,7 +983,12 @@
     "suspended": false,
     "suspendedUntil": null,
     "suspensionReason": null,
-    "suspendedAt": null
+    "suspendedAt": null,
+    "blocked": [],
+    "blockedBy": [],
+    "interests": [],
+    "firstLogin": true,
+    "interestPercentage": 0
   },
   {
     "id": "1783376829851",
@@ -917,7 +1027,12 @@
     "suspended": false,
     "suspendedUntil": null,
     "suspensionReason": null,
-    "suspendedAt": null
+    "suspendedAt": null,
+    "blocked": [],
+    "blockedBy": [],
+    "interests": [],
+    "firstLogin": true,
+    "interestPercentage": 0
   },
   {
     "id": "1783447967543",
@@ -956,7 +1071,12 @@
     "suspended": false,
     "suspendedUntil": null,
     "suspensionReason": null,
-    "suspendedAt": null
+    "suspendedAt": null,
+    "blocked": [],
+    "blockedBy": [],
+    "interests": [],
+    "firstLogin": true,
+    "interestPercentage": 0
   },
   {
     "id": "1784437337959",
@@ -995,7 +1115,12 @@
     "suspended": false,
     "suspendedUntil": null,
     "suspensionReason": null,
-    "suspendedAt": null
+    "suspendedAt": null,
+    "blocked": [],
+    "blockedBy": [],
+    "interests": [],
+    "firstLogin": true,
+    "interestPercentage": 0
   },
   {
     "id": "1784437546794",
@@ -1044,7 +1169,12 @@
     "suspended": false,
     "suspendedUntil": null,
     "suspensionReason": null,
-    "suspendedAt": null
+    "suspendedAt": null,
+    "blocked": [],
+    "blockedBy": [],
+    "interests": [],
+    "firstLogin": true,
+    "interestPercentage": 0
   },
   {
     "id": "1785472532136",
@@ -1100,7 +1230,12 @@
     "suspended": false,
     "suspendedUntil": null,
     "suspensionReason": null,
-    "suspendedAt": null
+    "suspendedAt": null,
+    "blocked": [],
+    "blockedBy": [],
+    "interests": [],
+    "firstLogin": true,
+    "interestPercentage": 0
   },
   {
     "id": "1785544079975",
@@ -1142,7 +1277,12 @@
     "suspended": false,
     "suspendedUntil": null,
     "suspensionReason": null,
-    "suspendedAt": null
+    "suspendedAt": null,
+    "blocked": [],
+    "blockedBy": [],
+    "interests": [],
+    "firstLogin": true,
+    "interestPercentage": 0
   },
   {
     "id": "1785774793742",
@@ -1181,7 +1321,12 @@
     "suspended": false,
     "suspendedUntil": null,
     "suspensionReason": null,
-    "suspendedAt": null
+    "suspendedAt": null,
+    "blocked": [],
+    "blockedBy": [],
+    "interests": [],
+    "firstLogin": true,
+    "interestPercentage": 0
   },
   {
     "id": "1786152373675",
@@ -1199,7 +1344,7 @@
     "pendingSent": [],
     "avatar": "https://ui-avatars.com/api/?name=Admin%20Test&background=a855f7&color=fff",
     "createdAt": "2026-08-08T01:26:13.675Z",
-    "lastSeen": "2026-08-09T01:42:51.622Z",
+    "lastSeen": "2026-08-14T03:04:21.228Z",
     "birthDate": "2012-10-01",
     "age": 13,
     "language": "en",
@@ -1222,7 +1367,19 @@
     "suspended": false,
     "suspendedUntil": null,
     "suspensionReason": null,
-    "suspendedAt": null
+    "suspendedAt": null,
+    "blocked": [],
+    "blockedBy": [],
+    "interests": [
+      "animals",
+      "art",
+      "business",
+      "education",
+      "nature",
+      "music"
+    ],
+    "firstLogin": false,
+    "interestPercentage": 20
   },
   {
     "id": "1786155839479",
@@ -1261,7 +1418,12 @@
     "suspended": false,
     "suspendedUntil": null,
     "suspensionReason": null,
-    "suspendedAt": null
+    "suspendedAt": null,
+    "blocked": [],
+    "blockedBy": [],
+    "interests": [],
+    "firstLogin": true,
+    "interestPercentage": 0
   },
   {
     "id": "1786157597057",
@@ -1302,7 +1464,12 @@
     "suspended": false,
     "suspendedUntil": null,
     "suspensionReason": null,
-    "suspendedAt": null
+    "suspendedAt": null,
+    "blocked": [],
+    "blockedBy": [],
+    "interests": [],
+    "firstLogin": true,
+    "interestPercentage": 0
   },
   {
     "id": "1786237883372",
@@ -1318,10 +1485,10 @@
     "pendingSent": [],
     "avatar": "https://ui-avatars.com/api/?name=Alan%20Lajones%20Aparicio&background=a855f7&color=fff",
     "createdAt": "2026-08-09T01:11:23.372Z",
-    "lastSeen": "2026-08-09T02:17:44.115Z",
+    "lastSeen": "2026-08-16T01:12:59.713Z",
     "birthDate": "2013-01-01",
     "age": 13,
-    "language": "es",
+    "language": "en",
     "region": "south_america",
     "country": "EC",
     "countryName": "Ecuador",
@@ -1341,6 +1508,122 @@
     "suspended": false,
     "suspendedUntil": null,
     "suspensionReason": null,
-    "suspendedAt": null
+    "suspendedAt": null,
+    "blocked": [],
+    "blockedBy": [],
+    "interests": [
+      "animals",
+      "art",
+      "business",
+      "education",
+      "food",
+      "music"
+    ],
+    "firstLogin": false,
+    "interestPercentage": 20
+  },
+  {
+    "id": "1786667275566",
+    "username": "AAAAA",
+    "email": "alansito1@gmail.com",
+    "password": "$2a$10$yCrhn1VkvYO/KUkzy9Iisend/BdcPFL8w/u1CvE6swvoqCgmoTPaW",
+    "fullName": "AAAAA",
+    "bio": "",
+    "privacy": "public",
+    "followers": [],
+    "following": [],
+    "pendingRequests": [],
+    "pendingSent": [],
+    "avatar": "https://ui-avatars.com/api/?name=AAAAA&background=a855f7&color=fff",
+    "createdAt": "2026-08-14T00:27:55.566Z",
+    "lastSeen": "2026-08-16T05:11:16.545Z",
+    "birthDate": "2010-01-08",
+    "age": 16,
+    "language": "es",
+    "region": "south_america",
+    "country": "EC",
+    "countryName": "Ecuador",
+    "timezone": "America/Guayaquil",
+    "role": "user",
+    "interests": [
+      "animals",
+      "art",
+      "business",
+      "education",
+      "fashion",
+      "fitness"
+    ],
+    "firstLogin": false,
+    "interestPercentage": 20,
+    "feedPreferences": {
+      "countryWeight": 34,
+      "regionWeight": 27,
+      "nearbyRegionsWeight": 23,
+      "farRegionsWeight": 5,
+      "followingWeight": 11,
+      "interestWeight": 15
+    },
+    "vyinPayNumber": "VP-275566-PAFM",
+    "isVerified": false,
+    "accountType": "personal",
+    "businessInfo": null,
+    "suspended": false,
+    "suspendedUntil": null,
+    "suspensionReason": null,
+    "suspendedAt": null,
+    "blocked": [],
+    "blockedBy": []
+  },
+  {
+    "id": "1786842673674",
+    "username": "1admin_sj681e",
+    "email": "1admin_hezu56@test.com",
+    "password": "$2a$10$UQ47AObhMinliYNRxbTXtOyCIfrM9UuQTHbOJRXpJT1QUM18sZgPy",
+    "fullName": "Admin Test1",
+    "bio": "",
+    "privacy": "public",
+    "followers": [],
+    "following": [],
+    "pendingRequests": [],
+    "pendingSent": [],
+    "avatar": "https://ui-avatars.com/api/?name=Admin%20Test1&background=a855f7&color=fff",
+    "createdAt": "2026-08-16T01:11:13.675Z",
+    "lastSeen": "2026-08-16T03:26:13.613Z",
+    "birthDate": "2013-01-01",
+    "age": 13,
+    "language": "es",
+    "region": "south_america",
+    "country": "EC",
+    "countryName": "Ecuador",
+    "timezone": "America/Guayaquil",
+    "role": "user",
+    "interests": [
+      "animals",
+      "art",
+      "business",
+      "education",
+      "food",
+      "music"
+    ],
+    "firstLogin": false,
+    "interestPercentage": 20,
+    "feedPreferences": {
+      "countryWeight": 34,
+      "regionWeight": 27,
+      "nearbyRegionsWeight": 23,
+      "farRegionsWeight": 5,
+      "followingWeight": 11,
+      "interestWeight": 15
+    },
+    "vyinPayNumber": "VP-673672-UJRC",
+    "isVerified": false,
+    "accountType": "personal",
+    "businessInfo": null,
+    "suspended": false,
+    "suspendedUntil": null,
+    "suspensionReason": null,
+    "suspendedAt": null,
+    "blocked": [],
+    "blockedBy": []
   }
 ]

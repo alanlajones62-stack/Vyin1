@@ -1,9 +1,15 @@
 // ============================================================
 // story-creator-modal.js - VERSIÓN COMPLETA CORREGIDA
-// (CON SEPARACIÓN MEJORADA ENTRE DESCRIPCIÓN Y BOTONES)
+// 🔥 DISEÑO MEJORADO: Sin duplicación, limpio y moderno
+// 🔥 INTEGRADO CON i18n PARA TRADUCCIÓN DE INTERFAZ
+// 🔥 MEJORADO: Calidad de cámara, zoom, flash
+// 🔥 NUEVO: Soporte para encuestas (survey-modal superpuesto)
+// 🔥 CORREGIDO: Flujo de texto (editar en lugar de volver a cámara)
 // ============================================================
 
 import { getToken, getCurrentUser, showToast } from './auth.js';
+import { t, onLocaleChange, translateAll } from './i18n.js';
+import { openSurveyModal, closeSurveyModal } from './survey-modal.js';
 
 const API_URL = window.location.origin;
 
@@ -29,6 +35,11 @@ let captureMode = 'video';
 let isPublishing = false;
 let currentStep = 'camera';
 let audioStreamForRecording = null;
+let localeUnsubscribe = null;
+let zoomLevel = 1;
+let flashEnabled = false;
+let torchSupported = false;
+let savedTextContent = '';
 
 // ============================================================
 // PALETA DE COLORES
@@ -53,13 +64,86 @@ function safeGetElement(id) {
 }
 
 // ============================================================
+// 🔥 ESCUCHAR CAMBIOS DE IDIOMA
+// ============================================================
+
+function initI18nForCreator() {
+    if (localeUnsubscribe) {
+        localeUnsubscribe();
+    }
+    localeUnsubscribe = onLocaleChange(() => {
+        if (isCreatorOpen) translateCreatorUI();
+    });
+}
+
+// ============================================================
+// 🔥 TRADUCIR UI DEL CREADOR
+// ============================================================
+
+function translateCreatorUI() {
+    const overlay = document.getElementById('creatorOverlay');
+    if (!overlay || !overlay.classList.contains('active')) return;
+    
+    console.log('🌐 Traduciendo UI del creador...');
+    
+    // Modo selector - SOLO Video y Foto
+    const modeBtns = overlay.querySelectorAll('.mode-btn span');
+    const modeLabels = [
+        t('story.video') || 'Video',
+        t('story.photo') || 'Foto'
+    ];
+    modeBtns.forEach((btn, index) => {
+        if (index < modeLabels.length) btn.textContent = modeLabels[index];
+    });
+    
+    // Botones barra inferior
+    const btnMap = {
+        '.btn-retake span': t('action.retake') || 'Rehacer',
+        '.btn-use span': t('action.use') || 'Usar',
+        '.btn-edit span': t('action.edit') || 'Editar',
+        '.btn-next-preview span': t('action.confirm') || 'Confirmar',
+        '.btn-gallery span': t('story.gallery') || 'Galería',
+        '.btn-text span': t('story.text') || 'Texto',
+        '.btn-survey span': t('survey.poll') || 'Encuesta'
+    };
+    Object.entries(btnMap).forEach(([selector, text]) => {
+        const el = overlay.querySelector(selector);
+        if (el) el.textContent = text;
+    });
+    
+    // Placeholders
+    const captionInput = overlay.querySelector('#creatorCaption');
+    if (captionInput) captionInput.placeholder = t('story.captionPlaceholder') || 'Escribe una descripción...';
+    
+    const textInput = overlay.querySelector('#textContent');
+    if (textInput) textInput.placeholder = t('story.textPlaceholder') || 'Escribe algo...';
+    
+    // Botón publicar
+    const publishBtn = overlay.querySelector('#publishBtn span');
+    if (publishBtn) publishBtn.textContent = t('action.publish') || 'Publicar';
+    
+    // Subtítulos
+    const subtitlesText = overlay.querySelector('#subtitlesText');
+    if (subtitlesText) {
+        const current = subtitlesText.textContent;
+        if (current.includes('Generando') || current.includes('generando')) {
+            subtitlesText.textContent = t('story.generatingSubtitles') || 'Generando subtítulos...';
+        } else if (current.includes('generados')) {
+            subtitlesText.textContent = t('story.subtitlesGenerated') || '✅ Subtítulos generados correctamente';
+        }
+    }
+    
+    console.log('✅ UI del creador traducida');
+}
+
+// ============================================================
 // ABRIR / CERRAR
 // ============================================================
 
 export async function openCreator() {
     const token = getToken();
     if (!token) {
-        showToast('Inicia sesión para publicar', true);
+        showToast(t('error.unauthorized') || 'Inicia sesión para publicar', true);
         return;
     }
 
@@ -73,6 +157,9 @@ export async function openCreator() {
     captureMode = 'video';
     isPublishing = false;
     currentStep = 'camera';
+    zoomLevel = 1;
+    flashEnabled = false;
+    savedTextContent = '';
 
     const overlay = safeGetElement('creatorOverlay');
     if (!overlay) createCreatorHTML();
@@ -82,6 +169,10 @@ export async function openCreator() {
     
     document.body.style.overflow = 'hidden';
     resetCreatorState();
+    
+    initI18nForCreator();
+    setTimeout(translateCreatorUI, 100);
+    
     await startCamera();
 }
 
@@ -104,6 +195,11 @@ export function closeCreator() {
     
     document.body.style.overflow = '';
     stopCamera();
+    
+    if (localeUnsubscribe) {
+        localeUnsubscribe();
+        localeUnsubscribe = null;
+    }
 }
 
 // ============================================================
@@ -117,6 +213,9 @@ function resetCreatorState() {
     processedVideoData = null;
     isRecording = false;
     recordingSeconds = 0;
+    zoomLevel = 1;
+    flashEnabled = false;
+    savedTextContent = '';
 
     const preview = safeGetElement('creatorPreview');
     if (preview) {
@@ -141,15 +240,21 @@ function resetCreatorState() {
     const publishBtn = safeGetElement('publishBtn');
     if (publishBtn) {
         publishBtn.disabled = true;
-        publishBtn.textContent = 'Publicar';
+        publishBtn.innerHTML = `<span>${t('action.publish') || 'Publicar'}</span> <i class="fas fa-arrow-right"></i>`;
     }
 
     const caption = safeGetElement('creatorCaption');
     if (caption) caption.value = '';
+    
+    const flashBtn = safeGetElement('flashBtn');
+    if (flashBtn) {
+        flashBtn.classList.remove('active');
+        flashBtn.innerHTML = '<i class="fas fa-bolt"></i>';
+    }
 }
 
 // ============================================================
-// CREAR HTML
+// CREAR HTML - DISEÑO MEJORADO SIN DUPLICACIÓN
 // ============================================================
 
 function createCreatorHTML() {
@@ -162,7 +267,7 @@ function createCreatorHTML() {
             <div class="creator-preview" id="creatorPreview">
                 <div class="camera-placeholder">
                     <i class="fas fa-camera"></i>
-                    <span>Iniciando cámara...</span>
+                    <span>${t('story.startingCamera') || 'Iniciando cámara...'}</span>
                 </div>
             </div>
 
@@ -171,28 +276,43 @@ function createCreatorHTML() {
                 <button class="btn-close" onclick="window.closeCreator()">
                     <i class="fas fa-chevron-down"></i>
                 </button>
+                <div class="top-controls-center">
+                    <span class="quality-indicator" id="qualityIndicator">
+                        <i class="fas fa-hdmi"></i> HD
+                    </span>
+                </div>
                 <button class="btn-next" id="publishBtn" disabled onclick="window.publishStory()">
-                    <span>Publicar</span>
+                    <span>${t('action.publish') || 'Publicar'}</span>
                     <i class="fas fa-arrow-right"></i>
                 </button>
             </div>
 
-            <!-- MODE SELECTOR -->
+            <!-- MODE SELECTOR - SOLO Video y Foto -->
             <div class="mode-selector" id="modeSelector">
                 <button class="mode-btn active" data-mode="video">
                     <i class="fas fa-video"></i>
-                    <span>Video</span>
+                    <span>${t('story.video') || 'Video'}</span>
                 </button>
                 <button class="mode-btn" data-mode="photo">
                     <i class="fas fa-camera"></i>
-                    <span>Foto</span>
+                    <span>${t('story.photo') || 'Foto'}</span>
                 </button>
             </div>
 
             <!-- FLIP CAMERA -->
-            <button class="btn-flip-camera" id="flipCameraBtn" title="Girar cámara">
+            <button class="btn-flip-camera" id="flipCameraBtn" title="${t('story.flipCamera') || 'Girar cámara'}">
                 <i class="fas fa-sync-alt"></i>
             </button>
+
+            <!-- FLASH BUTTON -->
+            <button class="btn-flash" id="flashBtn" title="${t('story.flash') || 'Flash'}">
+                <i class="fas fa-bolt"></i>
+            </button>
+
+            <!-- ZOOM INDICATOR -->
+            <div class="zoom-indicator" id="zoomIndicator">
+                <span id="zoomLevel">1.0x</span>
+            </div>
 
             <!-- RECORDING INDICATOR -->
             <div class="recording-indicator" id="recordingIndicator">
@@ -204,11 +324,11 @@ function createCreatorHTML() {
             <div class="capture-actions" id="captureActions">
                 <button class="btn-retake" onclick="window.retakeMedia()">
                     <i class="fas fa-undo"></i>
-                    <span>Rehacer</span>
+                    <span>${t('action.retake') || 'Rehacer'}</span>
                 </button>
                 <button class="btn-use" onclick="window.useMedia()">
                     <i class="fas fa-check"></i>
-                    <span>Usar</span>
+                    <span>${t('action.use') || 'Usar'}</span>
                 </button>
             </div>
 
@@ -216,11 +336,11 @@ function createCreatorHTML() {
             <div class="preview-actions" id="previewActions">
                 <button class="btn-edit" onclick="window.editMedia()">
                     <i class="fas fa-pen"></i>
-                    <span>Editar</span>
+                    <span>${t('action.edit') || 'Editar'}</span>
                 </button>
                 <button class="btn-next-preview" onclick="window.confirmMedia()">
                     <i class="fas fa-check"></i>
-                    <span>Confirmar</span>
+                    <span>${t('action.confirm') || 'Confirmar'}</span>
                 </button>
             </div>
 
@@ -230,7 +350,7 @@ function createCreatorHTML() {
                     <i class="fas fa-closed-captioning"></i>
                 </div>
                 <div class="subtitles-text">
-                    <span id="subtitlesText">Generando subtítulos...</span>
+                    <span id="subtitlesText">${t('story.generatingSubtitles') || 'Generando subtítulos...'}</span>
                 </div>
                 <button class="subtitles-close" onclick="window.closeSubtitlesStatus()">
                     <i class="fas fa-times"></i>
@@ -249,13 +369,15 @@ function createCreatorHTML() {
 
             <!-- TEXT EDITOR -->
             <div class="text-editor-container" id="textEditorContainer">
-                <textarea id="textContent" placeholder="Escribe algo..." maxlength="1000"></textarea>
+                <textarea id="textContent" placeholder="${t('story.textPlaceholder') || 'Escribe algo...'}" maxlength="1000"></textarea>
                 <div class="text-editor-tools">
                     <button class="btn-back-camera" onclick="window.backToCamera()">
                         <i class="fas fa-arrow-left"></i>
+                        ${t('action.back') || 'Volver'}
                     </button>
                     <button class="btn-confirm-text" onclick="window.confirmText()">
                         <i class="fas fa-check"></i>
+                        ${t('action.confirm') || 'Confirmar'}
                     </button>
                 </div>
             </div>
@@ -264,16 +386,16 @@ function createCreatorHTML() {
             <div class="input-area" id="inputArea">
                 <div class="input-wrapper">
                     <i class="fas fa-pencil-alt"></i>
-                    <input type="text" id="creatorCaption" placeholder="Escribe una descripción..." maxlength="220" />
+                    <input type="text" id="creatorCaption" placeholder="${t('story.captionPlaceholder') || 'Escribe una descripción...'}" maxlength="220" />
                     <span class="char-counter" id="charCounter">0/220</span>
                 </div>
             </div>
 
-            <!-- BOTTOM CONTROLS -->
+            <!-- BOTTOM CONTROLS - GALERÍA | GRABAR | TEXTO | ENCUESTA -->
             <div class="bottom-controls" id="bottomControls">
                 <button class="btn-gallery" onclick="window.openGallery()">
                     <i class="fas fa-image"></i>
-                    <span>Galería</span>
+                    <span>${t('story.gallery') || 'Galería'}</span>
                 </button>
 
                 <button class="btn-capture" id="captureBtn">
@@ -284,7 +406,12 @@ function createCreatorHTML() {
 
                 <button class="btn-text" onclick="window.createTextStory()">
                     <i class="fas fa-font"></i>
-                    <span>Texto</span>
+                    <span>${t('story.text') || 'Texto'}</span>
+                </button>
+
+                <button class="btn-survey" onclick="window.openSurveyModeFromCreator()">
+                    <i class="fas fa-chart-pie"></i>
+                    <span>${t('survey.poll') || 'Encuesta'}</span>
                 </button>
             </div>
 
@@ -317,13 +444,15 @@ function setupCreatorEvents() {
     document.querySelectorAll('.mode-btn').forEach(btn => {
         btn.addEventListener('click', () => {
             if (mediaType === 'image' || mediaType === 'video') {
-                showToast('Ya tienes un medio capturado', true);
+                showToast(t('story.alreadyCaptured') || 'Ya tienes un medio capturado', true);
                 return;
             }
             document.querySelectorAll('.mode-btn').forEach(b => b.classList.remove('active'));
             btn.classList.add('active');
             captureMode = btn.dataset.mode;
             if (isRecording) stopRecording();
+            updateQualityIndicator();
+            showCamera();
         });
     });
 
@@ -332,8 +461,23 @@ function setupCreatorEvents() {
         if (cameraStream && !mediaType) {
             flipCamera();
         } else {
-            showToast('No hay cámara activa', true);
+            showToast(t('story.noCamera') || 'No hay cámara activa', true);
         }
+    });
+
+    const flashBtn = safeGetElement('flashBtn');
+    flashBtn?.addEventListener('click', toggleFlash);
+
+    const preview = safeGetElement('creatorPreview');
+    preview?.addEventListener('touchmove', (e) => {
+        if (e.touches.length === 2 && cameraStream && !mediaType) {
+            e.preventDefault();
+            handlePinchZoom(e);
+        }
+    }, { passive: false });
+
+    preview?.addEventListener('dblclick', () => {
+        if (cameraStream && !mediaType) resetZoom();
     });
 
     const captionInput = safeGetElement('creatorCaption');
@@ -370,6 +514,151 @@ function setupCreatorEvents() {
 }
 
 // ============================================================
+// 🔥 ABRIR ENCUESTA DESDE BOTÓN INFERIOR (MODAL SUPERPUESTO)
+// ============================================================
+
+window.openSurveyModeFromCreator = function() {
+    if (mediaType === 'image' || mediaType === 'video') {
+        showToast(t('story.alreadyCaptured') || 'Ya tienes un medio capturado', true);
+        return;
+    }
+    
+    // 🔥 ABRIR MODAL DE ENCUESTA SUPERPUESTO
+    openSurveyModal(() => {
+        // Callback cuando se publique
+        console.log('📊 Encuesta publicada');
+        // Cerrar el creator también
+        closeCreator();
+    });
+};
+
+// ============================================================
+// ACTUALIZAR INDICADOR DE CALIDAD
+// ============================================================
+
+function updateQualityIndicator() {
+    const indicator = safeGetElement('qualityIndicator');
+    if (!indicator) return;
+    const isBackCamera = facingMode === 'environment';
+    const quality = isBackCamera ? 'HD' : 'HD';
+    indicator.innerHTML = `<i class="fas fa-camera"></i> ${quality}`;
+}
+
+// ============================================================
+// 🔥 MANEJAR ZOOM CON PINCH
+// ============================================================
+
+let initialPinchDistance = 0;
+let initialZoom = 1;
+
+function handlePinchZoom(e) {
+    const touch1 = e.touches[0];
+    const touch2 = e.touches[1];
+    
+    const dx = touch1.clientX - touch2.clientX;
+    const dy = touch1.clientY - touch2.clientY;
+    const distance = Math.sqrt(dx * dx + dy * dy);
+    
+    if (initialPinchDistance === 0) {
+        initialPinchDistance = distance;
+        initialZoom = zoomLevel;
+        return;
+    }
+    
+    const scale = distance / initialPinchDistance;
+    let newZoom = initialZoom * scale;
+    newZoom = Math.max(1, Math.min(6, newZoom));
+    applyZoom(newZoom);
+}
+
+function applyZoom(level) {
+    zoomLevel = Math.round(level * 10) / 10;
+    
+    if (cameraStream) {
+        const track = cameraStream.getVideoTracks()[0];
+        if (track && track.getCapabilities && track.getCapabilities().zoom) {
+            const capabilities = track.getCapabilities();
+            const maxZoom = capabilities.zoom.max || 6;
+            const minZoom = capabilities.zoom.min || 1;
+            const zoomValue = Math.min(maxZoom, Math.max(minZoom, zoomLevel));
+            try {
+                track.applyConstraints({
+                    advanced: [{ zoom: zoomValue }]
+                });
+            } catch (e) {
+                console.warn('Zoom no soportado:', e);
+            }
+        }
+    }
+    
+    const zoomIndicator = safeGetElement('zoomLevel');
+    if (zoomIndicator) {
+        zoomIndicator.textContent = `${zoomLevel.toFixed(1)}x`;
+    }
+    
+    const zoomContainer = safeGetElement('zoomIndicator');
+    if (zoomContainer) {
+        if (zoomLevel > 1) {
+            zoomContainer.style.display = 'flex';
+        } else {
+            setTimeout(() => {
+                if (zoomLevel <= 1) zoomContainer.style.display = 'none';
+            }, 1500);
+        }
+    }
+}
+
+function resetZoom() {
+    applyZoom(1);
+    initialPinchDistance = 0;
+}
+
+// ============================================================
+// 🔥 MANEJAR FLASH
+// ============================================================
+
+async function toggleFlash() {
+    if (!cameraStream) {
+        showToast(t('story.noCamera') || 'No hay cámara activa', true);
+        return;
+    }
+
+    const track = cameraStream.getVideoTracks()[0];
+    if (!track) return;
+
+    try {
+        const capabilities = track.getCapabilities();
+        if (!capabilities.torch) {
+            showToast(t('story.flashNotSupported') || 'Flash no soportado', true);
+            return;
+        }
+
+        flashEnabled = !flashEnabled;
+        
+        await track.applyConstraints({
+            advanced: [{ torch: flashEnabled }]
+        });
+
+        const flashBtn = safeGetElement('flashBtn');
+        if (flashBtn) {
+            flashBtn.classList.toggle('active', flashEnabled);
+            flashBtn.innerHTML = flashEnabled ? 
+                '<i class="fas fa-bolt" style="color:#ffdd00;"></i>' : 
+                '<i class="fas fa-bolt"></i>';
+        }
+
+        showToast(flashEnabled ? 
+            t('story.flashOn') || '🔦 Flash encendido' : 
+            t('story.flashOff') || '🔦 Flash apagado'
+        );
+
+    } catch (error) {
+        console.error('Error toggling flash:', error);
+        showToast(t('story.flashError') || 'Error al controlar el flash', true);
+    }
+}
+
+// ============================================================
 // CERRAR ESTADO DE SUBTÍTULOS
 // ============================================================
 
@@ -381,7 +670,7 @@ window.closeSubtitlesStatus = function() {
 };
 
 // ============================================================
-// CÁMARA - SOLO VIDEO
+// CÁMARA - CON CALIDAD MEJORADA
 // ============================================================
 
 async function startCamera() {
@@ -398,23 +687,54 @@ async function startCamera() {
         video.setAttribute('playsinline', '');
         video.style.width = '100%';
         video.style.height = '100%';
-        video.style.objectFit = 'contain';
+        video.style.objectFit = 'cover';
         video.style.transform = facingMode === 'user' ? 'scaleX(-1)' : 'scaleX(1)';
         preview.appendChild(video);
         cameraVideo = video;
 
+        // 🔥 MEJORAR CALIDAD DE CÁMARA
         const constraints = {
             video: { 
                 facingMode: facingMode,
-                width: { ideal: 1280 },
-                height: { ideal: 720 },
+                width: { ideal: 1920 },
+                height: { ideal: 1080 },
+                frameRate: { ideal: 30 },
                 zoom: { ideal: 1 }
             }
         };
 
-        const stream = await navigator.mediaDevices.getUserMedia(constraints);
-        cameraStream = stream;
-        video.srcObject = stream;
+        // 🔥 INTENTAR CON CALIDAD MÁS ALTA
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({
+                video: {
+                    facingMode: facingMode,
+                    width: { ideal: 3840 },
+                    height: { ideal: 2160 },
+                    frameRate: { ideal: 30 }
+                }
+            });
+            cameraStream = stream;
+        } catch (highQualityError) {
+            console.warn('⚠️ No se pudo obtener alta calidad, usando estándar');
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({
+                    video: {
+                        facingMode: facingMode,
+                        width: { ideal: 1920 },
+                        height: { ideal: 1080 },
+                        frameRate: { ideal: 30 }
+                    }
+                });
+                cameraStream = stream;
+            } catch (stdError) {
+                const stream = await navigator.mediaDevices.getUserMedia({
+                    video: { facingMode: facingMode }
+                });
+                cameraStream = stream;
+            }
+        }
+
+        video.srcObject = cameraStream;
 
         await new Promise(resolve => {
             video.onloadedmetadata = () => {
@@ -422,6 +742,26 @@ async function startCamera() {
                 resolve();
             };
         });
+
+        // 🔥 Verificar soporte de flash
+        const track = cameraStream.getVideoTracks()[0];
+        if (track) {
+            const capabilities = track.getCapabilities();
+            torchSupported = !!capabilities.torch;
+            const flashBtn = safeGetElement('flashBtn');
+            if (flashBtn) {
+                flashBtn.style.display = torchSupported ? 'flex' : 'none';
+            }
+        }
+
+        // 🔥 Verificar soporte de zoom
+        if (track) {
+            const capabilities = track.getCapabilities();
+            if (!capabilities.zoom) {
+                const zoomIndicator = safeGetElement('zoomIndicator');
+                if (zoomIndicator) zoomIndicator.style.display = 'none';
+            }
+        }
 
         document.querySelectorAll('.mode-selector, .bottom-controls, .top-controls').forEach(el => {
             if (el) el.style.display = 'flex';
@@ -435,9 +775,11 @@ async function startCamera() {
             if (el) el.style.display = 'none';
         });
 
+        updateQualityIndicator();
+
     } catch (error) {
         console.error('Error al acceder a la cámara:', error);
-        showToast('No se pudo acceder a la cámara', true);
+        showToast(t('story.cameraError') || 'No se pudo acceder a la cámara', true);
     }
 }
 
@@ -451,6 +793,17 @@ function stopCamera() {
         audioStreamForRecording = null;
     }
     cameraVideo = null;
+    flashEnabled = false;
+    torchSupported = false;
+}
+
+function showCamera() {
+    const preview = safeGetElement('creatorPreview');
+    if (preview) {
+        preview.innerHTML = '';
+        preview.style.background = '#000';
+    }
+    startCamera();
 }
 
 // ============================================================
@@ -459,20 +812,24 @@ function stopCamera() {
 
 async function flipCamera() {
     if (!cameraStream) {
-        showToast('No hay cámara activa', true);
+        showToast(t('story.noCamera') || 'No hay cámara activa', true);
         return;
     }
 
     facingMode = facingMode === 'user' ? 'environment' : 'user';
-    showToast(facingMode === 'user' ? '📸 Cámara frontal' : '📸 Cámara trasera');
+    showToast(facingMode === 'user' ? 
+        t('story.frontCamera') || '📸 Cámara frontal' : 
+        t('story.backCamera') || '📸 Cámara trasera'
+    );
 
     stopCamera();
     await new Promise(resolve => setTimeout(resolve, 300));
     await startCamera();
+    resetZoom();
 }
 
 // ============================================================
-// CAPTURAR FOTO
+// CAPTURAR FOTO - CON MEJOR CALIDAD
 // ============================================================
 
 function capturePhoto() {
@@ -480,8 +837,8 @@ function capturePhoto() {
 
     const video = cameraVideo;
     const canvas = document.createElement('canvas');
-    canvas.width = video.videoWidth || 1280;
-    canvas.height = video.videoHeight || 720;
+    canvas.width = video.videoWidth || 1920;
+    canvas.height = video.videoHeight || 1080;
     const ctx = canvas.getContext('2d');
     
     if (facingMode === 'user') {
@@ -517,17 +874,17 @@ function capturePhoto() {
 }
 
 // ============================================================
-// GRABAR VIDEO
+// GRABAR VIDEO - CON MEJOR CALIDAD
 // ============================================================
 
 function startRecording() {
     if (!cameraStream) {
-        showToast('Espera a que la cámara se active', true);
+        showToast(t('story.waitCamera') || 'Espera a que la cámara se active', true);
         return;
     }
 
     if (mediaType === 'image') {
-        showToast('Cambia a modo Video para grabar', true);
+        showToast(t('story.switchToVideo') || 'Cambia a modo Video para grabar', true);
         return;
     }
 
@@ -579,8 +936,8 @@ function startRecording() {
 
             const options = {
                 mimeType: 'video/webm;codecs=vp9,opus',
-                videoBitsPerSecond: 2500000,
-                audioBitsPerSecond: 128000
+                videoBitsPerSecond: 5000000,
+                audioBitsPerSecond: 256000
             };
 
             try {
@@ -600,7 +957,7 @@ function startRecording() {
                 }
 
                 if (recordedChunks.length === 0 || recordedChunks.reduce((acc, chunk) => acc + chunk.size, 0) === 0) {
-                    showToast('Error: no se grabó nada', true);
+                    showToast(t('story.recordingError') || 'Error: no se grabó nada', true);
                     isRecording = false;
                     if (captureBtn) captureBtn.classList.remove('recording');
                     if (indicator) {
@@ -631,11 +988,16 @@ function startRecording() {
                 const secs = String(recordingSeconds % 60).padStart(2, '0');
                 const timerEl = safeGetElement('recordTimer');
                 if (timerEl) timerEl.textContent = `${mins}:${secs}`;
+                
+                if (recordingSeconds >= 60) {
+                    stopRecording();
+                    showToast(t('story.maxRecording') || '⏱️ Límite de 60 segundos alcanzado');
+                }
             }, 1000);
 
         } catch (error) {
             console.error('❌ Error iniciando grabación:', error);
-            showToast('Error al iniciar la grabación', true);
+            showToast(t('story.recordingStartError') || 'Error al iniciar la grabación', true);
             isRecording = false;
             if (captureBtn) captureBtn.classList.remove('recording');
             if (indicator) {
@@ -681,11 +1043,14 @@ function showPreviewActions() {
     const publishBtn = safeGetElement('publishBtn');
     if (publishBtn) {
         publishBtn.disabled = false;
-        publishBtn.textContent = 'Publicar';
+        publishBtn.innerHTML = `<span>${t('action.publish') || 'Publicar'}</span> <i class="fas fa-arrow-right"></i>`;
     }
 
     const flipBtn = safeGetElement('flipCameraBtn');
     if (flipBtn) flipBtn.style.display = 'none';
+    
+    const flashBtn = safeGetElement('flashBtn');
+    if (flashBtn) flashBtn.style.display = 'none';
 }
 
 // ============================================================
@@ -698,7 +1063,53 @@ window.retakeMedia = function() {
     previewUrl = null;
     processedVideoData = null;
     currentStep = 'camera';
+    zoomLevel = 1;
     
+    // 🔥 SI ES TEXTO, VOLVER AL EDITOR DE TEXTO
+    if (savedTextContent && mediaType === 'text') {
+        const textarea = safeGetElement('textContent');
+        if (textarea) {
+            textarea.value = savedTextContent;
+            textarea.style.background = selectedTextBg;
+            setTimeout(() => textarea.focus(), 100);
+        }
+        
+        const editor = safeGetElement('textEditorContainer');
+        if (editor) editor.style.display = 'flex';
+        
+        const textTools = safeGetElement('textTools');
+        if (textTools) textTools.style.display = 'flex';
+        
+        const preview = safeGetElement('creatorPreview');
+        if (preview) {
+            preview.innerHTML = '';
+            preview.style.background = selectedTextBg;
+        }
+        
+        const inputArea = safeGetElement('inputArea');
+        if (inputArea) inputArea.style.display = 'none';
+        
+        const captureActions = safeGetElement('captureActions');
+        if (captureActions) captureActions.style.display = 'none';
+        
+        const publishBtn = safeGetElement('publishBtn');
+        if (publishBtn) publishBtn.disabled = true;
+        
+        document.querySelectorAll('.mode-selector, .bottom-controls').forEach(el => {
+            if (el) el.style.display = 'none';
+        });
+        
+        const topControls = safeGetElement('topControls');
+        if (topControls) topControls.style.display = 'flex';
+        
+        document.querySelectorAll('.mode-btn').forEach(b => b.classList.remove('active'));
+        const textBtn = document.querySelector('.mode-btn[data-mode="text"]');
+        if (textBtn) textBtn.classList.add('active');
+        
+        return;
+    }
+    
+    // 🔥 PARA IMAGEN/VIDEO: VOLVER A CÁMARA
     ['captureActions', 'previewActions', 'inputArea', 'subtitlesStatus', 'textTools', 'textEditorContainer'].forEach(id => {
         const el = safeGetElement(id);
         if (el) el.style.display = 'none';
@@ -707,7 +1118,7 @@ window.retakeMedia = function() {
     const publishBtn = safeGetElement('publishBtn');
     if (publishBtn) {
         publishBtn.disabled = true;
-        publishBtn.textContent = 'Publicar';
+        publishBtn.innerHTML = `<span>${t('action.publish') || 'Publicar'}</span> <i class="fas fa-arrow-right"></i>`;
     }
 
     const modeSelector = safeGetElement('modeSelector');
@@ -725,6 +1136,14 @@ window.retakeMedia = function() {
     const flipBtn = safeGetElement('flipCameraBtn');
     if (flipBtn) flipBtn.style.display = 'flex';
     
+    const flashBtn = safeGetElement('flashBtn');
+    if (flashBtn) {
+        flashBtn.style.display = torchSupported ? 'flex' : 'none';
+        flashBtn.classList.remove('active');
+        flashBtn.innerHTML = '<i class="fas fa-bolt"></i>';
+    }
+    
+    savedTextContent = '';
     startCamera();
 };
 
@@ -743,12 +1162,18 @@ window.useMedia = function() {
 };
 
 // ============================================================
-// TEXTO
+// TEXTO - CORREGIDO
 // ============================================================
 
 window.createTextStory = function() {
+    const textarea = safeGetElement('textContent');
+    if (textarea && savedTextContent) {
+        textarea.value = savedTextContent;
+    }
+    
     resetCreatorState();
     currentStep = 'text';
+    mediaType = 'text';
     
     const preview = safeGetElement('creatorPreview');
     if (preview) {
@@ -759,9 +1184,8 @@ window.createTextStory = function() {
     const editor = safeGetElement('textEditorContainer');
     if (editor) {
         editor.style.display = 'flex';
-        const textarea = safeGetElement('textContent');
         if (textarea) {
-            textarea.value = '';
+            if (!savedTextContent) textarea.value = '';
             textarea.style.background = selectedTextBg;
             setTimeout(() => textarea.focus(), 100);
         }
@@ -779,7 +1203,7 @@ window.createTextStory = function() {
     const publishBtn = safeGetElement('publishBtn');
     if (publishBtn) {
         publishBtn.disabled = true;
-        publishBtn.textContent = 'Publicar';
+        publishBtn.innerHTML = `<span>${t('action.publish') || 'Publicar'}</span> <i class="fas fa-arrow-right"></i>`;
     }
 
     const textTools = safeGetElement('textTools');
@@ -790,12 +1214,21 @@ window.createTextStory = function() {
         if (el) el.style.display = 'none';
     });
     
-    mediaType = 'text';
     stopCamera();
 
     const flipBtn = safeGetElement('flipCameraBtn');
     if (flipBtn) flipBtn.style.display = 'none';
+    const flashBtn = safeGetElement('flashBtn');
+    if (flashBtn) flashBtn.style.display = 'none';
+    
+    document.querySelectorAll('.mode-btn').forEach(b => b.classList.remove('active'));
+    const textBtn = document.querySelector('.mode-btn[data-mode="text"]');
+    if (textBtn) textBtn.classList.add('active');
 };
+
+// ============================================================
+// CONFIRMAR TEXTO - CORREGIDO
+// ============================================================
 
 window.confirmText = function() {
     const textarea = safeGetElement('textContent');
@@ -803,9 +1236,11 @@ window.confirmText = function() {
     
     const text = textarea.value.trim();
     if (!text) {
-        showToast('Escribe algo', true);
+        showToast(t('story.writeSomething') || 'Escribe algo', true);
         return;
     }
+    
+    savedTextContent = text;
     
     mediaType = 'text';
     mediaFile = null;
@@ -822,24 +1257,81 @@ window.confirmText = function() {
     const editor = safeGetElement('textEditorContainer');
     if (editor) editor.style.display = 'none';
     
-    const inputArea = safeGetElement('inputArea');
-    if (inputArea) inputArea.style.display = 'block';
-    
-    const publishBtn = safeGetElement('publishBtn');
-    if (publishBtn) publishBtn.disabled = false;
-    
     const textTools = safeGetElement('textTools');
     if (textTools) textTools.style.display = 'none';
     
     const captureActions = safeGetElement('captureActions');
-    if (captureActions) captureActions.style.display = 'flex';
+    if (captureActions) {
+        captureActions.style.display = 'flex';
+        const retakeBtn = captureActions.querySelector('.btn-retake span');
+        if (retakeBtn) {
+            retakeBtn.textContent = t('action.edit') || 'Editar';
+        }
+        const retakeBtnEl = captureActions.querySelector('.btn-retake');
+        if (retakeBtnEl) {
+            retakeBtnEl.onclick = function() {
+                const textareaEl = safeGetElement('textContent');
+                if (textareaEl) {
+                    textareaEl.value = savedTextContent;
+                }
+                const editorEl = safeGetElement('textEditorContainer');
+                if (editorEl) editorEl.style.display = 'flex';
+                const textToolsEl = safeGetElement('textTools');
+                if (textToolsEl) textToolsEl.style.display = 'flex';
+                const captureActionsEl = safeGetElement('captureActions');
+                if (captureActionsEl) captureActionsEl.style.display = 'none';
+                const previewEl = safeGetElement('creatorPreview');
+                if (previewEl) {
+                    previewEl.innerHTML = '';
+                    previewEl.style.background = selectedTextBg;
+                }
+                const inputAreaEl = safeGetElement('inputArea');
+                if (inputAreaEl) inputAreaEl.style.display = 'none';
+                const publishBtnEl = safeGetElement('publishBtn');
+                if (publishBtnEl) publishBtnEl.disabled = true;
+                document.querySelectorAll('.mode-selector, .bottom-controls').forEach(el => {
+                    if (el) el.style.display = 'none';
+                });
+                const topControlsEl = safeGetElement('topControls');
+                if (topControlsEl) topControlsEl.style.display = 'flex';
+                setTimeout(() => textareaEl?.focus(), 100);
+            };
+        }
+        const useBtn = captureActions.querySelector('.btn-use span');
+        if (useBtn) {
+            useBtn.textContent = t('action.confirm') || 'Confirmar';
+        }
+        const useBtnEl = captureActions.querySelector('.btn-use');
+        if (useBtnEl) {
+            useBtnEl.onclick = function() {
+                const captureActionsEl = safeGetElement('captureActions');
+                if (captureActionsEl) captureActionsEl.style.display = 'none';
+                const inputAreaEl = safeGetElement('inputArea');
+                if (inputAreaEl) inputAreaEl.style.display = 'block';
+                const publishBtnEl = safeGetElement('publishBtn');
+                if (publishBtnEl) publishBtnEl.disabled = false;
+                const previewActionsEl = safeGetElement('previewActions');
+                if (previewActionsEl) previewActionsEl.style.display = 'none';
+            };
+        }
+    }
     
-    showToast('✅ Texto listo');
+    const inputArea = safeGetElement('inputArea');
+    if (inputArea) inputArea.style.display = 'none';
+    
+    const publishBtn = safeGetElement('publishBtn');
+    if (publishBtn) {
+        publishBtn.disabled = true;
+        publishBtn.innerHTML = `<span>${t('action.publish') || 'Publicar'}</span> <i class="fas fa-arrow-right"></i>`;
+    }
+    
+    showToast('✅ ' + (t('story.textReady') || 'Texto listo'));
 };
 
 window.backToCamera = function() {
     resetCreatorState();
     currentStep = 'camera';
+    savedTextContent = '';
     
     const editor = safeGetElement('textEditorContainer');
     if (editor) editor.style.display = 'none';
@@ -901,7 +1393,7 @@ window.openGallery = function() {
             }
             showPreviewActions();
             stopCamera();
-            showToast('✅ Imagen seleccionada');
+            showToast('✅ ' + (t('story.imageSelected') || 'Imagen seleccionada'));
         }
         document.body.removeChild(input);
     };
@@ -933,20 +1425,23 @@ async function handleVideoFile(file) {
         const publishBtn = safeGetElement('publishBtn');
         if (publishBtn) {
             publishBtn.disabled = true;
-            publishBtn.textContent = '⏳ Procesando...';
+            publishBtn.innerHTML = `<span>⏳ ${t('story.processing') || 'Procesando...'}</span> <i class="fas fa-spinner fa-spin"></i>`;
         }
         const subtitlesStatus = safeGetElement('subtitlesStatus');
         if (subtitlesStatus) {
             subtitlesStatus.style.display = 'flex';
             const textEl = safeGetElement('subtitlesText');
-            if (textEl) textEl.textContent = '⏳ Generando subtítulos...';
+            if (textEl) textEl.textContent = t('story.generatingSubtitles') || '⏳ Generando subtítulos...';
         }
         await processVideoWithSubtitles(file);
     } else {
         const inputArea = safeGetElement('inputArea');
         if (inputArea) inputArea.style.display = 'block';
         const publishBtn = safeGetElement('publishBtn');
-        if (publishBtn) publishBtn.disabled = false;
+        if (publishBtn) {
+            publishBtn.disabled = false;
+            publishBtn.innerHTML = `<span>${t('action.publish') || 'Publicar'}</span> <i class="fas fa-arrow-right"></i>`;
+        }
         processedVideoData = null;
     }
 }
@@ -958,7 +1453,7 @@ async function handleVideoFile(file) {
 async function processVideoWithSubtitles(file) {
     const token = getToken();
     if (!token) {
-        showToast('Inicia sesión', true);
+        showToast(t('error.unauthorized') || 'Inicia sesión', true);
         return;
     }
 
@@ -991,7 +1486,7 @@ async function processVideoWithSubtitles(file) {
             const publishBtn = safeGetElement('publishBtn');
             if (publishBtn) {
                 publishBtn.disabled = false;
-                publishBtn.textContent = 'Publicar';
+                publishBtn.innerHTML = `<span>${t('action.publish') || 'Publicar'}</span> <i class="fas fa-arrow-right"></i>`;
             }
             
             const inputArea = safeGetElement('inputArea');
@@ -1005,16 +1500,16 @@ async function processVideoWithSubtitles(file) {
                 
                 if (result.hasSubtitles) {
                     if (textEl) {
-                        textEl.textContent = '✅ Subtítulos generados correctamente';
+                        textEl.textContent = t('story.subtitlesGenerated') || '✅ Subtítulos generados correctamente';
                         textEl.style.color = '#34d399';
                     }
                     if (icon) {
                         icon.style.color = '#34d399';
                     }
-                    showToast('✅ Subtítulos generados');
+                    showToast('✅ ' + (t('story.subtitlesReady') || 'Subtítulos generados'));
                 } else {
                     if (textEl) {
-                        textEl.textContent = '⚠️ No se pudieron generar subtítulos';
+                        textEl.textContent = t('story.subtitlesFailed') || '⚠️ No se pudieron generar subtítulos';
                         textEl.style.color = '#fbbf24';
                     }
                     if (icon) {
@@ -1037,12 +1532,12 @@ async function processVideoWithSubtitles(file) {
 
     } catch (error) {
         console.error('❌ Error procesando video:', error);
-        showToast(error.message || 'Error procesando video', true);
+        showToast(error.message || t('story.videoProcessingError') || 'Error procesando video', true);
         
         const publishBtn = safeGetElement('publishBtn');
         if (publishBtn) {
             publishBtn.disabled = false;
-            publishBtn.textContent = 'Publicar';
+            publishBtn.innerHTML = `<span>${t('action.publish') || 'Publicar'}</span> <i class="fas fa-arrow-right"></i>`;
         }
         
         const subtitlesStatus = safeGetElement('subtitlesStatus');
@@ -1066,7 +1561,7 @@ window.publishStory = async function() {
 
     const token = getToken();
     if (!token) {
-        showToast('Inicia sesión para publicar', true);
+        showToast(t('error.unauthorized') || 'Inicia sesión para publicar', true);
         return;
     }
 
@@ -1076,7 +1571,7 @@ window.publishStory = async function() {
     isPublishing = true;
     if (publishBtn) {
         publishBtn.disabled = true;
-        publishBtn.textContent = '⏳ Publicando...';
+        publishBtn.innerHTML = `<span>⏳ ${t('action.publishing') || 'Publicando...'}</span> <i class="fas fa-spinner fa-spin"></i>`;
     }
 
     try {
@@ -1087,14 +1582,18 @@ window.publishStory = async function() {
         let segments = null;
 
         if (mediaType === 'text') {
-            const textPreview = document.querySelector('.text-preview');
-            if (textPreview) {
-                textContent = textPreview.textContent.trim();
-            } else {
+            textContent = savedTextContent;
+            if (!textContent) {
+                const textPreview = document.querySelector('.text-preview');
+                if (textPreview) {
+                    textContent = textPreview.textContent.trim();
+                }
+            }
+            if (!textContent) {
                 const textInput = safeGetElement('textContent');
                 textContent = textInput?.value.trim();
             }
-            if (!textContent) throw new Error('Escribe algo');
+            if (!textContent) throw new Error(t('story.writeSomething') || 'Escribe algo');
         } else if (mediaType === 'video') {
             if (processedVideoData?.mediaUrl) {
                 mediaUrl = processedVideoData.mediaUrl;
@@ -1142,18 +1641,18 @@ window.publishStory = async function() {
             mediaUrl = uploadData.imageUrl;
 
             if (uploadData.classification?.is_nsfw && uploadData.classification?.percentage > 80) {
-                showToast('⚠️ Contenido inapropiado', true);
+                showToast(t('story.inappropriateContent') || '⚠️ Contenido inapropiado', true);
                 isPublishing = false;
                 if (publishBtn) {
                     publishBtn.disabled = false;
-                    publishBtn.textContent = 'Publicar';
+                    publishBtn.innerHTML = `<span>${t('action.publish') || 'Publicar'}</span> <i class="fas fa-arrow-right"></i>`;
                 }
                 return;
             }
         }
 
         if (!mediaUrl && mediaType !== 'text') {
-            throw new Error('No se pudo obtener la URL del medio');
+            throw new Error(t('story.noMediaUrl') || 'No se pudo obtener la URL del medio');
         }
 
         const storyData = {
@@ -1182,7 +1681,10 @@ window.publishStory = async function() {
         }
 
         const story = await storyRes.json();
-        showToast(hasSubtitles ? '📸 Publicada con subtítulos ✅' : '📸 Publicada');
+        showToast(hasSubtitles ? 
+            t('story.publishedWithSubtitles') || '📸 Publicada con subtítulos ✅' : 
+            t('story.published') || '📸 Publicada'
+        );
 
         const socket = window.socket;
         if (socket) {
@@ -1199,11 +1701,11 @@ window.publishStory = async function() {
 
     } catch (error) {
         console.error('❌ Error publicando:', error);
-        showToast(error.message || 'Error al publicar', true);
+        showToast(error.message || t('error.general') || 'Error al publicar', true);
         isPublishing = false;
         if (publishBtn) {
             publishBtn.disabled = false;
-            publishBtn.textContent = 'Publicar';
+            publishBtn.innerHTML = `<span>${t('action.publish') || 'Publicar'}</span> <i class="fas fa-arrow-right"></i>`;
         }
     }
 };
@@ -1223,8 +1725,9 @@ window.createTextStory = createTextStory;
 window.confirmText = confirmText;
 window.openGallery = openGallery;
 window.closeSubtitlesStatus = closeSubtitlesStatus;
+window.openSurveyModeFromCreator = openSurveyModeFromCreator;
 window.editMedia = function() {
-    showToast('✏️ Editar próximo en actualización');
+    showToast('✏️ ' + (t('story.editSoon') || 'Editar próximo en actualización'));
 };
 window.confirmMedia = function() {
     const inputArea = safeGetElement('inputArea');
@@ -1236,7 +1739,7 @@ window.confirmMedia = function() {
 };
 
 // ============================================================
-// ESTILOS - CON SEPARACIÓN MEJORADA
+// ESTILOS MEJORADOS - DISEÑO MODERNO CON ANIMACIONES
 // ============================================================
 
 function injectStyles() {
@@ -1245,6 +1748,9 @@ function injectStyles() {
     const styles = document.createElement('style');
     styles.id = 'creatorStyles';
     styles.textContent = `
+        /* ============================================================
+           OVERLAY PRINCIPAL
+        ============================================================ */
         .creator-overlay {
             position: fixed;
             top: 0;
@@ -1256,22 +1762,46 @@ function injectStyles() {
             display: none;
             flex-direction: column;
             overflow: hidden;
+            animation: overlayIn 0.3s ease;
         }
         .creator-overlay.active { display: flex; }
-        
+
+        @keyframes overlayIn {
+            from { opacity: 0; transform: scale(1.02); }
+            to { opacity: 1; transform: scale(1); }
+        }
+
+        /* ============================================================
+           CAMERA PLACEHOLDER
+        ============================================================ */
         .camera-placeholder {
             display: flex;
             flex-direction: column;
             align-items: center;
             justify-content: center;
-            color: rgba(255,255,255,0.2);
+            color: rgba(255,255,255,0.15);
             gap: 12px;
             width: 100%;
             height: 100%;
+            animation: pulseGlow 2s ease-in-out infinite;
         }
-        .camera-placeholder i { font-size: 40px; }
-        .camera-placeholder span { font-size: 14px; }
+        .camera-placeholder i { 
+            font-size: 48px; 
+            opacity: 0.5;
+        }
+        .camera-placeholder span { 
+            font-size: 14px;
+            letter-spacing: 0.5px;
+        }
 
+        @keyframes pulseGlow {
+            0%, 100% { opacity: 0.5; }
+            50% { opacity: 1; }
+        }
+
+        /* ============================================================
+           PREVIEW
+        ============================================================ */
         .creator-preview {
             flex: 1;
             display: flex;
@@ -1285,7 +1815,7 @@ function injectStyles() {
         .creator-preview img {
             width: 100%;
             height: 100%;
-            object-fit: contain !important;
+            object-fit: cover !important;
         }
         .creator-preview .text-preview {
             width: 100%;
@@ -1300,8 +1830,17 @@ function injectStyles() {
             line-height: 1.6;
             word-wrap: break-word;
             overflow-y: auto;
+            animation: textReveal 0.5s ease;
         }
 
+        @keyframes textReveal {
+            from { opacity: 0; transform: scale(0.95); }
+            to { opacity: 1; transform: scale(1); }
+        }
+
+        /* ============================================================
+           FLASH EFFECT
+        ============================================================ */
         .flash-effect {
             position: absolute;
             top: 0; left: 0; right: 0; bottom: 0;
@@ -1314,6 +1853,9 @@ function injectStyles() {
             100% { opacity: 0; }
         }
 
+        /* ============================================================
+           TOP CONTROLS - MEJORADOS
+        ============================================================ */
         .top-controls {
             position: absolute;
             top: 0;
@@ -1323,117 +1865,243 @@ function injectStyles() {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            padding: 12px 20px;
-            background: linear-gradient(180deg, rgba(0,0,0,0.8) 0%, transparent 100%);
+            padding: 14px 20px;
+            background: linear-gradient(180deg, rgba(0,0,0,0.85) 0%, transparent 100%);
         }
         .top-controls .btn-close {
-            background: rgba(255,255,255,0.12);
-            border: none;
+            background: rgba(255,255,255,0.08);
+            border: 1px solid rgba(255,255,255,0.06);
             border-radius: 50%;
-            width: 36px;
-            height: 36px;
+            width: 38px;
+            height: 38px;
             color: #fff;
             font-size: 16px;
             cursor: pointer;
-            backdrop-filter: blur(10px);
-            transition: all 0.2s;
+            backdrop-filter: blur(12px);
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
             display: flex;
             align-items: center;
             justify-content: center;
         }
+        .top-controls .btn-close:hover {
+            background: rgba(255,255,255,0.15);
+            transform: scale(1.05);
+        }
         .top-controls .btn-close:active { transform: scale(0.9); }
+
         .top-controls .btn-next {
-            background: #fff;
+            background: linear-gradient(135deg, #fff, #f0f0f0);
             border: none;
             border-radius: 50px;
-            padding: 8px 20px;
+            padding: 10px 24px;
             font-size: 13px;
             font-weight: 600;
             cursor: pointer;
             display: flex;
             align-items: center;
             gap: 8px;
-            transition: all 0.2s;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
             color: #000;
+            box-shadow: 0 4px 20px rgba(255,255,255,0.1);
         }
-        .top-controls .btn-next:disabled { opacity: 0.3; cursor: not-allowed; }
+        .top-controls .btn-next:not(:disabled):hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 30px rgba(255,255,255,0.2);
+        }
+        .top-controls .btn-next:disabled { 
+            opacity: 0.3; 
+            cursor: not-allowed;
+            transform: none !important;
+        }
         .top-controls .btn-next:active:not(:disabled) { transform: scale(0.95); }
         .top-controls .btn-next i { font-size: 12px; }
 
+        .top-controls-center {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        .quality-indicator {
+            font-size: 11px;
+            color: rgba(255,255,255,0.5);
+            background: rgba(0,0,0,0.5);
+            padding: 5px 14px;
+            border-radius: 50px;
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255,255,255,0.05);
+            letter-spacing: 0.3px;
+            font-weight: 500;
+        }
+        .quality-indicator i {
+            margin-right: 4px;
+            font-size: 10px;
+        }
+
+        /* ============================================================
+           MODE SELECTOR - MEJORADO
+        ============================================================ */
         .mode-selector {
             position: absolute;
-            top: 60px;
+            top: 64px;
             left: 50%;
             transform: translateX(-50%);
             z-index: 20;
             display: flex;
             gap: 4px;
-            background: rgba(0,0,0,0.6);
+            background: rgba(0,0,0,0.7);
             border-radius: 50px;
-            padding: 4px;
+            padding: 5px;
             backdrop-filter: blur(20px);
-            border: 1px solid rgba(255,255,255,0.08);
+            border: 1px solid rgba(255,255,255,0.06);
+            box-shadow: 0 8px 32px rgba(0,0,0,0.4);
         }
         .mode-selector .mode-btn {
             background: none;
             border: none;
-            color: rgba(255,255,255,0.5);
+            color: rgba(255,255,255,0.4);
             font-size: 12px;
-            padding: 6px 16px;
+            padding: 7px 18px;
             border-radius: 50px;
             cursor: pointer;
-            transition: all 0.3s;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
             display: flex;
             align-items: center;
             gap: 6px;
             font-weight: 500;
+            position: relative;
         }
-        .mode-selector .mode-btn i { font-size: 14px; }
+        .mode-selector .mode-btn i { 
+            font-size: 14px; 
+            transition: transform 0.3s ease;
+        }
+        .mode-selector .mode-btn:hover {
+            color: rgba(255,255,255,0.7);
+        }
         .mode-selector .mode-btn.active {
             background: #fff;
             color: #000;
+            box-shadow: 0 4px 15px rgba(255,255,255,0.15);
         }
-        .mode-selector .mode-btn:active { transform: scale(0.95); }
+        .mode-selector .mode-btn.active i {
+            transform: scale(1.1);
+        }
+        .mode-selector .mode-btn:active { transform: scale(0.92); }
 
+        /* ============================================================
+           BOTONES FLOTANTES - FLIP Y FLASH MEJORADOS
+        ============================================================ */
         .btn-flip-camera {
             position: absolute;
-            top: 68px;
+            top: 72px;
             right: 20px;
             z-index: 21;
-            background: rgba(255,255,255,0.12);
-            border: none;
+            background: rgba(255,255,255,0.08);
+            border: 1px solid rgba(255,255,255,0.06);
             border-radius: 50%;
-            width: 40px;
-            height: 40px;
+            width: 42px;
+            height: 42px;
             color: #fff;
             font-size: 16px;
             cursor: pointer;
-            backdrop-filter: blur(10px);
-            transition: all 0.2s;
+            backdrop-filter: blur(12px);
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
             display: flex;
             align-items: center;
             justify-content: center;
-            border: 1px solid rgba(255,255,255,0.08);
+            box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+        }
+        .btn-flip-camera:hover {
+            background: rgba(255,255,255,0.15);
+            transform: scale(1.05);
         }
         .btn-flip-camera:active { 
-            transform: scale(0.9); 
-            background: rgba(255,255,255,0.2);
+            transform: scale(0.9) rotate(180deg); 
         }
 
+        .btn-flash {
+            position: absolute;
+            top: 120px;
+            right: 20px;
+            z-index: 21;
+            background: rgba(255,255,255,0.08);
+            border: 1px solid rgba(255,255,255,0.06);
+            border-radius: 50%;
+            width: 42px;
+            height: 42px;
+            color: #fff;
+            font-size: 16px;
+            cursor: pointer;
+            backdrop-filter: blur(12px);
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+        }
+        .btn-flash:hover {
+            background: rgba(255,255,255,0.15);
+            transform: scale(1.05);
+        }
+        .btn-flash.active {
+            background: rgba(255,215,0,0.2);
+            border-color: rgba(255,215,0,0.3);
+            box-shadow: 0 0 30px rgba(255,215,0,0.1);
+        }
+        .btn-flash:active { 
+            transform: scale(0.9); 
+        }
+
+        /* ============================================================
+           ZOOM INDICATOR
+        ============================================================ */
+        .zoom-indicator {
+            position: absolute;
+            top: 168px;
+            right: 20px;
+            z-index: 21;
+            background: rgba(0,0,0,0.7);
+            border-radius: 50px;
+            padding: 5px 14px;
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255,255,255,0.05);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            animation: zoomPop 0.3s ease;
+        }
+        @keyframes zoomPop {
+            from { opacity: 0; transform: scale(0.8); }
+            to { opacity: 1; transform: scale(1); }
+        }
+        .zoom-indicator span {
+            color: rgba(255,255,255,0.8);
+            font-size: 12px;
+            font-weight: 600;
+            letter-spacing: 0.3px;
+        }
+
+        /* ============================================================
+           RECORDING INDICATOR
+        ============================================================ */
         .recording-indicator {
             position: absolute;
-            top: 64px;
+            top: 68px;
             left: 50%;
             transform: translateX(-50%);
             z-index: 18;
             display: none;
             align-items: center;
             gap: 10px;
-            background: rgba(0,0,0,0.7);
-            padding: 6px 16px;
+            background: rgba(0,0,0,0.8);
+            padding: 6px 18px;
             border-radius: 50px;
-            backdrop-filter: blur(10px);
+            backdrop-filter: blur(12px);
             border: 1px solid rgba(255,0,0,0.2);
+            animation: slideDown 0.3s ease;
+        }
+        @keyframes slideDown {
+            from { opacity: 0; transform: translateX(-50%) translateY(-10px); }
+            to { opacity: 1; transform: translateX(-50%) translateY(0); }
         }
         .recording-indicator.active { display: flex; }
         .recording-indicator .recording-dot {
@@ -1442,11 +2110,13 @@ function injectStyles() {
             border-radius: 50%;
             background: #ff0000;
             animation: pulseDot 1s infinite;
+            box-shadow: 0 0 20px rgba(255,0,0,0.3);
         }
         .recording-indicator span {
             color: #fff;
             font-size: 14px;
-            font-weight: 500;
+            font-weight: 600;
+            font-variant-numeric: tabular-nums;
         }
         @keyframes pulseDot {
             0%, 100% { opacity: 1; transform: scale(1); }
@@ -1454,7 +2124,7 @@ function injectStyles() {
         }
 
         /* ============================================================
-           BOTTOM CONTROLS
+           BOTTOM CONTROLS - MEJORADOS
         ============================================================ */
         .bottom-controls {
             position: absolute;
@@ -1466,65 +2136,96 @@ function injectStyles() {
             align-items: center;
             justify-content: space-around;
             padding: 16px 20px 34px;
-            background: linear-gradient(0deg, rgba(0,0,0,0.8) 0%, transparent 100%);
+            background: linear-gradient(0deg, rgba(0,0,0,0.85) 0%, transparent 100%);
         }
         .bottom-controls .btn-gallery,
-        .bottom-controls .btn-text {
+        .bottom-controls .btn-text,
+        .bottom-controls .btn-survey {
             background: none;
             border: none;
-            color: #fff;
+            color: rgba(255,255,255,0.6);
             cursor: pointer;
             display: flex;
             flex-direction: column;
             align-items: center;
             gap: 4px;
             font-size: 10px;
-            opacity: 0.7;
-            transition: all 0.2s;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            padding: 4px 12px;
+            position: relative;
         }
         .bottom-controls .btn-gallery i,
-        .bottom-controls .btn-text i { font-size: 24px; }
+        .bottom-controls .btn-text i,
+        .bottom-controls .btn-survey i { 
+            font-size: 24px;
+            transition: transform 0.3s ease;
+        }
+        .bottom-controls .btn-gallery:hover,
+        .bottom-controls .btn-text:hover,
+        .bottom-controls .btn-survey:hover {
+            color: #fff;
+            transform: translateY(-2px);
+        }
+        .bottom-controls .btn-gallery:hover i,
+        .bottom-controls .btn-text:hover i,
+        .bottom-controls .btn-survey:hover i {
+            transform: scale(1.1);
+        }
         .bottom-controls .btn-gallery:active,
-        .bottom-controls .btn-text:active { transform: scale(0.9); opacity: 1; }
+        .bottom-controls .btn-text:active,
+        .bottom-controls .btn-survey:active { 
+            transform: scale(0.9); 
+            color: #fff;
+        }
 
+        /* ============================================================
+           BOTÓN CAPTURA - MEJORADO
+        ============================================================ */
         .bottom-controls .btn-capture {
             background: none;
             border: none;
             cursor: pointer;
             padding: 0;
+            transition: transform 0.2s ease;
+        }
+        .bottom-controls .btn-capture:active {
+            transform: scale(0.92);
         }
         .bottom-controls .btn-capture .capture-outer {
             width: 72px;
             height: 72px;
             border-radius: 50%;
-            background: rgba(255,255,255,0.1);
+            background: rgba(255,255,255,0.06);
             display: flex;
             align-items: center;
             justify-content: center;
-            border: 2px solid rgba(255,255,255,0.2);
-            transition: all 0.3s;
+            border: 2px solid rgba(255,255,255,0.15);
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            box-shadow: 0 0 40px rgba(255,255,255,0.02);
         }
         .bottom-controls .btn-capture .capture-inner {
             width: 56px;
             height: 56px;
             border-radius: 50%;
             background: #fff;
-            transition: all 0.3s;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            box-shadow: 0 4px 20px rgba(255,255,255,0.1);
         }
-        .bottom-controls .btn-capture:active .capture-outer { transform: scale(0.92); }
         .bottom-controls .btn-capture.recording .capture-outer {
             border-color: #ff0000;
             border-width: 3px;
+            box-shadow: 0 0 40px rgba(255,0,0,0.15);
         }
         .bottom-controls .btn-capture.recording .capture-inner {
             width: 28px;
             height: 28px;
             border-radius: 4px;
             background: #ff0000;
+            box-shadow: 0 0 30px rgba(255,0,0,0.2);
         }
 
         /* ============================================================
-           INPUT AREA - DESCRIPCIÓN (bottom: 100px)
+           INPUT AREA - DESCRIPCIÓN MEJORADA
         ============================================================ */
         .input-area {
             position: absolute;
@@ -1533,11 +2234,17 @@ function injectStyles() {
             right: 20px;
             z-index: 14;
             display: none;
-            background: rgba(0,0,0,0.6);
+            background: rgba(0,0,0,0.7);
             backdrop-filter: blur(20px);
             border-radius: 16px;
             padding: 6px 0;
             border: 1px solid rgba(255,255,255,0.06);
+            box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+            animation: slideUp 0.3s ease;
+        }
+        @keyframes slideUp {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
         }
         .input-area .input-wrapper {
             position: relative;
@@ -1561,9 +2268,13 @@ function injectStyles() {
             color: #fff;
             font-size: 14px;
             outline: none;
+            transition: all 0.3s ease;
         }
         .input-area .input-wrapper input::placeholder {
-            color: rgba(255,255,255,0.4);
+            color: rgba(255,255,255,0.3);
+        }
+        .input-area .input-wrapper input:focus {
+            color: #fff;
         }
         .input-area .char-counter {
             position: absolute;
@@ -1571,11 +2282,12 @@ function injectStyles() {
             top: 50%;
             transform: translateY(-50%);
             font-size: 10px;
-            color: rgba(255,255,255,0.3);
+            color: rgba(255,255,255,0.2);
+            font-weight: 500;
         }
 
         /* ============================================================
-           CAPTURE ACTIONS - Rehacer/Usar (bottom: 200px - separado)
+           CAPTURE ACTIONS - MEJORADOS
         ============================================================ */
         .capture-actions {
             position: absolute;
@@ -1586,52 +2298,71 @@ function injectStyles() {
             display: none;
             justify-content: center;
             gap: 40px;
-            background: rgba(0,0,0,0.6);
+            background: rgba(0,0,0,0.7);
             backdrop-filter: blur(20px);
             border-radius: 16px;
-            padding: 12px 20px;
+            padding: 14px 20px;
             border: 1px solid rgba(255,255,255,0.06);
+            box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+            animation: slideUp 0.3s ease;
         }
         .capture-actions .btn-retake,
         .capture-actions .btn-use {
             display: flex;
             flex-direction: column;
             align-items: center;
-            gap: 4px;
+            gap: 6px;
             background: none;
             border: none;
             color: #fff;
             font-size: 11px;
             cursor: pointer;
-            transition: all 0.2s;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
             opacity: 0.9;
             flex: 1;
+            padding: 4px 0;
+        }
+        .capture-actions .btn-retake:hover,
+        .capture-actions .btn-use:hover {
+            opacity: 1;
+            transform: translateY(-2px);
         }
         .capture-actions .btn-retake i,
         .capture-actions .btn-use i {
-            width: 44px;
-            height: 44px;
+            width: 48px;
+            height: 48px;
             border-radius: 50%;
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: 16px;
+            font-size: 18px;
+            transition: all 0.3s ease;
         }
         .capture-actions .btn-retake i {
-            background: rgba(255,255,255,0.1);
+            background: rgba(255,255,255,0.08);
+            border: 1px solid rgba(255,255,255,0.05);
+        }
+        .capture-actions .btn-retake:hover i {
+            background: rgba(255,255,255,0.15);
+            transform: scale(1.05);
         }
         .capture-actions .btn-use i {
-            background: #fff;
+            background: linear-gradient(135deg, #fff, #f0f0f0);
             color: #000;
+            box-shadow: 0 4px 20px rgba(255,255,255,0.1);
+        }
+        .capture-actions .btn-use:hover i {
+            transform: scale(1.05);
+            box-shadow: 0 6px 30px rgba(255,255,255,0.2);
         }
         .capture-actions .btn-retake:active,
         .capture-actions .btn-use:active {
-            transform: scale(0.9);
+            transform: scale(0.92);
             opacity: 1;
         }
 
         /* ============================================================
-           PREVIEW ACTIONS - Editar/Confirmar (bottom: 200px)
+           PREVIEW ACTIONS - MEJORADOS
         ============================================================ */
         .preview-actions {
             position: absolute;
@@ -1642,21 +2373,23 @@ function injectStyles() {
             display: none;
             justify-content: center;
             gap: 16px;
-            background: rgba(0,0,0,0.6);
+            background: rgba(0,0,0,0.7);
             backdrop-filter: blur(20px);
             border-radius: 16px;
-            padding: 12px 20px;
+            padding: 14px 20px;
             border: 1px solid rgba(255,255,255,0.06);
+            box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+            animation: slideUp 0.3s ease;
         }
         .preview-actions .btn-edit,
         .preview-actions .btn-next-preview {
-            padding: 8px 20px;
+            padding: 10px 20px;
             border: none;
             border-radius: 50px;
             font-size: 13px;
             font-weight: 600;
             cursor: pointer;
-            transition: all 0.2s;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
             display: flex;
             align-items: center;
             gap: 8px;
@@ -1664,12 +2397,22 @@ function injectStyles() {
             justify-content: center;
         }
         .preview-actions .btn-edit {
-            background: rgba(255,255,255,0.1);
+            background: rgba(255,255,255,0.08);
             color: #fff;
+            border: 1px solid rgba(255,255,255,0.06);
+        }
+        .preview-actions .btn-edit:hover {
+            background: rgba(255,255,255,0.15);
+            transform: translateY(-2px);
         }
         .preview-actions .btn-next-preview {
-            background: #fff;
+            background: linear-gradient(135deg, #fff, #f0f0f0);
             color: #000;
+            box-shadow: 0 4px 20px rgba(255,255,255,0.1);
+        }
+        .preview-actions .btn-next-preview:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 30px rgba(255,255,255,0.2);
         }
         .preview-actions .btn-edit:active,
         .preview-actions .btn-next-preview:active {
@@ -1677,7 +2420,7 @@ function injectStyles() {
         }
 
         /* ============================================================
-           SUBTITLES STATUS (bottom: 270px)
+           SUBTITLES STATUS - MEJORADO
         ============================================================ */
         .subtitles-status {
             position: absolute;
@@ -1690,23 +2433,23 @@ function injectStyles() {
             gap: 12px;
             background: rgba(0,0,0,0.8);
             backdrop-filter: blur(20px);
-            border-radius: 12px;
-            padding: 10px 16px;
+            border-radius: 14px;
+            padding: 12px 16px;
             border: 1px solid rgba(255,255,255,0.06);
-            animation: slideUp 0.3s ease;
+            animation: slideUp 0.4s ease;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.3);
         }
-
-        @keyframes slideUp {
-            from { opacity: 0; transform: translateY(10px); }
-            to { opacity: 1; transform: translateY(0); }
-        }
-
         .subtitles-status .subtitles-icon {
             flex-shrink: 0;
         }
         .subtitles-status .subtitles-icon i {
             color: #34d399;
-            font-size: 16px;
+            font-size: 18px;
+            animation: spinGlow 2s ease-in-out infinite;
+        }
+        @keyframes spinGlow {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.6; transform: scale(0.9); }
         }
         .subtitles-status .subtitles-text {
             flex: 1;
@@ -1724,15 +2467,15 @@ function injectStyles() {
         .subtitles-status .subtitles-close {
             background: none;
             border: none;
-            color: rgba(255,255,255,0.3);
+            color: rgba(255,255,255,0.2);
             cursor: pointer;
             font-size: 14px;
             padding: 4px;
             flex-shrink: 0;
-            transition: all 0.2s;
+            transition: all 0.3s ease;
             border-radius: 50%;
-            width: 28px;
-            height: 28px;
+            width: 30px;
+            height: 30px;
             display: flex;
             align-items: center;
             justify-content: center;
@@ -1745,6 +2488,9 @@ function injectStyles() {
             transform: scale(0.9);
         }
 
+        /* ============================================================
+           TEXT TOOLS - MEJORADOS
+        ============================================================ */
         .text-tools {
             position: absolute;
             bottom: 140px;
@@ -1753,7 +2499,7 @@ function injectStyles() {
             z-index: 14;
             display: none;
             padding: 12px 20px;
-            background: linear-gradient(0deg, rgba(0,0,0,0.6) 0%, transparent 100%);
+            background: linear-gradient(0deg, rgba(0,0,0,0.7) 0%, transparent 100%);
         }
         .text-tools-scroll {
             display: flex;
@@ -1766,21 +2512,29 @@ function injectStyles() {
         }
         .text-tools-scroll::-webkit-scrollbar { display: none; }
         .text-tools .btn-bg {
-            min-width: 36px;
-            height: 36px;
+            min-width: 38px;
+            height: 38px;
             border-radius: 50%;
-            border: 2px solid rgba(255,255,255,0.1);
+            border: 2px solid rgba(255,255,255,0.06);
             cursor: pointer;
-            transition: all 0.2s;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
             flex-shrink: 0;
+            box-shadow: 0 2px 12px rgba(0,0,0,0.2);
+        }
+        .text-tools .btn-bg:hover {
+            transform: scale(1.1);
+            border-color: rgba(255,255,255,0.2);
         }
         .text-tools .btn-bg:active { transform: scale(0.85); }
         .text-tools .btn-bg.active {
             border-color: #fff;
             transform: scale(1.15);
-            box-shadow: 0 0 20px rgba(255,255,255,0.2);
+            box-shadow: 0 0 30px rgba(255,255,255,0.15);
         }
 
+        /* ============================================================
+           TEXT EDITOR - MEJORADO
+        ============================================================ */
         .text-editor-container {
             position: absolute;
             top: 0;
@@ -1794,6 +2548,11 @@ function injectStyles() {
             justify-content: center;
             padding: 60px 30px 100px;
             background: #1a1a2e;
+            animation: fadeIn 0.4s ease;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
         }
         .text-editor-container textarea {
             width: 100%;
@@ -1810,9 +2569,10 @@ function injectStyles() {
             font-weight: 500;
             font-family: inherit;
             line-height: 1.6;
+            transition: background 0.3s ease;
         }
         .text-editor-container textarea::placeholder {
-            color: rgba(255,255,255,0.2);
+            color: rgba(255,255,255,0.15);
         }
         .text-editor-tools {
             position: absolute;
@@ -1828,25 +2588,37 @@ function injectStyles() {
         }
         .text-editor-tools .btn-back-camera,
         .text-editor-tools .btn-confirm-text {
-            padding: 10px 24px;
+            padding: 12px 28px;
             border: none;
             border-radius: 50px;
             font-size: 14px;
             font-weight: 600;
             cursor: pointer;
-            transition: all 0.2s;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
             display: flex;
             align-items: center;
             gap: 8px;
+            flex: 1;
+            justify-content: center;
         }
         .text-editor-tools .btn-back-camera {
-            background: rgba(255,255,255,0.1);
+            background: rgba(255,255,255,0.08);
             color: #fff;
             backdrop-filter: blur(10px);
+            border: 1px solid rgba(255,255,255,0.06);
+        }
+        .text-editor-tools .btn-back-camera:hover {
+            background: rgba(255,255,255,0.15);
+            transform: translateY(-2px);
         }
         .text-editor-tools .btn-confirm-text {
-            background: #fff;
+            background: linear-gradient(135deg, #fff, #f0f0f0);
             color: #000;
+            box-shadow: 0 4px 20px rgba(255,255,255,0.1);
+        }
+        .text-editor-tools .btn-confirm-text:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 30px rgba(255,255,255,0.2);
         }
         .text-editor-tools .btn-back-camera:active,
         .text-editor-tools .btn-confirm-text:active {
@@ -1861,36 +2633,45 @@ function injectStyles() {
             .bottom-controls .btn-capture .capture-outer { width: 64px; height: 64px; }
             .bottom-controls .btn-capture .capture-inner { width: 48px; height: 48px; }
             .bottom-controls .btn-capture.recording .capture-inner { width: 24px; height: 24px; }
+            
             .top-controls { padding: 10px 16px; }
-            .top-controls .btn-close { width: 32px; height: 32px; font-size: 14px; }
-            .top-controls .btn-next { font-size: 12px; padding: 6px 16px; }
-            .mode-selector { top: 54px; padding: 3px; }
-            .mode-selector .mode-btn { font-size: 11px; padding: 5px 12px; }
+            .top-controls .btn-close { width: 34px; height: 34px; font-size: 14px; }
+            .top-controls .btn-next { font-size: 12px; padding: 8px 18px; }
+            
+            .mode-selector { top: 58px; padding: 4px; }
+            .mode-selector .mode-btn { font-size: 11px; padding: 6px 14px; }
             .mode-selector .mode-btn i { font-size: 12px; }
-            .btn-flip-camera { top: 62px; right: 12px; width: 34px; height: 34px; font-size: 14px; }
+            
+            .btn-flip-camera { top: 66px; right: 12px; width: 36px; height: 36px; font-size: 14px; }
+            .btn-flash { top: 110px; right: 12px; width: 36px; height: 36px; font-size: 14px; }
+            .zoom-indicator { top: 154px; right: 12px; }
+            .zoom-indicator span { font-size: 11px; }
             
             .input-area { bottom: 90px; left: 16px; right: 16px; padding: 4px 0; }
             .input-area .input-wrapper input { font-size: 13px; padding: 10px 12px; padding-left: 36px; padding-right: 50px; }
             
-            .capture-actions { bottom: 180px; left: 16px; right: 16px; padding: 10px 16px; gap: 20px; }
+            .capture-actions { bottom: 180px; left: 16px; right: 16px; padding: 12px 16px; gap: 20px; }
             .capture-actions .btn-retake i,
-            .capture-actions .btn-use i { width: 36px; height: 36px; font-size: 14px; }
+            .capture-actions .btn-use i { width: 40px; height: 40px; font-size: 16px; }
             
-            .preview-actions { bottom: 180px; left: 16px; right: 16px; padding: 10px 16px; gap: 12px; }
+            .preview-actions { bottom: 180px; left: 16px; right: 16px; padding: 12px 16px; gap: 12px; }
             .preview-actions .btn-edit,
-            .preview-actions .btn-next-preview { font-size: 12px; padding: 6px 14px; }
+            .preview-actions .btn-next-preview { font-size: 12px; padding: 8px 16px; }
             
-            .subtitles-status { bottom: 250px; left: 16px; right: 16px; padding: 8px 14px; gap: 10px; }
+            .subtitles-status { bottom: 250px; left: 16px; right: 16px; padding: 10px 14px; gap: 10px; }
             .subtitles-status .subtitles-text span { font-size: 12px; }
             
             .text-tools { bottom: 120px; padding: 8px 12px; }
-            .text-tools .btn-bg { min-width: 30px; height: 30px; }
+            .text-tools .btn-bg { min-width: 32px; height: 32px; }
+            
             .text-editor-container textarea { font-size: 20px; padding: 10px; }
             .text-editor-tools { bottom: 40px; padding: 0 16px; }
             .text-editor-tools .btn-back-camera,
-            .text-editor-tools .btn-confirm-text { font-size: 12px; padding: 8px 16px; }
-            .recording-indicator { top: 58px; padding: 4px 12px; }
+            .text-editor-tools .btn-confirm-text { font-size: 12px; padding: 10px 18px; }
+            
+            .recording-indicator { top: 62px; padding: 4px 14px; }
             .recording-indicator span { font-size: 12px; }
+            
             .creator-preview .text-preview { font-size: 22px; padding: 30px; }
         }
 
@@ -1903,34 +2684,41 @@ function injectStyles() {
             .bottom-controls .btn-capture .capture-outer { width: 56px; height: 56px; }
             .bottom-controls .btn-capture .capture-inner { width: 40px; height: 40px; }
             .bottom-controls .btn-capture.recording .capture-inner { width: 20px; height: 20px; }
-            .mode-selector { top: 48px; }
-            .mode-selector .mode-btn { font-size: 10px; padding: 4px 10px; }
+            
+            .mode-selector { top: 52px; }
+            .mode-selector .mode-btn { font-size: 10px; padding: 5px 12px; }
             .mode-selector .mode-btn i { font-size: 11px; }
-            .btn-flip-camera { top: 56px; right: 10px; width: 30px; height: 30px; font-size: 12px; }
+            
+            .btn-flip-camera { top: 60px; right: 10px; width: 32px; height: 32px; font-size: 12px; }
+            .btn-flash { top: 100px; right: 10px; width: 32px; height: 32px; font-size: 12px; }
+            .zoom-indicator { top: 140px; right: 10px; }
             
             .input-area { bottom: 80px; padding: 4px 0; }
             
-            .capture-actions { bottom: 160px; padding: 8px 16px; }
+            .capture-actions { bottom: 160px; padding: 10px 16px; }
             
-            .preview-actions { bottom: 160px; padding: 8px 16px; }
+            .preview-actions { bottom: 160px; padding: 10px 16px; }
             
-            .subtitles-status { bottom: 220px; padding: 6px 12px; }
+            .subtitles-status { bottom: 220px; padding: 8px 12px; }
             .subtitles-status .subtitles-text span { font-size: 11px; }
             
             .text-editor-container textarea { font-size: 18px; height: 50%; }
             .text-tools { bottom: 110px; }
             .text-editor-tools { bottom: 30px; }
-            .recording-indicator { top: 52px; }
+            .recording-indicator { top: 56px; }
             .creator-preview .text-preview { font-size: 18px; padding: 20px; }
         }
 
+        /* ============================================================
+           DESKTOP
+        ============================================================ */
         @media (min-width: 768px) {
             .creator-overlay {
                 max-width: 480px;
                 margin: 0 auto;
                 border-radius: 0;
             }
-            .mode-selector .mode-btn { padding: 8px 20px; }
+            .mode-selector .mode-btn { padding: 8px 22px; }
             .text-editor-container textarea { font-size: 32px; }
         }
     `;

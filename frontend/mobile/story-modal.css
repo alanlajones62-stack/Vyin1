@@ -1,5 +1,6 @@
 /* ============================================================
-   STORY MODAL - CON SUBTÍTULOS Y COMENTARIOS MEJORADOS
+   STORY MODAL - CON SUBTÍTULOS, COMENTARIOS Y ENCUESTAS
+   VERSIÓN MEJORADA - DISEÑO MODERNO Y LIMPIO
    ============================================================ */
 
 .modal-overlay {
@@ -8,13 +9,13 @@
     left: 0;
     right: 0;
     bottom: 0;
-    background: rgba(10, 10, 26, 0.92);
-    backdrop-filter: blur(24px);
-    -webkit-backdrop-filter: blur(24px);
+    background: rgba(10, 10, 26, 0.95);
+    backdrop-filter: blur(30px);
+    -webkit-backdrop-filter: blur(30px);
     z-index: 10001;
     display: none;
     flex-direction: column;
-    animation: modalFadeIn 0.35s ease;
+    animation: modalFadeIn 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
 .modal-overlay.active {
@@ -22,8 +23,8 @@
 }
 
 @keyframes modalFadeIn {
-    0% { opacity: 0; transform: scale(0.98); }
-    100% { opacity: 1; transform: scale(1); }
+    0% { opacity: 0; transform: scale(0.97) translateY(12px); }
+    100% { opacity: 1; transform: scale(1) translateY(0); }
 }
 
 /* ============================================================
@@ -56,26 +57,40 @@
     padding: 14px 20px 12px;
     border-bottom: 1px solid rgba(255, 255, 255, 0.04);
     flex-shrink: 0;
-    background: transparent;
+    background: rgba(18, 18, 42, 0.8);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
     z-index: 20;
 }
 
 .modal-header .user-info {
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: 12px;
     cursor: pointer;
     flex: 1;
     min-width: 0;
+    padding: 2px 0;
+    border-radius: 50px;
+    transition: background 0.2s;
+}
+
+.modal-header .user-info:hover {
+    background: rgba(255, 255, 255, 0.03);
 }
 
 .modal-header .user-info .avatar {
-    width: 36px;
-    height: 36px;
+    width: 38px;
+    height: 38px;
     border-radius: 50%;
     object-fit: cover;
     border: 2px solid rgba(192, 132, 252, 0.2);
     flex-shrink: 0;
+    transition: border-color 0.3s;
+}
+
+.modal-header .user-info:hover .avatar {
+    border-color: rgba(192, 132, 252, 0.4);
 }
 
 .modal-header .user-info .info-text {
@@ -91,11 +106,20 @@
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.modal-header .user-info .name .verified-icon {
+    color: #c084fc;
+    font-size: 12px;
+    flex-shrink: 0;
 }
 
 .modal-header .user-info .handle {
-    font-size: 13px;
-    color: rgba(255, 255, 255, 0.4);
+    font-size: 12px;
+    color: rgba(255, 255, 255, 0.3);
     line-height: 1.2;
     white-space: nowrap;
     overflow: hidden;
@@ -113,13 +137,13 @@
     display: inline-flex;
     align-items: center;
     gap: 4px;
-    background: rgba(124, 58, 237, 0.15);
+    background: rgba(124, 58, 237, 0.12);
     color: #7c3aed;
-    font-size: 10px;
+    font-size: 9px;
     font-weight: 700;
     padding: 3px 10px;
     border-radius: 12px;
-    border: 1px solid rgba(124, 58, 237, 0.2);
+    border: 1px solid rgba(124, 58, 237, 0.12);
     letter-spacing: 0.3px;
     text-transform: uppercase;
     animation: subtitlesPulse 2s ease-in-out infinite;
@@ -127,20 +151,20 @@
 
 @keyframes subtitlesPulse {
     0%, 100% { opacity: 1; }
-    50% { opacity: 0.6; }
+    50% { opacity: 0.5; }
 }
 
 .subtitles-indicator i {
-    font-size: 11px;
+    font-size: 10px;
 }
 
 .modal-header .close-btn {
-    background: rgba(255, 255, 255, 0.05);
+    background: rgba(255, 255, 255, 0.04);
     border: none;
     width: 36px;
     height: 36px;
     border-radius: 50%;
-    color: rgba(255, 255, 255, 0.4);
+    color: rgba(255, 255, 255, 0.3);
     font-size: 18px;
     cursor: pointer;
     display: flex;
@@ -150,9 +174,14 @@
     flex-shrink: 0;
 }
 
+.modal-header .close-btn:hover {
+    background: rgba(255, 255, 255, 0.08);
+    color: rgba(255, 255, 255, 0.6);
+}
+
 .modal-header .close-btn:active {
-    transform: scale(0.88);
-    background: rgba(255, 255, 255, 0.1);
+    transform: scale(0.85);
+    background: rgba(255, 255, 255, 0.12);
 }
 
 /* ============================================================
@@ -162,7 +191,7 @@
 .story-progress {
     display: none;
     gap: 4px;
-    padding: 6px 12px 0;
+    padding: 8px 16px 4px;
     flex-shrink: 0;
 }
 
@@ -170,12 +199,31 @@
     flex: 1;
     height: 3px;
     border-radius: 4px;
-    background: rgba(255, 255, 255, 0.12);
-    transition: all 0.3s ease;
+    background: rgba(255, 255, 255, 0.08);
+    transition: all 0.4s ease;
+    position: relative;
+    overflow: hidden;
 }
 
 .story-progress .progress-dot.active {
     background: linear-gradient(90deg, #c084fc, #db2777);
+    box-shadow: 0 0 12px rgba(192, 132, 252, 0.2);
+}
+
+.story-progress .progress-dot.active::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.3), transparent);
+    animation: progressShimmer 1.5s ease-in-out infinite;
+}
+
+@keyframes progressShimmer {
+    0% { left: -100%; }
+    100% { left: 100%; }
 }
 
 /* ============================================================
@@ -186,7 +234,7 @@
     flex: 1;
     display: flex;
     flex-direction: column;
-    padding: 12px 20px 6px;
+    padding: 12px 20px 8px;
     overflow: hidden;
     min-height: 0;
 }
@@ -197,7 +245,7 @@
 
 .modal-media {
     width: 100%;
-    border-radius: 12px;
+    border-radius: 16px;
     overflow: hidden;
     background: #0a0a1a;
     flex-shrink: 0;
@@ -208,12 +256,15 @@
     align-items: center;
     justify-content: center;
     position: relative;
+    border: 1px solid rgba(255, 255, 255, 0.03);
+    box-shadow: inset 0 0 60px rgba(0,0,0,0.3);
 }
 
 .modal-media img {
     width: 100%;
     height: 100%;
     object-fit: contain;
+    transition: opacity 0.3s;
 }
 
 .modal-media video {
@@ -224,14 +275,15 @@
 }
 
 #storyVideo::cue {
-    background: rgba(0, 0, 0, 0.7);
+    background: rgba(0, 0, 0, 0.75);
     color: white;
     font-size: 16px;
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;
-    text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.9), 0px 0px 8px rgba(0, 0, 0, 0.5);
-    padding: 4px 10px;
-    border-radius: 6px;
-    line-height: 1.4;
+    text-shadow: 2px 2px 8px rgba(0, 0, 0, 0.9), 0px 0px 20px rgba(0, 0, 0, 0.5);
+    padding: 6px 14px;
+    border-radius: 8px;
+    line-height: 1.5;
+    backdrop-filter: blur(4px);
 }
 
 #storyVideo::-webkit-media-controls {
@@ -246,7 +298,7 @@
 .modal-media .text-content {
     width: 100%;
     height: 100%;
-    padding: 30px;
+    padding: 30px 24px;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -256,6 +308,364 @@
     color: #fff;
     line-height: 1.6;
     overflow-y: auto;
+    text-shadow: 0 2px 30px rgba(0,0,0,0.5);
+}
+
+/* ============================================================
+   🔥 ESTILOS PARA ENCUESTAS EN MODAL - DISEÑO MODERNO
+   ============================================================ */
+
+.survey-container-modal {
+    width: 100%;
+    height: 100%;
+    min-height: 220px;
+    padding: 24px 20px;
+    background: radial-gradient(ellipse at top left, rgba(192, 132, 252, 0.06), transparent 50%),
+                radial-gradient(ellipse at bottom right, rgba(219, 39, 119, 0.06), transparent 50%),
+                #0a0a1a;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    overflow-y: auto;
+    gap: 16px;
+    border-radius: 12px;
+    position: relative;
+}
+
+.survey-container-modal::before {
+    content: '📊';
+    position: absolute;
+    top: 10px;
+    right: 14px;
+    font-size: 20px;
+    opacity: 0.1;
+}
+
+.survey-question-modal {
+    font-size: 20px;
+    font-weight: 700;
+    color: #fff;
+    text-align: center;
+    line-height: 1.4;
+    margin-bottom: 2px;
+    text-shadow: 0 2px 30px rgba(0,0,0,0.5);
+    background: linear-gradient(135deg, #fff 60%, rgba(192, 132, 252, 0.6));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    letter-spacing: -0.3px;
+}
+
+.survey-options-modal {
+    width: 100%;
+    max-width: 420px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.survey-option-modal {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    padding: 6px 12px 8px 12px;
+    transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+    cursor: pointer;
+    border-radius: 12px;
+    background: rgba(255, 255, 255, 0.02);
+    border: 1px solid rgba(255, 255, 255, 0.04);
+    position: relative;
+    overflow: hidden;
+}
+
+.survey-option-modal::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: 12px;
+    background: linear-gradient(135deg, rgba(192, 132, 252, 0.03), rgba(219, 39, 119, 0.01));
+    opacity: 0;
+    transition: opacity 0.3s ease;
+}
+
+.survey-option-modal:hover:not(.voted)::before {
+    opacity: 1;
+}
+
+.survey-option-modal:hover:not(.voted) {
+    transform: translateX(4px) scale(1.01);
+    border-color: rgba(192, 132, 252, 0.15);
+    box-shadow: 0 4px 20px rgba(192, 132, 252, 0.05);
+}
+
+.survey-option-modal:active:not(.voted) {
+    transform: scale(0.97);
+}
+
+.survey-option-modal.voted {
+    opacity: 1;
+    cursor: default;
+    border-color: rgba(192, 132, 252, 0.15);
+    background: rgba(192, 132, 252, 0.05);
+}
+
+.survey-option-modal.voted .survey-option-bar-modal {
+    border: 1px solid rgba(192, 132, 252, 0.1);
+}
+
+.survey-option-modal .option-vote-badge {
+    position: absolute;
+    top: 6px;
+    right: 10px;
+    font-size: 10px;
+    color: rgba(192, 132, 252, 0.4);
+    font-weight: 600;
+    background: rgba(192, 132, 252, 0.08);
+    padding: 1px 10px;
+    border-radius: 20px;
+    border: 1px solid rgba(192, 132, 252, 0.06);
+}
+
+.survey-option-modal.voted .option-vote-badge {
+    color: #c084fc;
+    background: rgba(192, 132, 252, 0.12);
+    border-color: rgba(192, 132, 252, 0.1);
+}
+
+.survey-option-label-modal {
+    font-size: 15px;
+    color: rgba(255, 255, 255, 0.85);
+    font-weight: 500;
+    padding-right: 60px;
+    padding-left: 4px;
+    letter-spacing: 0.2px;
+}
+
+.survey-option-modal.voted .survey-option-label-modal {
+    color: #fff;
+}
+
+.survey-option-bar-modal {
+    height: 8px;
+    background: rgba(255, 255, 255, 0.06);
+    border-radius: 20px;
+    overflow: hidden;
+    position: relative;
+    box-shadow: inset 0 1px 4px rgba(0,0,0,0.3);
+    margin-top: 2px;
+}
+
+.survey-option-fill-modal {
+    height: 100%;
+    border-radius: 20px;
+    transition: width 1.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+    min-width: 4px;
+    position: relative;
+}
+
+.survey-option-fill-modal::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 50%;
+    background: linear-gradient(180deg, rgba(255,255,255,0.2), transparent);
+    border-radius: 20px 20px 0 0;
+}
+
+.survey-option-stats-modal {
+    font-size: 11px;
+    color: rgba(255, 255, 255, 0.25);
+    text-align: right;
+    padding-right: 4px;
+    font-weight: 500;
+    letter-spacing: 0.3px;
+}
+
+.survey-option-modal.voted .survey-option-stats-modal {
+    color: rgba(192, 132, 252, 0.5);
+}
+
+.survey-total-modal {
+    text-align: center;
+    font-size: 12px;
+    color: rgba(255, 255, 255, 0.15);
+    margin-top: 4px;
+    font-weight: 500;
+    letter-spacing: 0.3px;
+    padding: 6px 16px;
+    background: rgba(255, 255, 255, 0.02);
+    border-radius: 20px;
+    border: 1px solid rgba(255, 255, 255, 0.03);
+}
+
+.survey-total-modal .vote-count {
+    color: rgba(192, 132, 252, 0.5);
+    font-weight: 700;
+}
+
+.survey-total-modal .voted-badge {
+    color: #34d399;
+    font-weight: 600;
+}
+
+/* ============================================================
+   ESTADÍSTICAS EN MODAL - MEJORADO
+   ============================================================ */
+
+.survey-stats-modal {
+    justify-content: flex-start;
+    padding: 16px 12px;
+}
+
+.survey-stats-bars-modal {
+    width: 100%;
+    max-width: 420px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+}
+
+.survey-stat-item-modal {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 4px 8px;
+    border-radius: 10px;
+    transition: all 0.3s ease;
+}
+
+.survey-stat-item-modal:hover {
+    background: rgba(255, 255, 255, 0.02);
+}
+
+.survey-stat-label-modal {
+    font-size: 13px;
+    color: rgba(255, 255, 255, 0.6);
+    min-width: 60px;
+    flex-shrink: 0;
+    font-weight: 500;
+    text-align: right;
+    letter-spacing: 0.2px;
+}
+
+.survey-stat-bar-modal {
+    flex: 1;
+    height: 22px;
+    background: rgba(255, 255, 255, 0.04);
+    border-radius: 11px;
+    overflow: hidden;
+    box-shadow: inset 0 1px 4px rgba(0,0,0,0.3);
+    position: relative;
+}
+
+.survey-stat-fill-modal {
+    height: 100%;
+    border-radius: 11px;
+    transition: width 1.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+    position: relative;
+}
+
+.survey-stat-fill-modal::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 50%;
+    background: linear-gradient(180deg, rgba(255,255,255,0.15), transparent);
+    border-radius: 11px 11px 0 0;
+}
+
+.survey-stat-value-modal {
+    font-size: 14px;
+    color: rgba(255, 255, 255, 0.3);
+    min-width: 35px;
+    text-align: right;
+    font-weight: 600;
+    letter-spacing: 0.3px;
+}
+
+.survey-stat-item-modal:first-child .survey-stat-value-modal {
+    color: #c084fc;
+}
+
+/* ============================================================
+   CÁLCULO EN MODAL - MEJORADO
+   ============================================================ */
+
+.survey-calculation-modal {
+    justify-content: center;
+    padding: 16px 12px;
+}
+
+.survey-calc-result-modal {
+    width: 100%;
+    max-width: 380px;
+    background: rgba(255, 255, 255, 0.03);
+    border-radius: 20px;
+    padding: 28px 24px;
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    backdrop-filter: blur(10px);
+    text-align: center;
+    position: relative;
+    overflow: hidden;
+}
+
+.survey-calc-result-modal::before {
+    content: '';
+    position: absolute;
+    top: -50%;
+    left: -50%;
+    width: 200%;
+    height: 200%;
+    background: radial-gradient(circle at center, rgba(192, 132, 252, 0.03), transparent 70%);
+    animation: calcPulse 4s ease-in-out infinite;
+}
+
+@keyframes calcPulse {
+    0%, 100% { transform: scale(1); opacity: 0.5; }
+    50% { transform: scale(1.1); opacity: 1; }
+}
+
+.survey-calc-label-modal {
+    display: block;
+    font-size: 13px;
+    color: rgba(255, 255, 255, 0.3);
+    margin-bottom: 8px;
+    font-weight: 500;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    position: relative;
+}
+
+.survey-calc-value-modal {
+    display: block;
+    font-size: 44px;
+    font-weight: 800;
+    background: linear-gradient(135deg, #c084fc, #db2777, #f43f5e);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    line-height: 1.1;
+    position: relative;
+    text-shadow: 0 0 60px rgba(192, 132, 252, 0.15);
+}
+
+.survey-calc-formula-modal {
+    font-size: 13px;
+    color: rgba(255, 255, 255, 0.15);
+    margin-top: 12px;
+    font-family: 'Courier New', monospace;
+    letter-spacing: 0.5px;
+    padding: 6px 16px;
+    background: rgba(255, 255, 255, 0.03);
+    border-radius: 10px;
+    display: inline-block;
+    position: relative;
+    border: 1px solid rgba(255, 255, 255, 0.03);
 }
 
 /* ============================================================
@@ -264,7 +674,7 @@
 
 .modal-caption {
     font-size: 14px;
-    color: rgba(255, 255, 255, 0.7);
+    color: rgba(255, 255, 255, 0.6);
     line-height: 1.4;
     padding: 6px 0 2px;
     max-height: 40px;
@@ -275,18 +685,24 @@
 .modal-caption .hashtag {
     color: #c084fc;
     font-weight: 600;
+    cursor: pointer;
+    transition: color 0.2s;
+}
+
+.modal-caption .hashtag:hover {
+    color: #a78bfa;
 }
 
 .modal-caption .subtitles-badge {
     display: inline-block;
-    background: rgba(124, 58, 237, 0.15);
+    background: rgba(124, 58, 237, 0.12);
     color: #7c3aed;
     font-size: 10px;
     font-weight: 600;
     padding: 1px 8px;
     border-radius: 10px;
     margin-left: 6px;
-    border: 1px solid rgba(124, 58, 237, 0.15);
+    border: 1px solid rgba(124, 58, 237, 0.1);
 }
 
 /* ============================================================
@@ -295,7 +711,7 @@
 
 .modal-stats {
     display: flex;
-    gap: 16px;
+    gap: 20px;
     padding: 6px 0;
     border-top: 1px solid rgba(255, 255, 255, 0.04);
     border-bottom: 1px solid rgba(255, 255, 255, 0.04);
@@ -305,9 +721,14 @@
 .modal-stats .stat {
     display: flex;
     align-items: center;
-    gap: 5px;
+    gap: 6px;
     font-size: 13px;
-    color: rgba(255, 255, 255, 0.3);
+    color: rgba(255, 255, 255, 0.25);
+    transition: color 0.2s;
+}
+
+.modal-stats .stat:hover {
+    color: rgba(255, 255, 255, 0.4);
 }
 
 .modal-stats .stat i {
@@ -334,12 +755,12 @@
 }
 
 .modal-actions-wrapper .nav-arrow {
-    width: 36px;
-    height: 36px;
+    width: 38px;
+    height: 38px;
     border-radius: 50%;
     background: rgba(255, 255, 255, 0.04);
     border: 1px solid rgba(255, 255, 255, 0.06);
-    color: rgba(255, 255, 255, 0.3);
+    color: rgba(255, 255, 255, 0.25);
     font-size: 15px;
     cursor: pointer;
     display: none;
@@ -351,9 +772,15 @@
     -webkit-tap-highlight-color: transparent;
 }
 
+.modal-actions-wrapper .nav-arrow:hover {
+    background: rgba(255, 255, 255, 0.08);
+    color: rgba(255, 255, 255, 0.4);
+    border-color: rgba(255, 255, 255, 0.1);
+}
+
 .modal-actions-wrapper .nav-arrow:active {
     transform: scale(0.88);
-    background: rgba(255, 255, 255, 0.08);
+    background: rgba(255, 255, 255, 0.12);
 }
 
 .modal-actions-wrapper .nav-arrow i {
@@ -370,7 +797,7 @@
 }
 
 .modal-actions button {
-    padding: 5px 12px;
+    padding: 5px 14px;
     border: none;
     border-radius: 50px;
     font-size: 12px;
@@ -379,7 +806,7 @@
     transition: all 0.25s;
     display: flex;
     align-items: center;
-    gap: 5px;
+    gap: 6px;
     font-family: inherit;
     flex-shrink: 0;
     white-space: nowrap;
@@ -390,24 +817,42 @@
 }
 
 .modal-actions .btn-like-modal {
-    background: rgba(255, 107, 107, 0.1);
+    background: rgba(255, 107, 107, 0.08);
     color: #ff6b6b;
+}
+
+.modal-actions .btn-like-modal:hover {
+    background: rgba(255, 107, 107, 0.12);
 }
 
 .modal-actions .btn-like-modal.liked {
     background: linear-gradient(135deg, #ff6b6b, #ff4444);
     color: #fff;
-    box-shadow: 0 4px 16px rgba(255, 107, 107, 0.2);
+    box-shadow: 0 4px 16px rgba(255, 107, 107, 0.25);
+}
+
+.modal-actions .btn-like-modal.liked:hover {
+    box-shadow: 0 6px 24px rgba(255, 107, 107, 0.35);
+    transform: translateY(-1px);
 }
 
 .modal-actions .btn-comment-modal {
-    background: rgba(192, 132, 252, 0.1);
+    background: rgba(192, 132, 252, 0.08);
     color: #c084fc;
+}
+
+.modal-actions .btn-comment-modal:hover {
+    background: rgba(192, 132, 252, 0.14);
 }
 
 .modal-actions .btn-share-modal {
     background: rgba(255, 255, 255, 0.04);
     color: rgba(255, 255, 255, 0.3);
+}
+
+.modal-actions .btn-share-modal:hover {
+    background: rgba(255, 255, 255, 0.08);
+    color: rgba(255, 255, 255, 0.5);
 }
 
 .modal-actions .btn-profile-modal {
@@ -416,7 +861,7 @@
 }
 
 /* ============================================================
-   COMENTARIOS
+   🔥 COMENTARIOS - DISEÑO MEJORADO
    ============================================================ */
 
 .comments-section {
@@ -425,31 +870,48 @@
     flex-direction: column;
     min-height: 0;
     border-top: 1px solid rgba(255, 255, 255, 0.04);
-    padding-top: 4px;
+    padding-top: 6px;
+    background: rgba(0, 0, 0, 0.1);
+    border-radius: 12px 12px 0 0;
+    margin-top: 2px;
 }
 
 .comments-section .comments-title {
-    font-size: 12px;
+    font-size: 11px;
     font-weight: 600;
-    color: rgba(255, 255, 255, 0.2);
-    margin-bottom: 2px;
+    color: rgba(255, 255, 255, 0.15);
+    margin-bottom: 4px;
+    padding: 0 4px;
     display: flex;
     align-items: center;
     justify-content: space-between;
     flex-shrink: 0;
     text-transform: uppercase;
-    letter-spacing: 0.5px;
+    letter-spacing: 0.8px;
+}
+
+.comments-section .comments-title .count-badge {
+    background: rgba(255, 255, 255, 0.04);
+    padding: 1px 10px;
+    border-radius: 20px;
+    font-size: 10px;
+    color: rgba(255, 255, 255, 0.15);
 }
 
 .comments-section .comments-list {
     flex: 1;
     overflow-y: auto;
-    padding-right: 2px;
-    min-height: 20px;
+    padding: 4px 4px 4px 0;
+    min-height: 30px;
+    scroll-behavior: smooth;
 }
 
 .comments-section .comments-list::-webkit-scrollbar {
-    width: 2px;
+    width: 3px;
+}
+
+.comments-section .comments-list::-webkit-scrollbar-track {
+    background: transparent;
 }
 
 .comments-section .comments-list::-webkit-scrollbar-thumb {
@@ -457,22 +919,40 @@
     border-radius: 10px;
 }
 
+.comments-section .comments-list::-webkit-scrollbar-thumb:hover {
+    background: rgba(192, 132, 252, 0.25);
+}
+
 /* ============================================================
-   COMENTARIO ITEM - ESTILOS MEJORADOS
+   🔥 COMENTARIO ITEM - DISEÑO MODERNO Y LIMPIO
    ============================================================ */
 
 .comment-item {
     display: flex;
     gap: 10px;
-    padding: 10px 12px;
-    border-radius: 10px;
+    padding: 8px 10px;
+    border-radius: 12px;
     background: rgba(255, 255, 255, 0.02);
     margin-bottom: 2px;
-    transition: background 0.2s;
+    transition: all 0.25s ease;
+    border: 1px solid transparent;
 }
 
 .comment-item:hover {
     background: rgba(255, 255, 255, 0.04);
+    border-color: rgba(255, 255, 255, 0.03);
+}
+
+.comment-item.highlighted {
+    background: rgba(192, 132, 252, 0.06) !important;
+    border-left: 3px solid #c084fc !important;
+    padding-left: 12px;
+    animation: highlightPulse 0.8s ease;
+}
+
+@keyframes highlightPulse {
+    0%, 100% { background: rgba(192, 132, 252, 0.06); }
+    50% { background: rgba(192, 132, 252, 0.12); }
 }
 
 .comment-item .avatar {
@@ -482,8 +962,14 @@
     object-fit: cover;
     flex-shrink: 0;
     cursor: pointer;
-    border: 1px solid rgba(255, 255, 255, 0.05);
+    border: 1.5px solid rgba(255, 255, 255, 0.04);
     margin-top: 2px;
+    transition: border-color 0.2s, transform 0.2s;
+}
+
+.comment-item .avatar:hover {
+    border-color: rgba(192, 132, 252, 0.2);
+    transform: scale(1.05);
 }
 
 .comment-item .comment-body {
@@ -505,69 +991,196 @@
 
 .comment-item .comment-body .comment-user .handle {
     font-weight: 400;
-    color: rgba(255, 255, 255, 0.25);
+    color: rgba(255, 255, 255, 0.2);
     font-size: 11px;
 }
 
 .comment-item .comment-body .comment-user .time {
     font-weight: 400;
-    color: rgba(255, 255, 255, 0.12);
+    color: rgba(255, 255, 255, 0.1);
     font-size: 10px;
 }
 
+.comment-item .comment-body .comment-user .badge-owner {
+    font-size: 8px;
+    padding: 1px 8px;
+    border-radius: 20px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+}
+
+.comment-item .comment-body .comment-user .badge-owner.self {
+    color: rgba(52, 211, 153, 0.6);
+    background: rgba(52, 211, 153, 0.06);
+    border: 1px solid rgba(52, 211, 153, 0.06);
+}
+
+.comment-item .comment-body .comment-user .badge-owner.story {
+    color: rgba(192, 132, 252, 0.6);
+    background: rgba(192, 132, 252, 0.06);
+    border: 1px solid rgba(192, 132, 252, 0.06);
+}
+
+.comment-item .comment-body .comment-user .badge-file {
+    font-size: 10px;
+    color: rgba(34, 197, 94, 0.4);
+}
+
 .comment-item .comment-body .reply-context {
-    font-size: 9px;
-    color: rgba(255, 255, 255, 0.15);
+    font-size: 10px;
+    color: rgba(255, 255, 255, 0.12);
     margin-bottom: 2px;
     display: flex;
     align-items: center;
-    gap: 3px;
+    gap: 4px;
+    padding: 2px 0;
 }
 
 .comment-item .comment-body .reply-context i {
-    font-size: 7px;
-    color: rgba(255, 255, 255, 0.08);
+    font-size: 8px;
+    color: rgba(255, 255, 255, 0.05);
 }
 
 .comment-item .comment-body .reply-context .reply-to-name {
-    color: rgba(255, 255, 255, 0.2);
+    color: rgba(192, 132, 252, 0.3);
+}
+
+.comment-item .comment-body .reply-context.is-target {
+    color: rgba(192, 132, 252, 0.5);
+}
+
+.comment-item .comment-body .reply-context.is-target .reply-to-name {
+    color: rgba(192, 132, 252, 0.7);
 }
 
 .comment-item .comment-body .comment-text {
     font-size: 15px;
-    color: rgba(255, 255, 255, 0.8);
+    color: rgba(255, 255, 255, 0.85);
     line-height: 1.5;
     word-wrap: break-word;
     margin: 2px 0 6px 0;
+    padding: 1px 0;
 }
+
+.comment-item .comment-body .comment-text a {
+    color: #c084fc;
+    text-decoration: none;
+    border-bottom: 1px solid rgba(192, 132, 252, 0.15);
+}
+
+.comment-item .comment-body .comment-text a:hover {
+    border-bottom-color: rgba(192, 132, 252, 0.4);
+}
+
+/* ============================================================
+   🔥 ARCHIVO ADJUNTO EN COMENTARIOS
+   ============================================================ */
+
+.comment-item .comment-body .comment-file {
+    margin-top: 4px;
+    margin-bottom: 4px;
+}
+
+.comment-item .comment-body .comment-file img {
+    max-width: 180px;
+    max-height: 160px;
+    border-radius: 10px;
+    border: 1px solid rgba(255, 255, 255, 0.04);
+    transition: all 0.3s ease;
+    cursor: pointer;
+}
+
+.comment-item .comment-body .comment-file img:hover {
+    border-color: rgba(192, 132, 252, 0.15);
+    transform: scale(1.01);
+}
+
+.comment-item .comment-body .comment-file .message-file {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.04);
+    border-radius: 10px;
+    padding: 8px 12px;
+    text-decoration: none;
+    color: rgba(255, 255, 255, 0.8);
+    max-width: 220px;
+    transition: all 0.2s ease;
+}
+
+.comment-item .comment-body .comment-file .message-file:hover {
+    background: rgba(255, 255, 255, 0.06);
+    border-color: rgba(192, 132, 252, 0.1);
+    transform: translateX(2px);
+}
+
+.comment-item .comment-body .comment-file .message-file .file-icon {
+    font-size: 20px;
+    color: #c084fc;
+    flex-shrink: 0;
+}
+
+.comment-item .comment-body .comment-file .message-file .file-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.comment-item .comment-body .comment-file .message-file .file-name {
+    font-size: 11px;
+    font-weight: 500;
+    display: block;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.comment-item .comment-body .comment-file .message-file .file-size {
+    font-size: 9px;
+    color: rgba(255, 255, 255, 0.15);
+}
+
+.comment-item .comment-body .comment-file .message-file .file-download {
+    color: rgba(255, 255, 255, 0.1);
+    transition: color 0.2s;
+}
+
+.comment-item .comment-body .comment-file .message-file:hover .file-download {
+    color: rgba(255, 255, 255, 0.3);
+}
+
+/* ============================================================
+   🔥 ACCIONES DEL COMENTARIO - MEJORADAS
+   ============================================================ */
 
 .comment-item .comment-body .comment-meta {
     display: flex;
     align-items: center;
-    gap: 6px;
+    gap: 4px;
     margin-top: 2px;
+    flex-wrap: wrap;
 }
 
 .comment-item .comment-body .comment-meta button {
-    background: rgba(255, 255, 255, 0.03);
-    border: 1px solid rgba(255, 255, 255, 0.04);
-    color: rgba(255, 255, 255, 0.2);
+    background: transparent;
+    border: none;
+    color: rgba(255, 255, 255, 0.15);
     cursor: pointer;
     font-size: 11px;
-    padding: 4px 10px;
+    padding: 3px 8px;
     border-radius: 16px;
     font-family: inherit;
     display: inline-flex;
     align-items: center;
     gap: 4px;
     transition: all 0.2s ease;
-    height: 26px;
+    height: 24px;
     line-height: 1;
 }
 
 .comment-item .comment-body .comment-meta button:hover {
-    background: rgba(255, 255, 255, 0.06);
-    border-color: rgba(255, 255, 255, 0.06);
+    background: rgba(255, 255, 255, 0.04);
     color: rgba(255, 255, 255, 0.3);
 }
 
@@ -580,27 +1193,21 @@
 }
 
 .comment-item .comment-body .comment-meta .btn-like-comment {
-    background: rgba(255, 255, 255, 0.03);
-    border: 1px solid rgba(255, 255, 255, 0.04);
-    color: rgba(255, 255, 255, 0.2);
+    color: rgba(255, 255, 255, 0.15);
 }
 
 .comment-item .comment-body .comment-meta .btn-like-comment:hover {
-    background: rgba(255, 107, 107, 0.05);
-    border-color: rgba(255, 107, 107, 0.1);
     color: #ff6b6b;
+    background: rgba(255, 107, 107, 0.05);
 }
 
 .comment-item .comment-body .comment-meta .btn-like-comment.liked {
-    background: rgba(255, 107, 107, 0.08);
-    border-color: rgba(255, 107, 107, 0.15);
     color: #ff6b6b;
 }
 
 .comment-item .comment-body .comment-meta .btn-like-comment.liked:hover {
-    background: rgba(255, 107, 107, 0.12);
-    border-color: rgba(255, 107, 107, 0.2);
     color: #ff6b6b;
+    background: rgba(255, 107, 107, 0.08);
 }
 
 .comment-item .comment-body .comment-meta .btn-like-comment span {
@@ -609,38 +1216,32 @@
 }
 
 .comment-item .comment-body .comment-meta .btn-reply-comment {
-    background: rgba(255, 255, 255, 0.03);
-    border: 1px solid rgba(255, 255, 255, 0.04);
-    color: rgba(255, 255, 255, 0.15);
+    color: rgba(255, 255, 255, 0.1);
 }
 
 .comment-item .comment-body .comment-meta .btn-reply-comment:hover {
-    background: rgba(192, 132, 252, 0.05);
-    border-color: rgba(192, 132, 252, 0.1);
     color: rgba(192, 132, 252, 0.5);
+    background: rgba(192, 132, 252, 0.04);
 }
 
 .comment-item .comment-body .comment-meta .btn-delete-comment {
-    background: rgba(255, 255, 255, 0.03);
-    border: 1px solid rgba(255, 255, 255, 0.04);
-    color: rgba(255, 107, 107, 0.15);
+    color: rgba(255, 107, 107, 0.1);
 }
 
 .comment-item .comment-body .comment-meta .btn-delete-comment:hover {
-    background: rgba(255, 107, 107, 0.05);
-    border-color: rgba(255, 107, 107, 0.1);
     color: rgba(255, 107, 107, 0.4);
+    background: rgba(255, 107, 107, 0.04);
 }
 
 /* ============================================================
-   INPUT DE RESPUESTA
+   🔥 INPUT DE RESPUESTA - MEJORADO
    ============================================================ */
 
 .reply-input-container {
     display: none;
     align-items: center;
     gap: 8px;
-    margin-top: 8px;
+    margin-top: 6px;
     padding: 4px 0;
 }
 
@@ -649,23 +1250,24 @@
     background: rgba(255, 255, 255, 0.04);
     border: 1px solid rgba(255, 255, 255, 0.04);
     border-radius: 50px;
-    padding: 6px 12px;
+    padding: 6px 14px;
     color: #fff;
-    font-size: 12px;
+    font-size: 13px;
     font-family: inherit;
     outline: none;
     transition: all 0.3s;
-    min-height: 30px;
+    min-height: 32px;
 }
 
 .reply-input-container .reply-input::placeholder {
-    color: rgba(255, 255, 255, 0.15);
+    color: rgba(255, 255, 255, 0.12);
     font-size: 12px;
 }
 
 .reply-input-container .reply-input:focus {
     border-color: rgba(192, 132, 252, 0.2);
     background: rgba(255, 255, 255, 0.06);
+    box-shadow: 0 0 0 3px rgba(192, 132, 252, 0.04);
 }
 
 .reply-input-container .reply-send-btn {
@@ -679,11 +1281,15 @@
     cursor: pointer;
     transition: all 0.25s;
     font-family: inherit;
-    min-height: 30px;
+    min-height: 32px;
     display: flex;
     align-items: center;
     gap: 4px;
-    border: none;
+}
+
+.reply-input-container .reply-send-btn:hover {
+    transform: scale(1.03);
+    box-shadow: 0 4px 16px rgba(192, 132, 252, 0.2);
 }
 
 .reply-input-container .reply-send-btn:active {
@@ -696,9 +1302,9 @@
 
 .show-replies-btn {
     font-size: 10px;
-    color: rgba(255, 255, 255, 0.1);
+    color: rgba(255, 255, 255, 0.08);
     cursor: pointer;
-    padding: 2px 8px;
+    padding: 2px 10px;
     border-radius: 12px;
     margin-top: 2px;
     transition: all 0.2s;
@@ -706,6 +1312,7 @@
     align-items: center;
     gap: 4px;
     border: 1px solid rgba(255, 255, 255, 0.02);
+    background: transparent;
 }
 
 .show-replies-btn:hover {
@@ -714,22 +1321,30 @@
     border-color: rgba(255, 255, 255, 0.04);
 }
 
+.show-replies-btn:active {
+    transform: scale(0.95);
+}
+
+.show-replies-btn i {
+    font-size: 8px;
+}
+
 /* ============================================================
    CONTENEDOR DE RESPUESTAS
    ============================================================ */
 
 .replies {
     margin-left: 40px;
-    margin-top: 8px;
+    margin-top: 6px;
     display: flex;
     flex-direction: column;
-    gap: 8px;
-    border-left: 1px solid rgba(255, 255, 255, 0.04);
+    gap: 4px;
+    border-left: 1.5px solid rgba(192, 132, 252, 0.06);
     padding-left: 12px;
 }
 
 /* ============================================================
-   INPUT PRINCIPAL
+   🔥 INPUT PRINCIPAL - MEJORADO
    ============================================================ */
 
 .comment-input-wrapper {
@@ -738,6 +1353,41 @@
     padding: 4px 0 6px;
     border-top: 1px solid rgba(255, 255, 255, 0.04);
     flex-shrink: 0;
+    background: rgba(0, 0, 0, 0.1);
+    border-radius: 0 0 12px 12px;
+    padding: 8px 4px;
+}
+
+.comment-input-wrapper .comment-attach-btn {
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.04);
+    border-radius: 50px;
+    padding: 0 12px;
+    color: rgba(255, 255, 255, 0.15);
+    font-size: 14px;
+    cursor: pointer;
+    transition: all 0.25s;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    min-height: 34px;
+    flex-shrink: 0;
+}
+
+.comment-input-wrapper .comment-attach-btn:hover {
+    background: rgba(255, 255, 255, 0.08);
+    color: rgba(255, 255, 255, 0.3);
+    border-color: rgba(255, 255, 255, 0.08);
+}
+
+.comment-input-wrapper .comment-attach-btn:active {
+    transform: scale(0.92);
+}
+
+.comment-input-wrapper .comment-attach-btn.has-file {
+    color: #34d399;
+    background: rgba(52, 211, 153, 0.06);
+    border-color: rgba(52, 211, 153, 0.1);
 }
 
 .comment-input-wrapper input {
@@ -745,7 +1395,7 @@
     background: rgba(255, 255, 255, 0.04);
     border: 1px solid rgba(255, 255, 255, 0.04);
     border-radius: 50px;
-    padding: 6px 14px;
+    padding: 6px 16px;
     color: #fff;
     font-size: 13px;
     font-family: inherit;
@@ -755,20 +1405,26 @@
 }
 
 .comment-input-wrapper input::placeholder {
-    color: rgba(255, 255, 255, 0.15);
+    color: rgba(255, 255, 255, 0.12);
     font-size: 13px;
 }
 
 .comment-input-wrapper input:focus {
     border-color: rgba(192, 132, 252, 0.2);
     background: rgba(255, 255, 255, 0.06);
+    box-shadow: 0 0 0 3px rgba(192, 132, 252, 0.04);
+}
+
+.comment-input-wrapper input:disabled {
+    opacity: 0.3;
+    cursor: not-allowed;
 }
 
 .comment-input-wrapper button {
     background: linear-gradient(135deg, #c084fc, #db2777);
     border: none;
     border-radius: 50px;
-    padding: 6px 16px;
+    padding: 6px 18px;
     color: #fff;
     font-weight: 600;
     font-size: 13px;
@@ -780,6 +1436,11 @@
     min-height: 34px;
 }
 
+.comment-input-wrapper button:hover {
+    transform: scale(1.03);
+    box-shadow: 0 4px 16px rgba(192, 132, 252, 0.2);
+}
+
 .comment-input-wrapper button:active {
     transform: scale(0.92);
 }
@@ -787,37 +1448,47 @@
 .comment-input-wrapper button:disabled {
     opacity: 0.3;
     cursor: not-allowed;
+    transform: none !important;
+    box-shadow: none !important;
 }
 
 /* ============================================================
-   ESTADO VACÍO
+   ESTADO VACÍO - MEJORADO
    ============================================================ */
 
 .no-comments {
     text-align: center;
-    padding: 12px 0;
+    padding: 20px 0;
     color: rgba(255, 255, 255, 0.04);
-    font-size: 12px;
+    font-size: 13px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
 }
 
 .no-comments i {
-    font-size: 20px;
+    font-size: 24px;
     display: block;
-    margin-bottom: 2px;
     color: rgba(255, 255, 255, 0.03);
+    margin-bottom: 2px;
+}
+
+.no-comments span {
+    color: rgba(255, 255, 255, 0.04);
 }
 
 /* ============================================================
-   RESPONSIVE
+   RESPONSIVE - MÓVIL
    ============================================================ */
 
 @media (max-width: 480px) {
     .modal-header {
-        padding: 12px 16px 10px;
+        padding: 10px 14px 8px;
     }
     .modal-header .user-info .avatar {
-        width: 30px;
-        height: 30px;
+        width: 32px;
+        height: 32px;
     }
     .modal-header .user-info .name {
         font-size: 14px;
@@ -826,8 +1497,8 @@
         font-size: 11px;
     }
     .modal-header .close-btn {
-        width: 30px;
-        height: 30px;
+        width: 32px;
+        height: 32px;
         font-size: 15px;
     }
     .subtitles-indicator {
@@ -838,24 +1509,25 @@
         font-size: 9px;
     }
     .modal-body {
-        padding: 8px 16px 4px;
+        padding: 8px 14px 4px;
     }
     .modal-media {
         height: 220px;
         min-height: 220px;
         max-height: 220px;
+        border-radius: 12px;
     }
     .modal-media .text-content {
         font-size: 19px;
-        padding: 24px;
+        padding: 20px;
     }
     #storyVideo::cue {
         font-size: 13px;
-        padding: 3px 8px;
+        padding: 4px 10px;
     }
     .story-progress {
         gap: 3px;
-        padding: 4px 10px 0;
+        padding: 6px 12px 3px;
     }
     .story-progress .progress-dot {
         height: 2px;
@@ -865,8 +1537,8 @@
         gap: 2px;
     }
     .modal-actions-wrapper .nav-arrow {
-        width: 30px;
-        height: 30px;
+        width: 32px;
+        height: 32px;
         font-size: 13px;
     }
     .modal-actions-wrapper .nav-arrow i {
@@ -885,7 +1557,7 @@
         padding: 4px 0 2px;
     }
     .modal-stats {
-        gap: 12px;
+        gap: 14px;
         padding: 4px 0;
         font-size: 12px;
     }
@@ -897,17 +1569,19 @@
     }
     .comments-section {
         padding-top: 4px;
+        border-radius: 10px 10px 0 0;
     }
     .comments-section .comments-title {
-        font-size: 11px;
+        font-size: 10px;
     }
     .comment-item {
         padding: 6px 8px;
         gap: 8px;
+        border-radius: 10px;
     }
     .comment-item .avatar {
-        width: 24px;
-        height: 24px;
+        width: 26px;
+        height: 26px;
     }
     .comment-item .comment-body .comment-user {
         font-size: 12px;
@@ -917,28 +1591,46 @@
     }
     .comment-item .comment-body .comment-meta button {
         font-size: 10px;
-        padding: 3px 8px;
-        height: 24px;
+        padding: 2px 6px;
+        height: 22px;
     }
     .comment-item .comment-body .comment-meta button i {
         font-size: 9px;
     }
+    .comment-item .comment-body .comment-file img {
+        max-width: 140px;
+        max-height: 120px;
+    }
+    .comment-item .comment-body .comment-file .message-file {
+        max-width: 160px;
+        padding: 6px 10px;
+    }
+    .comment-item .comment-body .comment-file .message-file .file-icon {
+        font-size: 16px;
+    }
     .replies {
         margin-left: 28px;
         padding-left: 8px;
+        border-left-width: 1.5px;
     }
     .reply-input-container .reply-input {
-        font-size: 11px;
-        padding: 5px 10px;
-        min-height: 26px;
+        font-size: 12px;
+        padding: 5px 12px;
+        min-height: 28px;
     }
     .reply-input-container .reply-send-btn {
         font-size: 11px;
-        padding: 5px 10px;
-        min-height: 26px;
+        padding: 5px 12px;
+        min-height: 28px;
     }
     .comment-input-wrapper {
-        padding: 2px 0 4px;
+        padding: 6px 2px;
+        gap: 6px;
+    }
+    .comment-input-wrapper .comment-attach-btn {
+        min-height: 30px;
+        padding: 0 10px;
+        font-size: 13px;
     }
     .comment-input-wrapper input {
         font-size: 12px;
@@ -950,25 +1642,99 @@
         padding: 5px 14px;
         min-height: 30px;
     }
+
+    /* Encuestas responsive 480px */
+    .survey-container-modal {
+        padding: 16px 12px;
+        min-height: 160px;
+        gap: 12px;
+    }
+    .survey-container-modal::before {
+        font-size: 16px;
+        top: 6px;
+        right: 8px;
+    }
+    .survey-question-modal {
+        font-size: 17px;
+    }
+    .survey-option-modal {
+        padding: 4px 10px 6px 10px;
+        gap: 2px;
+    }
+    .survey-option-label-modal {
+        font-size: 13px;
+        padding-right: 50px;
+    }
+    .survey-option-bar-modal {
+        height: 6px;
+    }
+    .survey-option-stats-modal {
+        font-size: 10px;
+    }
+    .survey-option-modal .option-vote-badge {
+        font-size: 9px;
+        padding: 1px 8px;
+        top: 4px;
+        right: 6px;
+    }
+    .survey-total-modal {
+        font-size: 11px;
+        padding: 4px 12px;
+    }
+    .survey-stat-item-modal {
+        gap: 10px;
+        padding: 2px 4px;
+    }
+    .survey-stat-label-modal {
+        font-size: 11px;
+        min-width: 45px;
+    }
+    .survey-stat-bar-modal {
+        height: 16px;
+    }
+    .survey-stat-value-modal {
+        font-size: 12px;
+        min-width: 28px;
+    }
+    .survey-calc-value-modal {
+        font-size: 32px;
+    }
+    .survey-calc-result-modal {
+        padding: 20px 16px;
+    }
+    .survey-calc-label-modal {
+        font-size: 11px;
+    }
+    .survey-calc-formula-modal {
+        font-size: 11px;
+        padding: 4px 12px;
+    }
+    .survey-stats-bars-modal {
+        gap: 10px;
+    }
 }
+
+/* ============================================================
+   RESPONSIVE - PANTALLA MUY PEQUEÑA
+   ============================================================ */
 
 @media (max-width: 380px) {
     .modal-header {
-        padding: 10px 12px 8px;
+        padding: 8px 10px 6px;
     }
     .modal-header .user-info .avatar {
         width: 26px;
         height: 26px;
     }
     .modal-header .user-info .name {
-        font-size: 13px;
+        font-size: 12px;
     }
     .modal-header .user-info .handle {
         font-size: 10px;
     }
     .modal-header .close-btn {
-        width: 26px;
-        height: 26px;
+        width: 28px;
+        height: 28px;
         font-size: 13px;
     }
     .subtitles-indicator {
@@ -979,31 +1745,32 @@
         font-size: 8px;
     }
     .modal-body {
-        padding: 6px 12px 2px;
+        padding: 6px 10px 2px;
     }
     .modal-media {
         height: 180px;
         min-height: 180px;
         max-height: 180px;
+        border-radius: 10px;
     }
     .modal-media .text-content {
         font-size: 16px;
-        padding: 18px;
+        padding: 14px;
     }
     #storyVideo::cue {
         font-size: 11px;
-        padding: 2px 6px;
+        padding: 3px 8px;
     }
     .story-progress {
         gap: 2px;
-        padding: 3px 8px 0;
+        padding: 4px 8px 2px;
     }
     .story-progress .progress-dot {
         height: 2px;
     }
     .modal-actions-wrapper .nav-arrow {
-        width: 26px;
-        height: 26px;
+        width: 28px;
+        height: 28px;
         font-size: 11px;
     }
     .modal-actions-wrapper .nav-arrow i {
@@ -1018,10 +1785,10 @@
     }
     .modal-caption {
         font-size: 12px;
-        max-height: 30px;
+        max-height: 28px;
     }
     .modal-stats {
-        gap: 8px;
+        gap: 10px;
         font-size: 11px;
         padding: 3px 0;
     }
@@ -1032,8 +1799,8 @@
         font-size: 12px;
     }
     .comment-item .avatar {
-        width: 20px;
-        height: 20px;
+        width: 22px;
+        height: 22px;
     }
     .comment-item .comment-body .comment-user {
         font-size: 11px;
@@ -1043,8 +1810,19 @@
     }
     .comment-item .comment-body .comment-meta button {
         font-size: 9px;
-        padding: 2px 6px;
+        padding: 1px 5px;
         height: 20px;
+    }
+    .comment-item .comment-body .comment-file img {
+        max-width: 110px;
+        max-height: 100px;
+    }
+    .comment-item .comment-body .comment-file .message-file {
+        max-width: 130px;
+        padding: 5px 8px;
+    }
+    .comment-item .comment-body .comment-file .message-file .file-icon {
+        font-size: 14px;
     }
     .replies {
         margin-left: 20px;
@@ -1060,11 +1838,64 @@
         padding: 4px 10px;
         min-height: 26px;
     }
+    .comment-input-wrapper .comment-attach-btn {
+        min-height: 26px;
+        padding: 0 8px;
+        font-size: 12px;
+    }
+
+    /* Encuestas responsive 380px */
+    .survey-container-modal {
+        padding: 10px 8px;
+        min-height: 130px;
+        gap: 8px;
+    }
+    .survey-question-modal {
+        font-size: 14px;
+    }
+    .survey-option-label-modal {
+        font-size: 11px;
+        padding-right: 40px;
+    }
+    .survey-option-bar-modal {
+        height: 5px;
+    }
+    .survey-option-stats-modal {
+        font-size: 9px;
+    }
+    .survey-option-modal .option-vote-badge {
+        font-size: 8px;
+        padding: 1px 6px;
+    }
+    .survey-total-modal {
+        font-size: 10px;
+    }
+    .survey-stat-label-modal {
+        font-size: 10px;
+        min-width: 38px;
+    }
+    .survey-stat-bar-modal {
+        height: 14px;
+    }
+    .survey-stat-value-modal {
+        font-size: 11px;
+        min-width: 24px;
+    }
+    .survey-calc-value-modal {
+        font-size: 26px;
+    }
+    .survey-calc-result-modal {
+        padding: 14px 12px;
+    }
 }
+
+/* ============================================================
+   RESPONSIVE - LANDSCAPE
+   ============================================================ */
 
 @media (max-height: 600px) {
     .modal-header {
-        padding: 8px 14px 6px;
+        padding: 6px 14px 4px;
     }
     .modal-header .user-info .avatar {
         width: 28px;
@@ -1077,20 +1908,21 @@
         font-size: 10px;
     }
     .modal-body {
-        padding: 6px 14px 2px;
+        padding: 4px 14px 2px;
     }
     .modal-media {
         height: 160px;
         min-height: 160px;
         max-height: 160px;
+        border-radius: 10px;
     }
     .modal-media .text-content {
         font-size: 17px;
-        padding: 16px;
+        padding: 14px;
     }
     #storyVideo::cue {
         font-size: 12px;
-        padding: 2px 6px;
+        padding: 3px 8px;
     }
     .modal-actions-wrapper .nav-arrow {
         width: 28px;
@@ -1103,7 +1935,7 @@
     }
     .modal-caption {
         font-size: 12px;
-        max-height: 30px;
+        max-height: 28px;
         padding: 3px 0 2px;
     }
     .modal-stats {
@@ -1111,7 +1943,18 @@
         padding: 3px 0;
     }
     .comment-item .avatar {
-        width: 20px;
+        width: 22px;
+        height: 22px;
+    }
+    .comment-item .comment-body .comment-user {
+        font-size: 11px;
+    }
+    .comment-item .comment-body .comment-text {
+        font-size: 13px;
+    }
+    .comment-item .comment-body .comment-meta button {
+        font-size: 9px;
+        padding: 1px 6px;
         height: 20px;
     }
     .comment-input-wrapper input {
@@ -1124,8 +1967,13 @@
         font-size: 12px;
         padding: 4px 12px;
     }
+    .comment-input-wrapper .comment-attach-btn {
+        min-height: 28px;
+        padding: 0 10px;
+        font-size: 12px;
+    }
     .story-progress {
-        padding: 3px 10px 0;
+        padding: 3px 10px 2px;
     }
     .story-progress .progress-dot {
         height: 2px;
@@ -1133,5 +1981,149 @@
     .subtitles-indicator {
         font-size: 8px;
         padding: 2px 7px;
+    }
+    .comment-item .comment-body .comment-file img {
+        max-width: 120px;
+        max-height: 100px;
+    }
+    .comment-item .comment-body .comment-file .message-file {
+        max-width: 140px;
+        padding: 5px 8px;
+    }
+
+    /* Encuestas landscape */
+    .survey-container-modal {
+        padding: 10px 12px;
+        min-height: 100px;
+        gap: 6px;
+    }
+    .survey-container-modal::before {
+        font-size: 14px;
+        top: 4px;
+        right: 6px;
+    }
+    .survey-question-modal {
+        font-size: 15px;
+        margin-bottom: 0;
+    }
+    .survey-options-modal {
+        gap: 6px;
+    }
+    .survey-option-modal {
+        padding: 3px 8px 4px 8px;
+    }
+    .survey-option-label-modal {
+        font-size: 12px;
+        padding-right: 45px;
+    }
+    .survey-option-bar-modal {
+        height: 5px;
+    }
+    .survey-option-stats-modal {
+        font-size: 9px;
+    }
+    .survey-option-modal .option-vote-badge {
+        font-size: 8px;
+        padding: 1px 6px;
+        top: 3px;
+        right: 5px;
+    }
+    .survey-total-modal {
+        font-size: 10px;
+        padding: 3px 10px;
+        margin-top: 2px;
+    }
+    .survey-stat-item-modal {
+        gap: 8px;
+        padding: 1px 4px;
+    }
+    .survey-stat-label-modal {
+        font-size: 10px;
+        min-width: 38px;
+    }
+    .survey-stat-bar-modal {
+        height: 14px;
+    }
+    .survey-stat-value-modal {
+        font-size: 11px;
+        min-width: 24px;
+    }
+    .survey-calc-value-modal {
+        font-size: 28px;
+    }
+    .survey-calc-result-modal {
+        padding: 14px 16px;
+    }
+    .survey-stats-bars-modal {
+        gap: 8px;
+    }
+}
+
+/* ============================================================
+   🔥 ANIMACIONES ADICIONALES
+   ============================================================ */
+
+@keyframes commentSlideIn {
+    0% { opacity: 0; transform: translateY(-8px) scale(0.98); }
+    100% { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.comment-item {
+    animation: commentSlideIn 0.25s ease;
+}
+
+@keyframes replySlideIn {
+    0% { opacity: 0; transform: translateX(-8px); }
+    100% { opacity: 1; transform: translateX(0); }
+}
+
+.reply-item {
+    animation: replySlideIn 0.3s ease;
+}
+
+@keyframes fileAppear {
+    0% { opacity: 0; transform: scale(0.95); }
+    100% { opacity: 1; transform: scale(1); }
+}
+
+.comment-file {
+    animation: fileAppear 0.3s ease;
+}
+
+/* ============================================================
+   UTILIDADES
+   ============================================================ */
+
+.file-input-hidden {
+    display: none !important;
+}
+
+.avatar-initials {
+    width: 38px;
+    height: 38px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #7c3aed, #db2777);
+    color: #fff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    font-size: 16px;
+    flex-shrink: 0;
+}
+
+@media (max-width: 480px) {
+    .avatar-initials {
+        width: 32px;
+        height: 32px;
+        font-size: 13px;
+    }
+}
+
+@media (max-width: 380px) {
+    .avatar-initials {
+        width: 26px;
+        height: 26px;
+        font-size: 11px;
     }
 }

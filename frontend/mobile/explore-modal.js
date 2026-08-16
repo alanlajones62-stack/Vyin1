@@ -1,12 +1,15 @@
 // explore-modal.js - BÚSQUEDA HÍBRIDA CON CLASIFICACIÓN POR CATEGORÍAS
 // Y SUPERPOSICIÓN DE MODALES - VERSIÓN COMPLETA ACTUALIZADA
-// 🔥 CORREGIDO: Persistencia de resultados de búsqueda
+// 🔥 CORREGIDO: Tabs siempre clickeables, se limpia búsqueda al cambiar de tab
 // 🔥 NUEVO: Clasificación por categorías usando ContentClassifier
 // 🔥 NUEVO: Soporte para /api/vyin/classify y /api/vyin/classify-story
+// 🔥 NUEVO: Soporte para i18n (traducción de interfaz)
+// 🔥 CORREGIDO: Miniaturas de historias con URLs correctas
 
 import { getToken, getCurrentUser, showToast, getAvatar } from './auth.js';
 import { formatNumber } from './utils.js';
 import { openStoryModal } from './story-modal.js';
+import { t, translateAll, onLocaleChange } from './i18n.js';
 
 const API_URL = window.location.origin;
 
@@ -25,6 +28,7 @@ let isSearchMode = false;
 let currentUsers = [];
 let currentStories = [];
 let currentMeta = {};
+let localeUnsubscribe = null;
 
 // ============================================================
 // 🔥 CACHÉ EN localStorage PARA USUARIOS POPULARES
@@ -114,6 +118,87 @@ function clearExploreCache() {
 }
 
 // ============================================================
+// 🔥 ESCUCHAR CAMBIOS DE IDIOMA
+// ============================================================
+
+function initI18nForExplore() {
+    if (localeUnsubscribe) {
+        localeUnsubscribe();
+    }
+    
+    localeUnsubscribe = onLocaleChange(() => {
+        if (isOpen) {
+            translateExploreUI();
+        }
+    });
+}
+
+// ============================================================
+// 🔥 TRADUCIR UI DEL EXPLORE
+// ============================================================
+
+function translateExploreUI() {
+    const overlay = document.getElementById('exploreOverlay');
+    if (!overlay || !overlay.classList.contains('active')) return;
+    
+    console.log('🌐 Traduciendo UI de explorar...');
+    
+    // Traducir título
+    const title = overlay.querySelector('.explore-header h2');
+    if (title) {
+        const icon = title.querySelector('i');
+        const text = t('explore.title');
+        if (text && text !== 'explore.title') {
+            title.innerHTML = '';
+            if (icon) title.appendChild(icon);
+            title.appendChild(document.createTextNode(' ' + text));
+        }
+    }
+    
+    // Traducir placeholder de búsqueda
+    const searchInput = overlay.querySelector('#exploreSearchInput');
+    if (searchInput) {
+        const placeholder = t('explore.searchPlaceholder');
+        if (placeholder && placeholder !== 'explore.searchPlaceholder') {
+            searchInput.placeholder = placeholder;
+        }
+    }
+    
+    // Traducir tabs
+    const tabs = overlay.querySelectorAll('.explore-tabs button');
+    const tabKeys = ['trending', 'stories', 'users'];
+    const tabLabels = [
+        t('explore.trending') || '🔥 Tendencias',
+        t('explore.stories') || '📸 Historias',
+        t('explore.users') || '👥 Usuarios'
+    ];
+    
+    tabs.forEach((btn, index) => {
+        if (index < tabKeys.length && tabLabels[index]) {
+            const icon = btn.textContent.match(/^[^\s]+/)?.[0] || '';
+            btn.textContent = tabLabels[index];
+            if (icon && !btn.textContent.startsWith(icon)) {
+                btn.textContent = icon + ' ' + tabLabels[index];
+            }
+        }
+    });
+    
+    // Traducir texto de carga
+    const loadingTexts = overlay.querySelectorAll('.explore-empty h3, .explore-empty p');
+    loadingTexts.forEach(el => {
+        const key = el.getAttribute('data-i18n');
+        if (key) {
+            const text = t(key);
+            if (text && text !== key) {
+                el.textContent = text;
+            }
+        }
+    });
+    
+    console.log('✅ UI de explorar traducida');
+}
+
+// ============================================================
 // CREAR ELEMENTOS DEL MODAL
 // ============================================================
 
@@ -126,7 +211,7 @@ function createExploreModal() {
     
     overlay.innerHTML = `
         <div class="explore-header">
-            <h2><i class="fas fa-compass"></i> Explorar</h2>
+            <h2><i class="fas fa-compass"></i> ${t('explore.title') || 'Explorar'}</h2>
             <button class="close-btn" id="closeExplore">
                 <i class="fas fa-times"></i>
             </button>
@@ -137,24 +222,24 @@ function createExploreModal() {
                 <input 
                     type="text" 
                     id="exploreSearchInput" 
-                    placeholder="Buscar en cualquier idioma..."
+                    placeholder="${t('explore.searchPlaceholder') || 'Buscar en cualquier idioma...'}"
                     autocomplete="off"
                 />
                 <span style="font-size:9px;color:rgba(255,255,255,0.1);margin-left:8px;">
-                    🔍 Híbrida (literal + semántica + categorías)
+                    🔍 ${t('explore.hybrid') || 'Híbrida (literal + semántica + categorías)'}
                 </span>
             </div>
             
             <div class="explore-tabs">
-                <button class="active" data-tab="trending">🔥 Tendencias</button>
-                <button data-tab="stories">📸 Historias</button>
-                <button data-tab="users">👥 Usuarios</button>
+                <button class="active" data-tab="trending">🔥 ${t('explore.trending') || 'Tendencias'}</button>
+                <button data-tab="stories">📸 ${t('explore.stories') || 'Historias'}</button>
+                <button data-tab="users">👥 ${t('explore.users') || 'Usuarios'}</button>
             </div>
             
             <div id="exploreContent">
                 <div class="explore-empty">
                     <i class="fas fa-spinner fa-pulse"></i>
-                    <h3>Cargando...</h3>
+                    <h3 data-i18n="modal.loading">${t('modal.loading') || 'Cargando...'}</h3>
                 </div>
             </div>
         </div>
@@ -163,14 +248,31 @@ function createExploreModal() {
     document.body.appendChild(overlay);
     exploreOverlay = overlay;
     
+    initI18nForExplore();
+    
     overlay.querySelector('#closeExplore').addEventListener('click', closeExploreModal);
     overlay.addEventListener('click', (e) => {
         if (e.target === overlay) closeExploreModal();
     });
     
+    // TABS SIEMPRE CLICKEABLES
     overlay.querySelectorAll('.explore-tabs button').forEach(btn => {
         btn.addEventListener('click', () => {
             const tab = btn.dataset.tab;
+            
+            const searchInput = overlay.querySelector('#exploreSearchInput');
+            if (searchInput && searchInput.value.trim().length > 0) {
+                console.log('🧹 Limpiando búsqueda al cambiar de tab');
+                searchInput.value = '';
+                currentSearchQuery = '';
+                currentSearchResults = [];
+                currentUsers = [];
+                currentStories = [];
+                currentMeta = {};
+                isSearchMode = false;
+                updateTabsVisualState(false);
+            }
+            
             switchExploreTab(tab);
         });
     });
@@ -178,20 +280,23 @@ function createExploreModal() {
     const searchInput = overlay.querySelector('#exploreSearchInput');
     searchInput.addEventListener('input', (e) => {
         clearTimeout(searchTimeout);
-        searchTimeout = setTimeout(() => {
-            const query = e.target.value.trim();
-            currentSearchQuery = query;
-            if (query.length >= 2) {
-                performSmartSearch(query);
-            } else if (query.length === 0) {
-                currentSearchResults = [];
-                currentUsers = [];
-                currentStories = [];
-                currentMeta = {};
-                clearSearchMode();
-                loadExploreDataWithCache(currentTab);
-            }
-        }, 400);
+        const query = e.target.value.trim();
+        currentSearchQuery = query;
+        
+        if (query.length >= 2) {
+            isSearchMode = true;
+            updateTabsVisualState(true);
+            performSmartSearch(query);
+        } else if (query.length === 0) {
+            console.log('🧹 Campo de búsqueda vacío, volviendo a modo normal');
+            currentSearchResults = [];
+            currentUsers = [];
+            currentStories = [];
+            currentMeta = {};
+            isSearchMode = false;
+            updateTabsVisualState(false);
+            loadExploreDataWithCache(currentTab);
+        }
     });
     
     searchInput.addEventListener('keydown', (e) => {
@@ -199,7 +304,13 @@ function createExploreModal() {
             const query = e.target.value.trim();
             if (query.length >= 2) {
                 clearTimeout(searchTimeout);
+                isSearchMode = true;
+                updateTabsVisualState(true);
                 performSmartSearch(query);
+            } else if (query.length === 0) {
+                isSearchMode = false;
+                updateTabsVisualState(false);
+                loadExploreDataWithCache(currentTab);
             }
         }
     });
@@ -221,6 +332,36 @@ function createExploreModal() {
 }
 
 // ============================================================
+// 🔥 ACTUALIZAR ESTADO VISUAL DE TABS (sin bloquear)
+// ============================================================
+
+function updateTabsVisualState(isSearchActive) {
+    const tabs = exploreOverlay?.querySelectorAll('.explore-tabs button');
+    if (!tabs) return;
+    
+    tabs.forEach(btn => {
+        const tab = btn.dataset.tab;
+        const isActive = tab === currentTab;
+        
+        if (isSearchActive) {
+            btn.classList.remove('active');
+            btn.style.opacity = '0.6';
+            btn.style.pointerEvents = 'auto';
+            btn.style.cursor = 'pointer';
+        } else {
+            btn.style.opacity = '1';
+            btn.style.pointerEvents = 'auto';
+            btn.style.cursor = 'pointer';
+            if (isActive) {
+                btn.classList.add('active');
+            } else {
+                btn.classList.remove('active');
+            }
+        }
+    });
+}
+
+// ============================================================
 // 🔥 LIMPIAR MODO DE BÚSQUEDA
 // ============================================================
 
@@ -232,15 +373,7 @@ function clearSearchMode() {
     currentStories = [];
     currentMeta = {};
     savedScrollPosition = 0;
-    
-    const tabs = exploreOverlay.querySelectorAll('.explore-tabs button');
-    tabs.forEach(btn => {
-        btn.style.opacity = '1';
-        btn.style.pointerEvents = 'auto';
-        btn.style.cursor = 'pointer';
-        const isActive = btn.dataset.tab === currentTab;
-        btn.classList.toggle('active', isActive);
-    });
+    updateTabsVisualState(false);
 }
 
 // ============================================================
@@ -249,13 +382,7 @@ function clearSearchMode() {
 
 function activateSearchMode() {
     isSearchMode = true;
-    const tabs = exploreOverlay.querySelectorAll('.explore-tabs button');
-    tabs.forEach(btn => {
-        btn.classList.remove('active');
-        btn.style.opacity = '0.3';
-        btn.style.pointerEvents = 'none';
-        btn.style.cursor = 'default';
-    });
+    updateTabsVisualState(true);
 }
 
 // ============================================================
@@ -290,11 +417,152 @@ function filterPublicStories(stories) {
 }
 
 // ============================================================
-// 🔥 ABRIR MODAL - RESTAURA EL ESTADO GUARDADO
+// 🔥 ESCAPE HTML
+// ============================================================
+
+function escapeHtml(text) {
+    if (!text) return '';
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+// ============================================================
+// 🔥 CREAR MINIATURA DE HISTORIA (CORREGIDO)
+// ============================================================
+
+function createStoryThumbnail(story) {
+    // 🔥 Determinar el contenido de la miniatura
+    let mediaContent = '';
+    const mediaUrl = story.mediaUrl || story.cloudinaryUrl || story.url || '';
+    const mediaType = story.mediaType || 'image';
+    
+    // 🔥 OBTENER URL CORRECTA
+    let displayUrl = mediaUrl;
+    if (displayUrl && displayUrl.startsWith('/uploads/')) {
+        displayUrl = window.location.origin + displayUrl;
+    }
+    
+    if (mediaType === 'image' && displayUrl) {
+        // 🔥 IMAGEN - Usar la URL correcta
+        mediaContent = `
+            <img src="${displayUrl}" loading="lazy" 
+                 onerror="this.style.display='none';this.parentElement.innerHTML='<div style=\\'width:100%;height:100%;display:flex;align-items:center;justify-content:center;background:#1a1a2e;color:rgba(255,255,255,0.15);font-size:32px;\\'>📸</div>'"
+                 style="width:100%;height:100%;object-fit:cover;"
+            />
+        `;
+    } else if (mediaType === 'video' && displayUrl) {
+        // 🔥 VIDEO - Usar la URL correcta
+        mediaContent = `
+            <video src="${displayUrl}" muted loop playsinline preload="metadata" 
+                   style="width:100%;height:100%;object-fit:cover;"
+                   onerror="this.style.display='none';this.parentElement.innerHTML='<div style=\\'width:100%;height:100%;display:flex;align-items:center;justify-content:center;background:#1a1a2e;color:rgba(255,255,255,0.15);font-size:32px;\\'>🎬</div>'"></video>
+        `;
+    } else if (mediaType === 'text' && story.textContent) {
+        // 🔥 TEXTO - Mostrar el contenido del texto
+        const textPreview = story.textContent.substring(0, 80) + (story.textContent.length > 80 ? '...' : '');
+        mediaContent = `
+            <div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;background:${story.textBgColor || '#1a1a2e'};padding:12px;text-align:center;font-size:13px;color:rgba(255,255,255,0.6);font-weight:500;overflow:hidden;line-height:1.4;">
+                ${escapeHtml(textPreview)}
+            </div>
+        `;
+    } else if (mediaType === 'survey') {
+        // 🔥 ENCUESTA - Mostrar icono de encuesta
+        const question = story.surveyData?.question || 'Encuesta';
+        mediaContent = `
+            <div style="width:100%;height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;background:#1a1a2e;color:rgba(192,132,252,0.3);font-size:24px;padding:12px;text-align:center;">
+                <i class="fas fa-chart-pie" style="font-size:28px;margin-bottom:4px;"></i>
+                <span style="font-size:10px;color:rgba(255,255,255,0.15);line-height:1.2;max-width:90%;">${escapeHtml(question.substring(0, 30))}</span>
+            </div>
+        `;
+    } else if (mediaType === 'audio') {
+        // 🔥 AUDIO - Mostrar icono de audio
+        mediaContent = `
+            <div style="width:100%;height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;background:#1a1a2e;color:rgba(192,132,252,0.3);font-size:24px;">
+                <i class="fas fa-music" style="font-size:32px;"></i>
+                <span style="font-size:10px;color:rgba(255,255,255,0.15);margin-top:4px;">🎵 Audio</span>
+            </div>
+        `;
+    } else {
+        // 🔥 FALLBACK - Si no hay URL válida
+        const icon = mediaType === 'video' ? '🎬' : story.hasSubtitles ? '💬' : '📝';
+        mediaContent = `
+            <div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;background:#1a1a2e;color:rgba(255,255,255,0.15);font-size:32px;">
+                ${icon}
+            </div>
+        `;
+    }
+
+    // 🔥 Badge de subtítulos
+    const subtitlesBadge = story.hasSubtitles ? 
+        `<span class="subtitles-badge" style="position:absolute;top:6px;right:6px;z-index:5;background:rgba(192,132,252,0.2);padding:2px 6px;border-radius:4px;font-size:7px;color:#c084fc;backdrop-filter:blur(4px);border:1px solid rgba(192,132,252,0.1);">CC</span>` : '';
+
+    // 🔥 Badge de idioma
+    const langBadge = story.language && story.language !== 'es' ?
+        `<span class="lang-badge" style="position:absolute;bottom:6px;right:6px;z-index:5;background:rgba(255,255,255,0.05);padding:2px 6px;border-radius:4px;font-size:7px;color:rgba(255,255,255,0.15);">
+            ${story.language.toUpperCase()}
+        </span>` : '';
+
+    // 🔥 Badge de relevancia (para búsquedas)
+    let relevanceBadge = '';
+    const relevance = story.relevanceScore || 0;
+    if (relevance > 70) {
+        relevanceBadge = `<span class="relevance-badge" style="position:absolute;top:6px;left:6px;z-index:5;background:rgba(34,197,94,0.2);padding:2px 6px;border-radius:4px;font-size:7px;color:#22c55e;backdrop-filter:blur(4px);border:1px solid rgba(34,197,94,0.1);">⭐ ${relevance}%</span>`;
+    } else if (relevance > 40) {
+        relevanceBadge = `<span class="relevance-badge" style="position:absolute;top:6px;left:6px;z-index:5;background:rgba(192,132,252,0.15);padding:2px 6px;border-radius:4px;font-size:7px;color:#c084fc;backdrop-filter:blur(4px);border:1px solid rgba(192,132,252,0.05);">🔍 ${relevance}%</span>`;
+    }
+
+    // 🔥 Badge de coincidencia de categoría
+    let categoryBadge = '';
+    if (story.categoryMatch && story.categoryName) {
+        categoryBadge = `
+            <span class="category-match-badge" style="position:absolute;bottom:6px;left:6px;z-index:5;background:rgba(192,132,252,0.2);padding:2px 6px;border-radius:4px;font-size:7px;color:#c084fc;backdrop-filter:blur(4px);border:1px solid rgba(192,132,252,0.1);">
+                📂 ${story.categoryName}
+            </span>
+        `;
+    }
+
+    // 🔥 Badge de coincidencia de intereses
+    let interestBadge = '';
+    if (story.interestMatch) {
+        interestBadge = `
+            <span class="interest-match-badge" style="position:absolute;bottom:30px;left:6px;z-index:5;background:rgba(251,191,36,0.15);padding:2px 6px;border-radius:4px;font-size:7px;color:#fbbf24;backdrop-filter:blur(4px);border:1px solid rgba(251,191,36,0.1);">
+                ⭐ Interés
+            </span>
+        `;
+    }
+
+    // 🔥 Texto de vista previa (subtítulos o caption)
+    const previewText = story.subtitles || story.caption || story.textContent || '';
+    const previewLabel = story.subtitles ? '💬' : (story.caption ? '📝' : '');
+
+    return `
+        <div class="story-thumb" onclick="window.openStoryFromExplore('${story.id}')" style="position:relative;cursor:pointer;border-radius:8px;overflow:hidden;aspect-ratio:1;background:rgba(255,255,255,0.02);">
+            ${mediaContent}
+            ${subtitlesBadge}
+            ${langBadge}
+            ${relevanceBadge}
+            ${categoryBadge}
+            ${interestBadge}
+            <div class="overlay" style="position:absolute;bottom:0;left:0;right:0;padding:6px 8px;background:linear-gradient(0deg,rgba(0,0,0,0.7) 0%,transparent 100%);pointer-events:none;">
+                <div class="likes" style="font-size:11px;color:#fff;font-weight:500;display:flex;align-items:center;gap:4px;text-shadow:0 1px 8px rgba(0,0,0,0.3);">
+                    <i class="fas fa-heart" style="font-size:11px;color:#ff6b6b;"></i>
+                    ${formatNumber(story.likes?.length || 0)}
+                </div>
+                ${previewText ? `<div class="subtitle-preview" style="font-size:9px;color:rgba(255,255,255,0.7);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100%;margin-top:2px;text-shadow:0 1px 4px rgba(0,0,0,0.5);">${previewLabel} ${escapeHtml(previewText.substring(0, 50))}${previewText.length > 50 ? '...' : ''}</div>` : ''}
+            </div>
+        </div>
+    `;
+}
+
+// ============================================================
+// ABRIR MODAL - RESTAURA EL ESTADO GUARDADO
 // ============================================================
 
 function openExploreModal(restoreState = true) {
     if (!exploreOverlay) createExploreModal();
+    
+    setTimeout(translateExploreUI, 100);
     
     if (restoreState) {
         const savedState = getExploreState();
@@ -308,37 +576,20 @@ function openExploreModal(restoreState = true) {
             savedScrollPosition = savedState.scrollPosition || 0;
             isSearchMode = savedState.isSearchMode || false;
             
-            // 🔥 RESTAURAR USUARIOS Y STORIES
             currentUsers = savedState.users || [];
             currentStories = savedState.stories || [];
             currentMeta = savedState.meta || {};
             
-            const tabs = exploreOverlay.querySelectorAll('.explore-tabs button');
-            tabs.forEach(btn => {
-                if (isSearchMode) {
-                    btn.classList.remove('active');
-                    btn.style.opacity = '0.3';
-                    btn.style.pointerEvents = 'none';
-                    btn.style.cursor = 'default';
-                } else {
-                    const isActive = btn.dataset.tab === tabToLoad;
-                    btn.classList.toggle('active', isActive);
-                    btn.style.opacity = '1';
-                    btn.style.pointerEvents = 'auto';
-                    btn.style.cursor = 'pointer';
-                }
-            });
+            updateTabsVisualState(isSearchMode);
             
             const searchInput = exploreOverlay.querySelector('#exploreSearchInput');
             if (searchInput) {
                 searchInput.value = savedState.query || '';
             }
             
-            // 🔥 SI HAY RESULTADOS DE BÚSQUEDA, MOSTRARLOS
             if (isSearchMode && savedState.query && (savedState.results?.length > 0 || savedState.users?.length > 0)) {
                 currentSearchResults = savedState.results || [];
                 
-                // 🔥 COMBINAR USUARIOS Y STORIES PARA RENDERIZAR
                 const users = savedState.users || [];
                 const stories = savedState.stories || [];
                 const meta = savedState.meta || {};
@@ -346,11 +597,9 @@ function openExploreModal(restoreState = true) {
                 if (users.length > 0 || stories.length > 0) {
                     renderSearchResults(savedState.query, stories, users, meta);
                 } else if (savedState.results && savedState.results.length > 0) {
-                    // Fallback: usar results si no hay users/stories separados
                     renderSearchResults(savedState.query, savedState.results, [], {});
                 }
                 
-                // 🔥 RESTAURAR SCROLL
                 setTimeout(() => {
                     const content = document.getElementById('exploreContent');
                     if (content && savedState.scrollPosition) {
@@ -383,14 +632,7 @@ function openExploreModal(restoreState = true) {
     savedScrollPosition = 0;
     isSearchMode = false;
     
-    const tabs = exploreOverlay.querySelectorAll('.explore-tabs button');
-    tabs.forEach(btn => {
-        const isActive = btn.dataset.tab === tabToLoad;
-        btn.classList.toggle('active', isActive);
-        btn.style.opacity = '1';
-        btn.style.pointerEvents = 'auto';
-        btn.style.cursor = 'pointer';
-    });
+    updateTabsVisualState(false);
     
     const searchInput = exploreOverlay.querySelector('#exploreSearchInput');
     if (searchInput) searchInput.value = '';
@@ -412,6 +654,8 @@ function showExploreModal() {
         return;
     }
     
+    setTimeout(translateExploreUI, 100);
+    
     console.log(`📌 Mostrando explore-modal (pestaña: ${savedTab || currentTab})`);
     
     const savedState = getExploreState();
@@ -425,21 +669,7 @@ function showExploreModal() {
         currentStories = savedState.stories || [];
         currentMeta = savedState.meta || {};
         
-        const tabs = exploreOverlay.querySelectorAll('.explore-tabs button');
-        tabs.forEach(btn => {
-            if (isSearchMode) {
-                btn.classList.remove('active');
-                btn.style.opacity = '0.3';
-                btn.style.pointerEvents = 'none';
-                btn.style.cursor = 'default';
-            } else {
-                const isActive = btn.dataset.tab === tabToShow;
-                btn.classList.toggle('active', isActive);
-                btn.style.opacity = '1';
-                btn.style.pointerEvents = 'auto';
-                btn.style.cursor = 'pointer';
-            }
-        });
+        updateTabsVisualState(isSearchMode);
         
         const searchInput = exploreOverlay.querySelector('#exploreSearchInput');
         if (searchInput) {
@@ -497,7 +727,6 @@ function closeExploreModal() {
         const content = document.getElementById('exploreContent');
         const scrollPos = content ? content.scrollTop : 0;
         
-        // 🔥 GUARDAR ESTADO COMPLETO CON USUARIOS Y STORIES
         saveExploreState(
             currentTab, 
             query, 
@@ -545,7 +774,8 @@ function switchExploreTab(tab) {
         currentStories = [];
         currentMeta = {};
         savedScrollPosition = 0;
-        clearSearchMode();
+        isSearchMode = false;
+        updateTabsVisualState(false);
     }
     
     currentTab = tab;
@@ -553,7 +783,8 @@ function switchExploreTab(tab) {
     
     const tabs = exploreOverlay.querySelectorAll('.explore-tabs button');
     tabs.forEach(btn => {
-        btn.classList.toggle('active', btn.dataset.tab === tab);
+        const isActive = btn.dataset.tab === tab;
+        btn.classList.toggle('active', isActive);
         btn.style.opacity = '1';
         btn.style.pointerEvents = 'auto';
         btn.style.cursor = 'pointer';
@@ -682,10 +913,10 @@ async function loadExploreData(tab) {
         content.innerHTML = `
             <div class="explore-empty">
                 <i class="fas fa-exclamation-triangle" style="color:#ff6b6b;"></i>
-                <h3>Error al cargar</h3>
-                <p>Intenta de nuevo más tarde</p>
+                <h3 data-i18n="error.general">${t('error.general') || 'Error al cargar'}</h3>
+                <p>${t('error.retry') || 'Intenta de nuevo más tarde'}</p>
                 <button onclick="loadExploreData('${tab}')" style="margin-top:12px;padding:8px 24px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:8px;color:white;cursor:pointer;">
-                    Reintentar
+                    ${t('action.retry') || 'Reintentar'}
                 </button>
             </div>
         `;
@@ -699,13 +930,14 @@ async function loadExploreData(tab) {
 async function performSmartSearch(query) {
     const token = getToken();
     if (!token) {
-        showToast('Inicia sesión para buscar', true);
+        showToast(t('error.unauthorized') || 'Inicia sesión para buscar', true);
         return;
     }
 
     if (searchInProgress) return;
     
-    activateSearchMode();
+    isSearchMode = true;
+    updateTabsVisualState(true);
     
     const cacheKey = `search_${query.toLowerCase().trim()}`;
     const cachedResults = getFromCache(cacheKey);
@@ -726,15 +958,15 @@ async function performSmartSearch(query) {
     content.innerHTML = `
         <div class="explore-empty">
             <i class="fas fa-spinner fa-pulse"></i>
-            <h3>Buscando "${query}"...</h3>
+            <h3>${t('explore.searching') || 'Buscando'} "${query}"...</h3>
             <p style="font-size:12px;color:rgba(255,255,255,0.2);">
-                🔍 Búsqueda híbrida: literal + semántica + categorías
+                🔍 ${t('explore.hybrid') || 'Búsqueda híbrida: literal + semántica + categorías'}
             </p>
         </div>
     `;
 
     try {
-        // 🔥 1. DETECTAR CATEGORÍA DE LA BÚSQUEDA USANDO /api/vyin/classify
+        // DETECTAR CATEGORÍA DE LA BÚSQUEDA
         let detectedCategory = null;
         let detectedCategoryName = null;
         let detectedCategoryEmoji = null;
@@ -763,14 +995,12 @@ async function performSmartSearch(query) {
                     detectedCategoryScore = topCategory.score || 0;
                     console.log(`📂 Categoría detectada: ${detectedCategoryName} (${detectedCategory}) con ${Math.round(detectedCategoryScore * 100)}%`);
                 }
-            } else {
-                console.warn('⚠️ Error en /api/vyin/classify:', classifyRes.status);
             }
         } catch (classifyError) {
             console.warn('⚠️ Error clasificando búsqueda:', classifyError.message);
         }
 
-        // 🔥 2. BUSCAR USUARIOS
+        // BUSCAR USUARIOS
         const usersRes = await fetch(`${API_URL}/api/users/search?q=${encodeURIComponent(query)}`, {
             headers: { 'Authorization': `Bearer ${token}` }
         });
@@ -782,7 +1012,7 @@ async function performSmartSearch(query) {
             console.log(`👥 Usuarios encontrados (públicos): ${users.length}`);
         }
 
-        // 🔥 3. BÚSQUEDA HÍBRIDA - EL BACKEND YA USA ContentClassifier
+        // BÚSQUEDA HÍBRIDA
         const hybridRes = await fetch(`${API_URL}/api/stories/search/hybrid?q=${encodeURIComponent(query)}&limit=50`, {
             headers: { 'Authorization': `Bearer ${token}` }
         });
@@ -797,94 +1027,15 @@ async function performSmartSearch(query) {
             
             console.log(`📊 Búsqueda híbrida: ${allStories.length} historias encontradas`);
             
-            // 🔥 4. FILTRAR POR CATEGORÍA DETECTADA (si el backend no lo hizo)
-            if (detectedCategory && allStories.length > 0) {
-                console.log(`🔍 Aplicando filtro de categoría en frontend: ${detectedCategoryName}`);
-                
-                // Verificar si el backend ya filtró por categoría
-                const alreadyFiltered = meta.detectedCategory === detectedCategory;
-                
-                if (!alreadyFiltered) {
-                    // Clasificar cada historia para verificar categoría
-                    const classifiedStories = [];
-                    const batchSize = 5;
-                    
-                    for (let i = 0; i < allStories.length; i += batchSize) {
-                        const batch = allStories.slice(i, i + batchSize);
-                        const batchPromises = batch.map(async (story) => {
-                            try {
-                                const classifyStoryRes = await fetch(`${API_URL}/api/vyin/classify-story`, {
-                                    method: 'POST',
-                                    headers: {
-                                        'Authorization': `Bearer ${token}`,
-                                        'Content-Type': 'application/json'
-                                    },
-                                    body: JSON.stringify({ 
-                                        storyId: story.id,
-                                        targetLanguage: 'es'
-                                    })
-                                });
-                                
-                                if (classifyStoryRes.ok) {
-                                    const storyClass = await classifyStoryRes.json();
-                                    const categories = storyClass.categories || [];
-                                    const hasCategory = categories.some(c => c.category === detectedCategory);
-                                    
-                                    if (hasCategory) {
-                                        // 🔥 BONUS POR COINCIDENCIA DE CATEGORÍA
-                                        story.categoryMatch = true;
-                                        story.categoryName = detectedCategoryName;
-                                        story.categoryEmoji = detectedCategoryEmoji;
-                                        story.relevanceScore = (story.relevanceScore || 0) + 40;
-                                        return story;
-                                    }
-                                }
-                                // Si falla o no coincide, incluir pero con menor prioridad
-                                story.categoryMatch = false;
-                                return story;
-                            } catch (e) {
-                                story.categoryMatch = false;
-                                return story;
-                            }
-                        });
-                        
-                        const batchResults = await Promise.all(batchPromises);
-                        classifiedStories.push(...batchResults);
-                    }
-                    
-                    // Ordenar: primero las que coinciden con categoría
-                    classifiedStories.sort((a, b) => {
-                        if (a.categoryMatch && !b.categoryMatch) return -1;
-                        if (!a.categoryMatch && b.categoryMatch) return 1;
-                        return (b.relevanceScore || 0) - (a.relevanceScore || 0);
-                    });
-                    
-                    allStories = classifiedStories;
-                    
-                    // Actualizar meta
-                    meta.detectedCategory = detectedCategory;
-                    meta.detectedCategoryName = detectedCategoryName;
-                    meta.detectedCategoryEmoji = detectedCategoryEmoji;
-                    meta.categoryFilterApplied = true;
-                    
-                    console.log(`📸 Historias en categoría "${detectedCategoryName}": ${allStories.filter(s => s.categoryMatch).length}`);
-                } else {
-                    console.log(`✅ El backend ya aplicó filtro de categoría: ${detectedCategoryName}`);
-                }
-            }
-            
-            // Filtrar por relevancia mínima
             stories = allStories.filter(s => {
                 const relevance = s.relevanceScore || 0;
                 return relevance > 15;
             });
             
-            // 🔥 SI EL USUARIO TIENE INTERESES, APLICAR FILTRO ADICIONAL
             const currentUser = getCurrentUser();
             const userInterests = currentUser?.interests || [];
             
             if (userInterests.length > 0 && stories.length > 0) {
-                // Dar prioridad a historias que coinciden con intereses del usuario
                 stories = stories.map(story => {
                     const storyCategories = story.storyCategories || [];
                     const matches = userInterests.filter(interest => 
@@ -913,27 +1064,19 @@ async function performSmartSearch(query) {
             content.innerHTML = `
                 <div class="explore-empty">
                     <i class="fas fa-search"></i>
-                    <h3>No se encontraron resultados para "${query}"</h3>
-                    ${detectedCategoryName ? `<p>No hay contenido en la categoría "${detectedCategoryName}"</p>` : '<p>Prueba con otras palabras clave</p>'}
+                    <h3>${t('explore.noResults') || 'No se encontraron resultados para'} "${query}"</h3>
+                    ${detectedCategoryName ? `<p>${t('explore.noCategoryContent') || 'No hay contenido en la categoría'} "${detectedCategoryName}"</p>` : `<p>${t('explore.tryDifferent') || 'Prueba con otras palabras clave'}</p>`}
                     <div style="margin-top:16px;display:flex;gap:8px;flex-wrap:wrap;justify-content:center;">
                         ${getRelatedSuggestions(query).map(s => `
                             <span class="trending-hashtag" onclick="window.performSmartSearch('${s}')">#${s}</span>
                         `).join('')}
                     </div>
-                    ${detectedCategoryName ? `
-                        <div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap;justify-content:center;">
-                            <span class="trending-hashtag" style="border-color:#c084fc;color:#c084fc;">
-                                ${detectedCategoryEmoji || '📂'} ${detectedCategoryName}
-                            </span>
-                        </div>
-                    ` : ''}
                 </div>
             `;
             searchInProgress = false;
             return;
         }
 
-        // 🔥 GUARDAR USUARIOS Y STORIES POR SEPARADO
         currentUsers = users;
         currentStories = stories;
         currentMeta = meta;
@@ -954,8 +1097,8 @@ async function performSmartSearch(query) {
         content.innerHTML = `
             <div class="explore-empty">
                 <i class="fas fa-exclamation-triangle" style="color:#ff6b6b;"></i>
-                <h3>Error al buscar</h3>
-                <p>${error.message || 'Intenta de nuevo más tarde'}</p>
+                <h3 data-i18n="error.general">${t('error.general') || 'Error al buscar'}</h3>
+                <p>${error.message || t('error.retry') || 'Intenta de nuevo más tarde'}</p>
             </div>
         `;
     }
@@ -970,7 +1113,7 @@ async function performSmartSearch(query) {
 async function openHashtagStories(tag) {
     const token = getToken();
     if (!token) {
-        showToast('Inicia sesión para ver historias', true);
+        showToast(t('error.unauthorized') || 'Inicia sesión para ver historias', true);
         return;
     }
 
@@ -986,7 +1129,7 @@ async function openHashtagStories(tag) {
                 }
             }, 50);
         } else {
-            showToast(`No hay historias públicas con #${tag}`, true);
+            showToast(`${t('explore.noStoriesWithHashtag') || 'No hay historias públicas con'} #${tag}`, true);
         }
         return;
     }
@@ -997,7 +1140,7 @@ async function openHashtagStories(tag) {
         });
 
         if (!res.ok) {
-            showToast('Error al buscar historias', true);
+            showToast(t('error.general') || 'Error al buscar historias', true);
             return;
         }
 
@@ -1017,7 +1160,7 @@ async function openHashtagStories(tag) {
         stories = filterPublicStories(stories);
 
         if (stories.length === 0) {
-            showToast(`No hay historias públicas con #${tag}`, true);
+            showToast(`${t('explore.noStoriesWithHashtag') || 'No hay historias públicas con'} #${tag}`, true);
             return;
         }
 
@@ -1035,7 +1178,7 @@ async function openHashtagStories(tag) {
         
     } catch (error) {
         console.error('Error buscando historias por hashtag:', error);
-        showToast('Error al buscar historias', true);
+        showToast(t('error.general') || 'Error al buscar historias', true);
     }
 }
 
@@ -1046,6 +1189,8 @@ async function openHashtagStories(tag) {
 function renderExploreContent(tab, data) {
     const content = document.getElementById('exploreContent');
     if (!content) return;
+    
+    setTimeout(translateExploreUI, 50);
     
     if (tab === 'trending') {
         renderHashtags(content, data);
@@ -1061,8 +1206,8 @@ function renderHashtags(content, data) {
         content.innerHTML = `
             <div class="explore-empty">
                 <i class="fas fa-hashtag"></i>
-                <h3>Sin hashtags disponibles</h3>
-                <p>Los hashtags aparecerán aquí cuando se usen</p>
+                <h3 data-i18n="explore.noHashtags">${t('explore.noHashtags') || 'Sin hashtags disponibles'}</h3>
+                <p data-i18n="explore.hashtagsWillAppear">${t('explore.hashtagsWillAppear') || 'Los hashtags aparecerán aquí cuando se usen'}</p>
             </div>
         `;
         return;
@@ -1070,7 +1215,7 @@ function renderHashtags(content, data) {
     
     let html = `
         <div class="explore-section">
-            <div class="section-title">🔥 Hashtags en tendencia <span style="font-size:11px;color:rgba(255,255,255,0.1);">(${data.hashtags.length})</span></div>
+            <div class="section-title">🔥 ${t('explore.trending') || 'Hashtags en tendencia'} <span style="font-size:11px;color:rgba(255,255,255,0.1);">(${data.hashtags.length})</span></div>
             <div class="trending-hashtags">
                 ${data.hashtags.map(h => `
                     <span class="trending-hashtag" onclick="window.openHashtagStories('${h.tag}')">
@@ -1085,6 +1230,10 @@ function renderHashtags(content, data) {
     content.innerHTML = html;
 }
 
+// ============================================================
+// 🔥 RENDERIZAR GRID DE HISTORIAS (CORREGIDO)
+// ============================================================
+
 function renderStoriesGrid(content, stories) {
     const currentUser = getCurrentUser();
     const filteredStories = filterPublicStories(stories || []).filter(story => story.userId !== currentUser?.id);
@@ -1093,13 +1242,14 @@ function renderStoriesGrid(content, stories) {
         content.innerHTML = `
             <div class="explore-empty">
                 <i class="fas fa-camera"></i>
-                <h3>No hay historias públicas</h3>
-                <p>Las historias de usuarios públicos aparecerán aquí</p>
+                <h3 data-i18n="explore.noPublicStories">${t('explore.noPublicStories') || 'No hay historias públicas'}</h3>
+                <p data-i18n="explore.publicStoriesWillAppear">${t('explore.publicStoriesWillAppear') || 'Las historias de usuarios públicos aparecerán aquí'}</p>
             </div>
         `;
         return;
     }
     
+    // Mezclar para variedad
     const shuffled = [...filteredStories];
     for (let i = shuffled.length - 1; i > 0; i--) {
         const j = Math.floor(Math.random() * (i + 1));
@@ -1108,32 +1258,17 @@ function renderStoriesGrid(content, stories) {
     
     content.innerHTML = `
         <div class="explore-section">
-            <div class="section-title">📸 Historias públicas recientes</div>
+            <div class="section-title">📸 ${t('explore.recentPublicStories') || 'Historias públicas recientes'}</div>
             <div class="explore-grid">
-                ${shuffled.map(story => `
-                    <div class="story-thumb" onclick="window.openStoryFromExplore('${story.id}')">
-                        ${story.mediaType === 'image' && story.mediaUrl 
-                            ? `<img src="${story.mediaUrl}" loading="lazy" />`
-                            : story.mediaType === 'video' && story.mediaUrl
-                            ? `<video src="${story.mediaUrl}" muted loop playsinline preload="metadata"></video>`
-                            : `<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;background:${story.textBgColor || '#1a1a2e'};color:rgba(255,255,255,0.3);font-size:24px;">
-                                ${story.mediaType === 'video' ? '🎬' : story.hasSubtitles ? '💬' : '📝'}
-                              </div>`
-                        }
-                        ${story.hasSubtitles ? '<span class="subtitles-badge">CC</span>' : ''}
-                        <div class="overlay">
-                            <div class="likes">
-                                <i class="fas fa-heart"></i>
-                                ${formatNumber(story.likes?.length || 0)}
-                            </div>
-                            ${story.subtitles ? `<div class="subtitle-preview">💬 ${story.subtitles.substring(0, 40)}...</div>` : ''}
-                        </div>
-                    </div>
-                `).join('')}
+                ${shuffled.map(story => createStoryThumbnail(story)).join('')}
             </div>
         </div>
     `;
 }
+
+// ============================================================
+// RENDERIZAR USUARIOS
+// ============================================================
 
 function renderUsersList(content, users) {
     const publicUsers = filterPublicUsers(users || []);
@@ -1142,8 +1277,8 @@ function renderUsersList(content, users) {
         content.innerHTML = `
             <div class="explore-empty">
                 <i class="fas fa-users"></i>
-                <h3>No hay usuarios públicos populares</h3>
-                <p>Los usuarios con perfil público aparecerán aquí</p>
+                <h3 data-i18n="explore.noPublicUsers">${t('explore.noPublicUsers') || 'No hay usuarios públicos populares'}</h3>
+                <p data-i18n="explore.publicUsersWillAppear">${t('explore.publicUsersWillAppear') || 'Los usuarios con perfil público aparecerán aquí'}</p>
             </div>
         `;
         return;
@@ -1153,7 +1288,7 @@ function renderUsersList(content, users) {
     
     content.innerHTML = `
         <div class="explore-section">
-            <div class="section-title">👑 Usuarios populares (públicos)</div>
+            <div class="section-title">👑 ${t('explore.popularUsers') || 'Usuarios populares (públicos)'}</div>
             <div class="explore-users">
                 ${publicUsers.map(user => {
                     const isOwn = currentUser?.id === user.id;
@@ -1164,13 +1299,13 @@ function renderUsersList(content, users) {
                             <div class="info">
                                 <div class="name">${user.fullName} ${isOwn ? '👤' : ''}</div>
                                 <div class="username">@${user.username}</div>
-                                <div class="bio">${user.followersCount || 0} seguidores</div>
+                                <div class="bio">${user.followersCount || 0} ${t('profile.followers') || 'seguidores'}</div>
                             </div>
                             ${!isOwn ? `
                                 <button class="follow-btn ${isFollowing ? 'following' : ''}" 
                                         data-user-id="${user.id}"
                                         onclick="event.stopPropagation(); window.followUserFromExplore('${user.id}', this)">
-                                    ${isFollowing ? 'Siguiendo' : 'Seguir'}
+                                    ${isFollowing ? t('profile.unfollow') || 'Siguiendo' : t('profile.follow') || 'Seguir'}
                                 </button>
                             ` : ''}
                         </div>
@@ -1217,6 +1352,10 @@ function getRelatedSuggestions(query) {
     return ['contenido', 'popular', 'interesante', 'actual', 'tendencias', 'viral'];
 }
 
+// ============================================================
+// 🔥 RENDERIZAR RESULTADOS DE BÚSQUEDA (CORREGIDO)
+// ============================================================
+
 function renderSearchResults(query, stories, users, meta, detectedCategoryName = null, detectedCategoryEmoji = null) {
     const content = document.getElementById('exploreContent');
     if (!content) return;
@@ -1224,27 +1363,24 @@ function renderSearchResults(query, stories, users, meta, detectedCategoryName =
     const currentUser = getCurrentUser();
     const currentUserId = currentUser?.id;
 
-    // 🔥 FILTRAR STORIES VÁLIDAS
     const validStories = (stories || []).filter(s => {
         if (!s || !s.id) return false;
         if (s.userId === currentUserId) return false;
         return true;
     });
 
-    // 🔥 FILTRAR USUARIOS VÁLIDOS
     const validUsers = (users || []).filter(u => {
         if (!u || !u.id) return false;
         if (u.id === currentUserId) return false;
         return u.privacy === 'public' || u.privacy === undefined;
     });
 
-    // Si no hay resultados válidos, mostrar mensaje
     if (validStories.length === 0 && validUsers.length === 0) {
         content.innerHTML = `
             <div class="explore-empty">
                 <i class="fas fa-search"></i>
-                <h3>No se encontraron resultados para "${query}"</h3>
-                ${detectedCategoryName ? `<p>No hay contenido en la categoría "${detectedCategoryName}"</p>` : '<p>Prueba con otras palabras clave</p>'}
+                <h3>${t('explore.noResults') || 'No se encontraron resultados para'} "${query}"</h3>
+                ${detectedCategoryName ? `<p>${t('explore.noCategoryContent') || 'No hay contenido en la categoría'} "${detectedCategoryName}"</p>` : `<p>${t('explore.tryDifferent') || 'Prueba con otras palabras clave'}</p>`}
                 <div style="margin-top:16px;display:flex;gap:8px;flex-wrap:wrap;justify-content:center;">
                     ${getRelatedSuggestions(query).map(s => `
                         <span class="trending-hashtag" onclick="window.performSmartSearch('${s}')">#${s}</span>
@@ -1255,9 +1391,8 @@ function renderSearchResults(query, stories, users, meta, detectedCategoryName =
         return;
     }
 
-    // 🔥 OBTENER INFO DEL META (para mostrar estadísticas de clasificación)
     const classificationInfo = meta?.detectedCategory ? 
-        `🔍 Clasificado como: ${meta.detectedCategoryName || detectedCategoryName || 'N/A'}` : '';
+        `🔍 ${t('explore.classifiedAs') || 'Clasificado como'}: ${meta.detectedCategoryName || detectedCategoryName || 'N/A'}` : '';
     const classificationScore = meta?.detectedCategoryScore ? 
         ` (${meta.detectedCategoryScore}%)` : '';
     const categoryApplied = meta?.categoryFilterApplied ? 
@@ -1266,12 +1401,12 @@ function renderSearchResults(query, stories, users, meta, detectedCategoryName =
     let html = `
         <div class="explore-section">
             <div class="section-title">
-                🔍 Resultados para "${query}"
+                🔍 ${t('explore.results') || 'Resultados para'} "${query}"
                 ${detectedCategoryName ? `<span style="font-size:11px;color:#c084fc;margin-left:8px;background:rgba(192,132,252,0.1);padding:2px 10px;border-radius:12px;">
                     ${detectedCategoryEmoji || '📂'} ${detectedCategoryName}${classificationScore}
                 </span>` : ''}
                 <span style="font-size:10px;color:rgba(255,255,255,0.1);margin-left:8px;">
-                    ${validStories.length} historias · ${validUsers.length} usuarios
+                    ${validStories.length} ${t('explore.stories') || 'historias'} · ${validUsers.length} ${t('explore.users') || 'usuarios'}
                     ${classificationInfo ? `<span style="margin-left:8px;font-size:9px;color:rgba(255,255,255,0.08);">${classificationInfo}${categoryApplied}</span>` : ''}
                 </span>
             </div>
@@ -1281,7 +1416,7 @@ function renderSearchResults(query, stories, users, meta, detectedCategoryName =
         html += `
             <div style="margin-bottom:16px;">
                 <div style="font-size:12px;color:rgba(255,255,255,0.3);margin-bottom:8px;font-weight:600;letter-spacing:0.5px;border-bottom:1px solid rgba(255,255,255,0.04);padding-bottom:6px;">
-                    👥 Usuarios públicos (${validUsers.length})
+                    👥 ${t('explore.publicUsers') || 'Usuarios públicos'} (${validUsers.length})
                 </div>
                 <div class="explore-users">
                     ${validUsers.map(user => {
@@ -1293,13 +1428,13 @@ function renderSearchResults(query, stories, users, meta, detectedCategoryName =
                                 <div class="info">
                                     <div class="name">${user.fullName} ${user.isVerified ? '✅' : ''} ${isOwn ? '👤' : ''}</div>
                                     <div class="username">@${user.username}</div>
-                                    <div class="bio">${user.followersCount || 0} seguidores</div>
+                                    <div class="bio">${user.followersCount || 0} ${t('profile.followers') || 'seguidores'}</div>
                                 </div>
                                 ${!isOwn ? `
                                     <button class="follow-btn ${isFollowing ? 'following' : ''}" 
                                             data-user-id="${user.id}"
                                             onclick="event.stopPropagation(); window.followUserFromExplore('${user.id}', this)">
-                                        ${isFollowing ? 'Siguiendo' : 'Seguir'}
+                                        ${isFollowing ? t('profile.unfollow') || 'Siguiendo' : t('profile.follow') || 'Seguir'}
                                     </button>
                                 ` : ''}
                             </div>
@@ -1314,104 +1449,13 @@ function renderSearchResults(query, stories, users, meta, detectedCategoryName =
         html += `
             <div>
                 <div style="font-size:12px;color:rgba(255,255,255,0.3);margin-bottom:8px;font-weight:600;letter-spacing:0.5px;border-bottom:1px solid rgba(255,255,255,0.04);padding-bottom:6px;">
-                    📸 Historias relacionadas (${validStories.length})
+                    📸 ${t('explore.relatedStories') || 'Historias relacionadas'} (${validStories.length})
                     ${meta?.algorithm ? `<span style="font-size:9px;color:rgba(255,255,255,0.08);margin-left:8px;font-weight:400;">${meta.algorithm}</span>` : ''}
                     ${meta?.classifierVersion ? `<span style="font-size:9px;color:rgba(255,255,255,0.06);margin-left:8px;">${meta.classifierVersion}</span>` : ''}
                     ${detectedCategoryName ? `<span style="font-size:9px;color:#c084fc;margin-left:8px;">📂 ${detectedCategoryName}</span>` : ''}
                 </div>
                 <div class="explore-grid">
-                    ${validStories.slice(0, 30).map(story => {
-                        let mediaContent = '';
-                        const mediaUrl = story.mediaUrl;
-                        
-                        if (story.mediaType === 'image' && mediaUrl) {
-                            mediaContent = `<img src="${mediaUrl}" loading="lazy" onerror="this.style.display='none'" />`;
-                        } else if (story.mediaType === 'video' && mediaUrl) {
-                            mediaContent = `
-                                <video src="${mediaUrl}" muted loop playsinline preload="metadata" 
-                                       onerror="this.style.display='none'"></video>
-                            `;
-                        } else if (story.mediaType === 'text' && story.textContent) {
-                            mediaContent = `
-                                <div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;background:${story.textBgColor || '#1a1a2e'};padding:16px;text-align:center;font-size:14px;color:rgba(255,255,255,0.6);font-weight:500;overflow:hidden;">
-                                    ${story.textContent.substring(0, 60)}${story.textContent.length > 60 ? '...' : ''}
-                                </div>
-                            `;
-                        } else {
-                            mediaContent = `
-                                <div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;background:#1a1a2e;color:rgba(255,255,255,0.15);font-size:32px;">
-                                    ${story.mediaType === 'video' ? '🎬' : story.hasSubtitles ? '💬' : '📝'}
-                                </div>
-                            `;
-                        }
-
-                        const subtitleText = story.subtitles || story.caption || story.textContent || '';
-                        const subtitlePreview = subtitleText.length > 60 ? subtitleText.substring(0, 60) + '...' : subtitleText;
-
-                        let relevanceBadge = '';
-                        const relevance = story.relevanceScore || 0;
-                        if (relevance > 70) {
-                            relevanceBadge = `<span class="relevance-badge" style="position:absolute;top:8px;left:8px;z-index:5;background:rgba(34,197,94,0.2);padding:2px 8px;border-radius:10px;font-size:7px;color:#22c55e;border:1px solid rgba(34,197,94,0.1);">⭐ ${relevance}%</span>`;
-                        } else if (relevance > 50) {
-                            relevanceBadge = `<span class="relevance-badge" style="position:absolute;top:8px;left:8px;z-index:5;background:rgba(192,132,252,0.15);padding:2px 8px;border-radius:10px;font-size:7px;color:#c084fc;border:1px solid rgba(192,132,252,0.05);">🔍 ${relevance}%</span>`;
-                        }
-
-                        // 🔥 MOSTRAR BADGE DE CATEGORÍA SI COINCIDE
-                        let categoryBadge = '';
-                        if (story.categoryMatch && detectedCategoryName) {
-                            categoryBadge = `
-                                <span class="category-match-badge" style="position:absolute;top:8px;right:8px;z-index:5;background:rgba(192,132,252,0.2);padding:2px 8px;border-radius:10px;font-size:7px;color:#c084fc;border:1px solid rgba(192,132,252,0.1);">
-                                    ${detectedCategoryEmoji || '📂'} ${detectedCategoryName}
-                                </span>
-                            `;
-                        }
-
-                        // 🔥 MOSTRAR BADGE DE INTERÉS DEL USUARIO
-                        let interestBadge = '';
-                        if (story.interestMatch) {
-                            interestBadge = `
-                                <span class="interest-match-badge" style="position:absolute;bottom:8px;left:8px;z-index:5;background:rgba(251,191,36,0.15);padding:2px 8px;border-radius:10px;font-size:7px;color:#fbbf24;border:1px solid rgba(251,191,36,0.1);">
-                                    ⭐ Interés ${story.interestMatchCount || ''}
-                                </span>
-                            `;
-                        }
-
-                        const sources = story.sources || [];
-                        const sourceBadges = sources.slice(0, 3).map(source => {
-                            let label = source;
-                            if (source.includes('Semántico')) label = '🔍 Semántico';
-                            if (source.includes('Subtítulos')) label = '🎤 Subtítulos';
-                            if (source.includes('Descripción')) label = '📝 Descripción';
-                            if (source.includes('Hashtag')) label = '# Hashtag';
-                            if (source.includes('Texto')) label = '📄 Texto';
-                            if (source.includes('Categoría')) label = `📂 ${detectedCategoryName || ''}`;
-                            return `<span class="source-badge" style="font-size:7px;background:rgba(255,255,255,0.05);padding:1px 6px;border-radius:8px;margin-right:2px;color:rgba(255,255,255,0.3);">${label}</span>`;
-                        }).join('');
-
-                        const langBadge = story.language && story.language !== 'es' ?
-                            `<span class="lang-badge" style="position:absolute;bottom:8px;right:8px;z-index:5;background:rgba(255,255,255,0.05);padding:2px 8px;border-radius:10px;font-size:7px;color:rgba(255,255,255,0.15);">
-                                ${story.language.toUpperCase()}
-                            </span>` : '';
-
-                        return `
-                            <div class="story-thumb" onclick="window.openStoryFromExplore('${story.id}')">
-                                ${mediaContent}
-                                ${story.hasSubtitles ? '<span class="subtitles-badge" style="position:absolute;top:8px;right:8px;z-index:5;background:rgba(192,132,252,0.15);padding:2px 6px;border-radius:4px;font-size:7px;color:#c084fc;">CC</span>' : ''}
-                                ${relevanceBadge}
-                                ${categoryBadge}
-                                ${interestBadge}
-                                ${langBadge}
-                                <div class="overlay">
-                                    <div class="likes">
-                                        <i class="fas fa-heart"></i>
-                                        ${formatNumber(story.likes?.length || 0)}
-                                    </div>
-                                    ${subtitlePreview ? `<div class="subtitle-preview">💬 ${subtitlePreview}</div>` : ''}
-                                    ${sourceBadges ? `<div class="source-badges" style="margin-top:4px;display:flex;flex-wrap:wrap;gap:2px;">${sourceBadges}</div>` : ''}
-                                </div>
-                            </div>
-                        `;
-                    }).join('')}
+                    ${validStories.slice(0, 30).map(story => createStoryThumbnail(story)).join('')}
                 </div>
             </div>
         `;
@@ -1419,6 +1463,8 @@ function renderSearchResults(query, stories, users, meta, detectedCategoryName =
 
     html += `</div>`;
     content.innerHTML = html;
+    
+    setTimeout(translateExploreUI, 50);
 }
 
 // ============================================================
@@ -1428,7 +1474,7 @@ function renderSearchResults(query, stories, users, meta, detectedCategoryName =
 async function followUserFromExplore(userId, btn) {
     const token = getToken();
     if (!token) {
-        showToast('Inicia sesión para seguir', true);
+        showToast(t('error.unauthorized') || 'Inicia sesión para seguir', true);
         return;
     }
     
@@ -1448,19 +1494,19 @@ async function followUserFromExplore(userId, btn) {
         const data = await res.json();
         if (res.ok) {
             btn.classList.toggle('following');
-            btn.textContent = isFollowing ? 'Seguir' : 'Siguiendo';
-            showToast(isFollowing ? 'Dejaste de seguir' : 'Ahora sigues a este usuario');
+            btn.textContent = isFollowing ? (t('profile.follow') || 'Seguir') : (t('profile.unfollow') || 'Siguiendo');
+            showToast(isFollowing ? (t('profile.unfollowed') || 'Dejaste de seguir') : (t('profile.followed') || 'Ahora sigues a este usuario'));
         } else {
-            showToast(data.error || 'Error', true);
+            showToast(data.error || t('error.general') || 'Error', true);
         }
     } catch (error) {
         console.error('Error en follow:', error);
-        showToast('Error al procesar', true);
+        showToast(t('error.general') || 'Error al procesar', true);
     }
 }
 
 // ============================================================
-// 🔥 ACCIONES GLOBALES - SUPERPONER MODALES
+// 🔥 ACCIONES GLOBALES
 // ============================================================
 
 window.openStoryFromExplore = (storyId) => {
@@ -1485,7 +1531,6 @@ window.openProfileFromExplore = (userId) => {
         const content = document.getElementById('exploreContent');
         const scrollPos = content ? content.scrollTop : 0;
         
-        // 🔥 GUARDAR ESTADO COMPLETO ANTES DE ABRIR PERFIL
         saveExploreState(
             currentTab, 
             query, 
@@ -1513,7 +1558,7 @@ window.openProfileFromExplore = (userId) => {
                 savedTab: savedTab
             });
         } else {
-            showToast('Error al abrir perfil', true);
+            showToast(t('error.general') || 'Error al abrir perfil', true);
             closeExploreModal();
             setTimeout(() => {
                 import('./profile-modal.js').then(({ openProfileModal }) => {
@@ -1543,5 +1588,7 @@ export {
     clearExploreCache,
     saveExploreState,
     getExploreState,
-    openHashtagStories
+    openHashtagStories,
+    translateExploreUI,
+    initI18nForExplore
 };

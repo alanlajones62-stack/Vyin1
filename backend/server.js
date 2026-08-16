@@ -1,7 +1,10 @@
-// backend/server.js - COMPLETO CON TODOS LOS MÓDULOS (VERIFICACIÓN, VYIN PAY, ASIGNACIÓN, MODERACIÓN, VYIN IA, BLOQUEOS, PUBLICIDAD, INTERESES, TRADUCCIÓN, CLASIFICACIÓN)
+// backend/server.js - COMPLETO CON TODOS LOS MÓDULOS (VERIFICACIÓN, VYIN PAY, ASIGNACIÓN, MODERACIÓN, VYIN IA, BLOQUEOS, PUBLICIDAD, INTERESES, TRADUCCIÓN, CLASIFICACIÓN, ENCUESTAS)
+// 🔥 MODIFICADO: Historias en SQLITE (stories-sqlite.js)
 // 🔥 CORREGIDO: Rutas de login, register y chat
 // 🔥 CORREGIDO: Ruta /api/categories con idioma del usuario
 // 🔥 NUEVO: Rutas /api/vyin/classify y /api/vyin/classify-story
+// 🔥 NUEVO: Sistema de encuestas /api/survey
+// 🔥 NUEVO: Ruta /api/cloudinary/test
 
 const express = require('express');
 const cors = require('cors');
@@ -397,6 +400,9 @@ const write = (file, data) => {
             cache.invalidatePattern('ads_');
             cache.invalidatePattern('active_ads');
         }
+        if (file === 'survey-votes.json') {
+            cache.invalidatePattern('survey_votes_');
+        }
     } catch (error) {
         logger.error(`Error escribiendo ${file}:`, { error: error.message });
         throw error;
@@ -710,7 +716,6 @@ function migrateAllData() {
             user.suspendedAt = null;
             modified = true;
         }
-        // 🔥 NUEVO: BLOQUEOS
         if (user.blocked === undefined) {
             user.blocked = [];
             modified = true;
@@ -719,7 +724,6 @@ function migrateAllData() {
             user.blockedBy = [];
             modified = true;
         }
-        // 🔥 NUEVO: INTERESES
         if (user.interests === undefined) {
             user.interests = [];
             modified = true;
@@ -738,23 +742,9 @@ function migrateAllData() {
     });
     if (usersModified) { write('users.json', users); anyChange = true; }
 
-    let stories = read('stories.json');
-    let storiesModified = false;
-    stories = stories.map(story => {
-        let modified = false;
-        if (story.mediaType === undefined) { story.mediaType = 'image'; modified = true; }
-        if (story.views === undefined) { story.views = []; modified = true; }
-        if (story.caption === undefined) { story.caption = ''; modified = true; }
-        if (story.textContent === undefined) { story.textContent = null; modified = true; }
-        if (story.textBgColor === undefined) { story.textBgColor = '#1a1a2e'; modified = true; }
-        if (story.likes === undefined) { story.likes = []; modified = true; }
-        if (story.comments === undefined) { story.comments = []; modified = true; }
-        if (story.score === undefined) { story.score = 0; modified = true; }
-        if (story.hidden === undefined) { story.hidden = false; modified = true; }
-        if (modified) storiesModified = true;
-        return story;
-    });
-    if (storiesModified) { write('stories.json', stories); anyChange = true; }
+    // 🔥 LAS HISTORIAS YA NO SE GUARDAN EN JSON - SE USAN EN SQLITE
+    // Ya no migramos stories.json porque ahora van a SQLite
+    logger.info('ℹ️ Las historias se guardan en SQLite (stories.db)');
 
     let hashtags = read('hashtags.json');
     let hashtagsModified = false;
@@ -788,10 +778,10 @@ function migrateAllData() {
     if (messagesModified) { write('messages.json', messages); anyChange = true; }
 
     const initFiles = [
-        'users.json', 'stories.json', 'messages.json', 'hashtags.json', 
+        'users.json', 'messages.json', 'hashtags.json', 
         'notifications.json', 'reports.json', 'wallets.json', 'transactions.json', 
         'business-requests.json', 'report-assignments.json', 'moderation-log.json',
-        'ads.json'
+        'ads.json', 'survey-votes.json'
     ];
     initFiles.forEach(f => {
         const filePath = path.join(DATA_DIR, f);
@@ -939,12 +929,11 @@ try {
 }
 
 // ============================================================
-// 🔥🔥🔥 RUTA DE CATEGORÍAS (PARA INTERESES) - CON IDIOMA DEL USUARIO
+// 🔥 RUTA DE CATEGORÍAS (PARA INTERESES) - CON IDIOMA DEL USUARIO
 // ============================================================
 try {
     app.get('/api/categories', async (req, res) => {
         try {
-            // 🔥 OBTENER IDIOMA DEL USUARIO DESDE EL TOKEN
             let userLanguage = 'es';
             const token = req.headers.authorization?.split(' ')[1];
             
@@ -957,7 +946,6 @@ try {
                         userLanguage = user.language;
                     }
                 } catch (e) {
-                    // Token inválido, usar español por defecto
                     console.warn('⚠️ Token inválido al obtener categorías, usando español');
                 }
             }
@@ -965,20 +953,17 @@ try {
             const { getContentClassifier } = require('./classifiers');
             const classifier = getContentClassifier();
             
-            // 🔥 PASAR EL IDIOMA DEL USUARIO
             const categories = await classifier.getCategories(userLanguage);
             
-            // Formatear para el frontend
             const formatted = categories.map(c => ({
                 id: c.name,
-                name: c.displayName,  // ← YA ESTÁ TRADUCIDO POR getCategories()
+                name: c.displayName,
                 emoji: c.emoji,
                 description: c.description || '',
                 keywordCount: c.keywordCount || 0,
                 isTranslated: c.isTranslated || false
             }));
             
-            // 🔥 OBTENER ESTADO DE TRADUCCIÓN
             const translationStatus = getTranslationStatus();
             
             res.json({
@@ -1014,13 +999,20 @@ try {
     logger.error('❌ Error cargando ranking:', { error: error.message });
 }
 
-// 3. RUTAS DE STORIES
+// 3. RUTAS DE STORIES - 🔥 USANDO SQLITE
 try {
-    const storiesRoutes = require('./stories')(read, write, io, processHashtags, isProfileVisible, areStoriesVisible, logger, storyLimiter, likeLimiter);
+    const storiesRoutes = require('./stories-sqlite')(read, write, io, processHashtags, isProfileVisible, areStoriesVisible, logger, storyLimiter, likeLimiter);
     app.use('/api/stories', storiesRoutes);
-    logger.info('✅ Stories routes cargadas');
+    logger.info('✅ Stories routes cargadas con SQLite');
+    console.log('📸 SISTEMA DE STORIES CON SQLITE ACTIVADO:');
+    console.log('   ✅ Historias en base de datos SQLite');
+    console.log('   ✅ Cloudinary integrado');
+    console.log('   ✅ Detección de idioma');
+    console.log('   ✅ Clasificación IA');
+    console.log('   ✅ Encuestas integradas');
 } catch (error) {
     logger.error('❌ Error cargando stories:', { error: error.message });
+    console.error('❌ Error cargando sistema de stories:', error.message);
 }
 
 // 4. RUTAS DE STORY INTERACTIONS
@@ -1187,7 +1179,26 @@ try {
 }
 
 // ============================================================
-// 🔥🔥🔥 RUTAS DE CLASIFICACIÓN PARA EL EXPLORADOR
+// 🔥 16. 📊 SISTEMA DE ENCUESTAS Y ESTADÍSTICAS
+// ============================================================
+try {
+    const surveyRoutes = require('./routes/survey')(read, write, io, logger);
+    app.use('/api/survey', surveyRoutes);
+    logger.info('✅ Survey routes cargadas en /api/survey');
+    console.log('📊 SISTEMA DE ENCUESTAS Y ESTADÍSTICAS ACTIVADO:');
+    console.log('   ✅ Encuestas con votación (poll)');
+    console.log('   ✅ Estadísticas numéricas (stats)');
+    console.log('   ✅ Cálculos numéricos (calculation)');
+    console.log('   ✅ Resultados en tiempo real con WebSocket');
+    console.log('   ✅ Votos anónimos y múltiples');
+    console.log('   ✅ Expiración automática de encuestas');
+} catch (error) {
+    logger.error('❌ Error cargando survey routes:', { error: error.message });
+    console.error('❌ Error cargando sistema de encuestas:', error.message);
+}
+
+// ============================================================
+// 🔥 RUTAS DE CLASIFICACIÓN PARA EL EXPLORADOR
 // ============================================================
 
 // ============================================================
@@ -1229,8 +1240,8 @@ app.post('/api/vyin/classify-story', auth, async (req, res) => {
             return res.status(400).json({ error: 'storyId requerido' });
         }
         
-        const stories = read('stories.json');
-        const story = stories.find(s => s.id === storyId);
+        const storyDB = require('./db/stories.db');
+        const story = await storyDB.getStoryById(storyId);
         
         if (!story) {
             return res.status(404).json({ error: 'Historia no encontrada' });
@@ -1263,13 +1274,13 @@ app.post('/api/vyin/classify-stories', auth, async (req, res) => {
             return res.status(400).json({ error: 'Array de storyIds requerido' });
         }
         
-        const stories = read('stories.json');
+        const storyDB = require('./db/stories.db');
         const { getContentClassifier } = require('./classifiers');
         const classifier = getContentClassifier();
         
         const results = [];
         for (const storyId of storyIds) {
-            const story = stories.find(s => s.id === storyId);
+            const story = await storyDB.getStoryById(storyId);
             if (story) {
                 const result = await classifier.classifyStory(story, targetLanguage);
                 results.push(result);
@@ -1333,6 +1344,20 @@ app.get('/story/:storyId', (req, res) => {
     const commentId = req.query.commentId || '';
     logger.info(`📂 Redirigiendo a historia: ${storyId}, comentario: ${commentId}`);
     res.redirect(`/feed.html?storyId=${storyId}&commentId=${commentId}&fromNotification=true`);
+});
+
+// ============================================================
+// 🔥 RUTA PARA VERIFICAR CLOUDINARY
+// ============================================================
+
+app.get('/api/cloudinary/test', async (req, res) => {
+    try {
+        const { testConnection } = require('./services/cloudinary.service');
+        const result = await testConnection();
+        res.json(result);
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
 });
 
 // ========== ENDPOINTS DE DIAGNÓSTICO ==========
@@ -1445,7 +1470,6 @@ app.get('/health', (req, res) => {
                 limit: 5
             }
         },
-        // 🔥 ESTADÍSTICAS DE INTERESES
         interests: {
             enabled: true,
             maxSelection: 6,
@@ -1458,9 +1482,7 @@ app.get('/health', (req, res) => {
                 6: 20
             }
         },
-        // 🔥 ESTADO DE TRADUCCIÓN
         translation: getTranslationStatus(),
-        // 🔥 CLASIFICACIÓN
         classification: {
             enabled: true,
             endpoints: {
@@ -1470,6 +1492,28 @@ app.get('/health', (req, res) => {
             },
             categories: 15,
             translationSupported: isTranslationAvailable()
+        },
+        surveys: {
+            enabled: true,
+            types: ['poll', 'stats', 'calculation'],
+            features: {
+                voting: true,
+                anonymous: true,
+                multipleVotes: true,
+                expiration: true,
+                realtimeResults: true
+            }
+        },
+        stories: {
+            source: 'sqlite',
+            enabled: true,
+            features: {
+                cloudinary: true,
+                iaClassification: true,
+                languageDetection: true,
+                surveys: true,
+                subtitles: true
+            }
         }
     };
     
@@ -1494,7 +1538,7 @@ const MOBILE_PATH = path.join(FRONTEND_PATH, 'mobile');
 console.log(`📁 Frontend path: ${FRONTEND_PATH}`);
 console.log(`📁 Mobile path: ${MOBILE_PATH}`);
 
-// Servir archivos estáticos
+// Servir archivos estáticos (esto sirve login.html y register.html automáticamente)
 app.use(express.static(FRONTEND_PATH));
 app.use('/mobile', express.static(MOBILE_PATH));
 app.use('/uploads', express.static(path.join(FRONTEND_PATH, 'uploads')));
@@ -1509,35 +1553,32 @@ app.get('/feed.html', (req, res) => {
     res.sendFile(path.join(MOBILE_PATH, 'index.html'));
 });
 
-// 🔥 LOGIN - RUTA ESPECÍFICA (CORREGIDO)
+// 🔥 LOGIN - Usar el archivo de frontend (CORREGIDO)
 app.get('/login.html', (req, res) => {
     const loginPath = path.join(FRONTEND_PATH, 'login.html');
     if (fs.existsSync(loginPath)) {
         res.sendFile(loginPath);
     } else {
-        // Fallback: si no existe login.html, redirigir al feed
-        res.redirect('/feed.html');
+        res.redirect('/');
     }
 });
 
-// 🔥 REGISTER - RUTA ESPECÍFICA
+// 🔥 REGISTER - Usar el archivo de frontend (CORREGIDO)
 app.get('/register.html', (req, res) => {
     const registerPath = path.join(FRONTEND_PATH, 'register.html');
     if (fs.existsSync(registerPath)) {
         res.sendFile(registerPath);
     } else {
-        res.redirect('/login.html');
+        res.redirect('/');
     }
 });
 
-// 🔥 CHAT - RUTA ESPECÍFICA (RENOMBRADA de chats.html a chat.html)
+// 🔥 CHAT - RUTA ESPECÍFICA
 app.get('/chat.html', (req, res) => {
     const chatPath = path.join(MOBILE_PATH, 'chat.html');
-    // Si existe chat.html, usarlo
     if (fs.existsSync(chatPath)) {
         res.sendFile(chatPath);
     } else {
-        // Fallback: si no existe, buscar chats.html
         const chatsPath = path.join(MOBILE_PATH, 'chats.html');
         if (fs.existsSync(chatsPath)) {
             res.sendFile(chatsPath);
@@ -1549,37 +1590,13 @@ app.get('/chat.html', (req, res) => {
 
 // 🔥 CHATS - RUTA ANTIGUA (REDIRECCIÓN)
 app.get('/chats.html', (req, res) => {
-    // Redirigir de chats.html a chat.html
     const query = req.url.includes('?') ? req.url.substring(req.url.indexOf('?')) : '';
     res.redirect(`/chat.html${query}`);
-});
-
-// 🔥 MOBILE CHATS - RUTA DIRECTA
-app.get('/mobile/chats.html', (req, res) => {
-    // Redirigir a la nueva ruta
-    const query = req.url.includes('?') ? req.url.substring(req.url.indexOf('?')) : '';
-    res.redirect(`/chat.html${query}`);
-});
-
-// 🔥 MOBILE CHAT - RUTA DIRECTA
-app.get('/mobile/chat.html', (req, res) => {
-    const chatPath = path.join(MOBILE_PATH, 'chat.html');
-    if (fs.existsSync(chatPath)) {
-        res.sendFile(chatPath);
-    } else {
-        const chatsPath = path.join(MOBILE_PATH, 'chats.html');
-        if (fs.existsSync(chatsPath)) {
-            res.sendFile(chatsPath);
-        } else {
-            res.redirect('/feed.html');
-        }
-    }
 });
 
 // 🔥 Cualquier otra ruta no API - App móvil (SPA)
 app.get('*', (req, res) => {
     if (!req.path.startsWith('/api')) {
-        // Excluir rutas de archivos estáticos
         const staticExtensions = ['.js', '.css', '.png', '.jpg', '.jpeg', '.gif', '.svg', '.ico', '.webp', '.woff', '.woff2', '.ttf', '.eot', '.otf', '.json'];
         if (staticExtensions.some(ext => req.path.endsWith(ext))) {
             return res.status(404).send('Archivo no encontrado');
@@ -1645,42 +1662,43 @@ io.on('connection', (socket) => {
         logger.info(`📸 Usuario ${socket.userId} publicó una historia:`, data.storyId);
         
         try {
-            const stories = read('stories.json');
-            const story = stories.find(s => s.id === data.storyId);
-            
-            if (story && !story.hidden) {
-                const users = read('users.json');
-                const storyOwner = users.find(u => u.id === story.userId);
-                
-                if (storyOwner) {
-                    const storyWithUser = {
-                        ...story,
-                        user: {
-                            id: storyOwner.id,
-                            username: storyOwner.username,
-                            fullName: storyOwner.fullName,
-                            avatar: storyOwner.avatar,
-                            isVerified: storyOwner.isVerified || false,
-                            accountType: storyOwner.accountType || 'personal'
-                        }
-                    };
+            const storyDB = require('./db/stories.db');
+            storyDB.getStoryById(data.storyId).then(story => {
+                if (story && !story.hidden) {
+                    const users = read('users.json');
+                    const storyOwner = users.find(u => u.id === story.userId);
                     
-                    let sentCount = 0;
-                    users.forEach(user => {
-                        if (user.id !== socket.userId) {
-                            // 🔥 VERIFICAR BLOQUEOS
-                            const isBlocked = user.blocked?.includes(storyOwner.id) || false;
-                            const isBlockedBy = storyOwner.blockedBy?.includes(user.id) || false;
-                            
-                            if (!isBlocked && !isBlockedBy && areStoriesVisible(storyOwner, user.id)) {
-                                io.to(`user_${user.id}`).emit('new_story', storyWithUser);
-                                sentCount++;
+                    if (storyOwner) {
+                        const storyWithUser = {
+                            ...story,
+                            user: {
+                                id: storyOwner.id,
+                                username: storyOwner.username,
+                                fullName: storyOwner.fullName,
+                                avatar: storyOwner.avatar,
+                                isVerified: storyOwner.isVerified || false,
+                                accountType: storyOwner.accountType || 'personal'
                             }
-                        }
-                    });
-                    logger.info(`✅ Historia ${story.id} enviada a ${sentCount} usuarios`);
+                        };
+                        
+                        let sentCount = 0;
+                        users.forEach(user => {
+                            if (user.id !== socket.userId) {
+                                const isBlocked = user.blocked?.includes(storyOwner.id) || false;
+                                const isBlockedBy = storyOwner.blockedBy?.includes(user.id) || false;
+                                
+                                if (!isBlocked && !isBlockedBy && areStoriesVisible(storyOwner, user.id)) {
+                                    io.to(`user_${user.id}`).emit('new_story', storyWithUser);
+                                    sentCount++;
+                                }
+                            }
+                        });
+                        logger.info(`✅ Historia ${story.id} enviada a ${sentCount} usuarios`);
+                    }
                 }
-            }
+            }).catch(err => {
+                logger.error('❌ Error obteniendo historia de SQLite:', err);
+            });
         } catch (error) {
             logger.error('❌ Error en user_published_story:', { error: error.message });
         }
@@ -1727,7 +1745,6 @@ io.on('connection', (socket) => {
             const { to, content } = data;
             if (!content || content.trim().length === 0) return;
             
-            // 🔥 VERIFICAR BLOQUEOS
             const users = read('users.json');
             const fromUser = users.find(u => u.id === socket.userId);
             const toUser = users.find(u => u.id === to);
@@ -1736,12 +1753,10 @@ io.on('connection', (socket) => {
                 return socket.emit('error', { message: 'Usuario no encontrado' });
             }
             
-            // Si el bloqueador intenta enviar mensaje al bloqueado
             if (fromUser.blocked?.includes(to)) {
                 return socket.emit('error', { message: 'No puedes enviar mensajes a este usuario' });
             }
             
-            // Si el bloqueado intenta enviar mensaje al bloqueador (bloqueo silencioso)
             if (toUser.blockedBy?.includes(socket.userId)) {
                 return socket.emit('error', { message: 'Usuario no encontrado' });
             }
@@ -1772,7 +1787,6 @@ io.on('connection', (socket) => {
                 isOwn: true
             };
             
-            // Solo enviar si no hay bloqueo
             const isBlockedBy = fromUser.blocked?.includes(to) || false;
             const isBlocked = toUser.blockedBy?.includes(socket.userId) || false;
             
@@ -1794,7 +1808,6 @@ io.on('connection', (socket) => {
     });
     
     socket.on('typing', (data) => {
-        // 🔥 VERIFICAR BLOQUEOS
         const users = read('users.json');
         const fromUser = users.find(u => u.id === socket.userId);
         const toUser = users.find(u => u.id === data.to);
@@ -1862,27 +1875,10 @@ io.on('connection', (socket) => {
 // 🔥 TAREAS EN SEGUNDO PLANO
 // ============================================================
 
-// 1. LIMPIEZA DE HISTORIAS EXPIRADAS
-setInterval(() => {
-    try {
-        const stories = read('stories.json');
-        const now = new Date().toISOString();
-        const filtered = stories.filter(s => s.expiresAt > now);
-        if (filtered.length !== stories.length) {
-            write('stories.json', filtered);
-            io.emit('stories_updated');
-            cache.invalidatePattern('stories_');
-            cache.invalidatePattern('feed_');
-            cache.invalidatePattern('hashtags');
-            cache.invalidatePattern('trending');
-            logger.info(`🧹 ${stories.length - filtered.length} historias expiradas eliminadas`);
-        }
-    } catch (error) {
-        logger.error('Error limpiando historias:', { error: error.message });
-    }
-}, 3600000);
+// 🔥 LAS HISTORIAS EXPIRADAS SE LIMPIAN AUTOMÁTICAMENTE EN SQLITE
+// Ya no es necesario el cleanup de stories.json
 
-// 2. LIMPIEZA DE ASIGNACIONES EXPIRADAS (cada 30 minutos)
+// 1. LIMPIEZA DE ASIGNACIONES EXPIRADAS (cada 30 minutos)
 setInterval(() => {
     try {
         const assignmentSystem = new ReportAssignment(read, write, logger);
@@ -1895,7 +1891,7 @@ setInterval(() => {
     }
 }, 30 * 60 * 1000);
 
-// 3. REASIGNACIÓN DE DENUNCIAS EXPIRADAS (cada hora)
+// 2. REASIGNACIÓN DE DENUNCIAS EXPIRADAS (cada hora)
 setInterval(() => {
     try {
         const assignments = read('report-assignments.json') || [];
@@ -1926,7 +1922,7 @@ setInterval(() => {
     }
 }, 60 * 60 * 1000);
 
-// 4. LIMPIEZA DE SUSPENSIONES EXPIRADAS (cada hora)
+// 3. LIMPIEZA DE SUSPENSIONES EXPIRADAS (cada hora)
 setInterval(() => {
     try {
         const users = read('users.json');
@@ -1963,6 +1959,41 @@ setInterval(() => {
         }
     } catch (error) {
         logger.error('Error limpiando suspensiones:', { error: error.message });
+    }
+}, 60 * 60 * 1000);
+
+// 4. LIMPIEZA DE ENCUESTAS EXPIRADAS (cada hora) - 🔥 USANDO SQLITE
+setInterval(() => {
+    try {
+        const storyDB = require('./db/stories.db');
+        storyDB.getAllStories().then(stories => {
+            let updated = false;
+            
+            for (const story of stories) {
+                if (story.mediaType === 'survey' && story.surveyData && !story.surveyData.isExpired) {
+                    let surveyData = typeof story.surveyData === 'string' ? JSON.parse(story.surveyData) : story.surveyData;
+                    const createdTime = new Date(surveyData.createdAt).getTime();
+                    const expiresInHours = surveyData.expiresIn || 24;
+                    const expiresTime = createdTime + (expiresInHours * 60 * 60 * 1000);
+                    
+                    if (Date.now() > expiresTime) {
+                        surveyData.isExpired = true;
+                        storyDB.updateStory(story.id, { surveyData: surveyData }).then(() => {
+                            logger.info(`⏰ Encuesta ${story.id} expirada automáticamente`);
+                        });
+                        updated = true;
+                    }
+                }
+            }
+            
+            if (updated) {
+                io.emit('surveys_updated');
+            }
+        }).catch(err => {
+            logger.error('Error limpiando encuestas expiradas:', err);
+        });
+    } catch (error) {
+        logger.error('Error limpiando encuestas expiradas:', { error: error.message });
     }
 }, 60 * 60 * 1000);
 
@@ -2038,18 +2069,34 @@ server.listen(PORT, HOST, () => {
        ✅ 15 categorías disponibles
        ✅ Compatible con traducción automática
     
+    📊 SISTEMA DE ENCUESTAS: ACTIVADO
+       ✅ Encuestas con votación
+       ✅ Estadísticas numéricas
+       ✅ Cálculos numéricos
+       ✅ Resultados en tiempo real
+       ✅ Votos anónimos y múltiples
+       ✅ Expiración automática
+    
+    📸 SISTEMA DE STORIES: ACTIVADO CON SQLITE
+       ✅ Historias en base de datos SQLite
+       ✅ Cloudinary integrado (mediaflows)
+       ✅ Detección de idioma automática
+       ✅ Clasificación IA de imágenes
+       ✅ Encuestas integradas
+       ✅ Subtítulos automáticos
+    
     🔥 ========================================
     
     🔄 TAREAS EN SEGUNDO PLANO:
-       ✅ Limpieza de historias expiradas (cada hora)
        ✅ Limpieza de asignaciones expiradas (cada 30 min)
        ✅ Reasignación de denuncias (cada hora)
        ✅ Limpieza de suspensiones (cada hora)
-       ✅ Limpieza de anuncios expirados (cada hora)
+       ✅ Limpieza de encuestas expiradas (cada hora)
+       ✅ Historias expiradas se limpian automáticamente en SQLite
     
     📌 RUTAS CORREGIDAS:
-       ✅ /login.html - Página de inicio de sesión
-       ✅ /register.html - Página de registro
+       ✅ /login.html - Página de inicio de sesión (desde frontend)
+       ✅ /register.html - Página de registro (desde frontend)
        ✅ /chat.html - Chat principal (renombrado de chats.html)
        ✅ /chats.html - Redirige a /chat.html
     
@@ -2057,6 +2104,8 @@ server.listen(PORT, HOST, () => {
        ✅ POST /api/vyin/classify - Clasificar texto
        ✅ POST /api/vyin/classify-story - Clasificar historia por ID
        ✅ POST /api/vyin/classify-stories - Clasificar múltiples historias
+       ✅ POST /api/survey/* - Sistema de encuestas
+       ✅ GET /api/cloudinary/test - Verificar Cloudinary
     `);
 });
 

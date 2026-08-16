@@ -1,5 +1,5 @@
 // backend/services/vyin-ia.service.js
-// VYIN IA - CON M2M100 (10 IDIOMAS) - COMPLETO
+// VYIN IA - CON M2M100 (10 IDIOMAS) - COMPLETO CON DETECCIÓN MEJORADA
 
 const { getTranslationService } = require('./translation.service');
 
@@ -61,6 +61,29 @@ class VyinIAService {
         this._checkInterval = setTimeout(() => this._checkAndUpdateStatus(), 30000);
     }
 
+    /**
+     * 🔥 DETECTA IDIOMA MEJORADO (con soporte para textos cortos)
+     */
+    async detectLanguage(text) {
+        if (!this.enabled || !this.translator) return 'es';
+        
+        try {
+            // 🔥 USAR EL NUEVO MÉTODO MEJORADO DEL TRANSLATOR
+            const result = await this.translator.detectLanguage(text);
+            if (result && result !== 'unknown' && result !== null) {
+                // Verificar que el idioma esté soportado
+                if (this.supportedLanguages.includes(result)) {
+                    return result;
+                }
+            }
+            // Fallback: español
+            return 'es';
+        } catch (error) {
+            console.warn('⚠️ Error detectando idioma:', error.message);
+            return 'es';
+        }
+    }
+
     async translateText(text, targetLanguage, sourceLanguage = null) {
         if (!this.enabled && this.translator) {
             await this.translator.checkHealth();
@@ -83,21 +106,6 @@ class VyinIAService {
     async translateBatch(texts, targetLanguage) {
         if (!this.enabled || !this.translator) return texts;
         return await this.translator.translateBatch(texts, targetLanguage);
-    }
-
-    async detectLanguage(text) {
-        if (!this.enabled || !this.translator) return 'es';
-        
-        try {
-            const result = await this.translator.detectLanguage(text);
-            if (result && result !== 'unknown') {
-                return result;
-            }
-            return 'es';
-        } catch (error) {
-            console.warn('⚠️ Error detectando idioma:', error.message);
-            return 'es';
-        }
     }
 
     getUserLanguage(user) {

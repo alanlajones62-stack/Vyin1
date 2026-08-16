@@ -5,9 +5,9 @@ const fs = require('fs');
 
 // 🔥 CREDENCIALES CORRECTAS
 cloudinary.config({
-    cloud_name: 'anonimatix',
-    api_key: '834122285252736',
-    api_secret: '4YKciFBJY7Ui0enGNFbjo3FVC94'  // ← CORREGIDA
+    cloud_name: 'mediaflows_29aff746-0f4d-43cd-a0b1-f84d9bbd62b1',
+    api_key: '252662336671461',
+    api_secret: 'PMpBvWpxz49UiHjixemVpO6LL40'
 });
 
 /**

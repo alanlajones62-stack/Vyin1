@@ -1,5 +1,6 @@
 // backend/notifications.js - VERSIÓN CORREGIDA CON MENSAJES DETALLADOS Y VYIN IA
 // CON SOPORTE PARA RESPUESTAS A RESPUESTAS
+// 🔥 CORREGIDO: Orden de rutas (clear-all ANTES de :id)
 
 const auth = require('./middleware/auth');
 const { getVyinService } = require('./services/vyin-ia.service');
@@ -7,6 +8,108 @@ const { getVyinService } = require('./services/vyin-ia.service');
 module.exports = (read, write, io) => {
     const router = require('express').Router();
     const vyinService = getVyinService();
+
+    // ============================================================
+    // 🔥 PRIMERO: RUTAS ESPECÍFICAS (SIN PARÁMETROS :id)
+    // ============================================================
+
+    // ============================================================
+    // ELIMINAR TODAS LAS NOTIFICACIONES
+    // ============================================================
+    router.delete('/clear-all', auth, (req, res) => {
+        try {
+            let notifications = read('notifications.json');
+            const userId = req.userId;
+            
+            // Contar antes de eliminar
+            const beforeCount = notifications.filter(n => n.userId === userId).length;
+            
+            if (beforeCount === 0) {
+                return res.json({ 
+                    success: true, 
+                    deletedCount: 0,
+                    message: 'No hay notificaciones para eliminar'
+                });
+            }
+            
+            // Eliminar solo las del usuario
+            notifications = notifications.filter(n => n.userId !== userId);
+            write('notifications.json', notifications);
+            
+            // Emitir evento
+            io.to(`user_${userId}`).emit('all_notifications_cleared');
+            
+            // Actualizar contador
+            io.to(`user_${userId}`).emit('notification_count_updated', { unreadCount: 0 });
+            
+            console.log(`🗑️ Usuario ${userId} eliminó ${beforeCount} notificaciones`);
+            
+            res.json({ 
+                success: true, 
+                deletedCount: beforeCount,
+                remaining: 0,
+                message: `Se eliminaron ${beforeCount} notificaciones correctamente`
+            });
+        } catch (error) {
+            console.error('Error eliminando todas:', error);
+            res.status(500).json({ error: 'Error interno del servidor' });
+        }
+    });
+
+    // ============================================================
+    // MARCAR TODAS COMO LEÍDAS
+    // ============================================================
+    router.put('/read-all', auth, (req, res) => {
+        try {
+            let notifications = read('notifications.json');
+            let markedCount = 0;
+            
+            notifications = notifications.map(n => {
+                if (n.userId === req.userId && !n.read) {
+                    markedCount++;
+                    n.read = true;
+                }
+                return n;
+            });
+            
+            write('notifications.json', notifications);
+            
+            io.to(`user_${req.userId}`).emit('all_notifications_read');
+            
+            const unreadCount = notifications.filter(n => n.userId === req.userId && !n.read).length;
+            io.to(`user_${req.userId}`).emit('notification_count_updated', { unreadCount });
+            
+            res.json({ 
+                success: true, 
+                markedCount: markedCount,
+                message: `Se marcaron ${markedCount} notificaciones como leídas`
+            });
+        } catch (error) {
+            console.error('Error marcando todas:', error);
+            res.status(500).json({ error: 'Error interno' });
+        }
+    });
+
+    // ============================================================
+    // CONTADOR DE NO LEÍDAS
+    // ============================================================
+    router.get('/unread-count', auth, (req, res) => {
+        try {
+            const notifications = read('notifications.json');
+            const unreadCount = notifications
+                .filter(n => n.userId === req.userId && !n.read)
+                .length;
+            
+            res.json({ unreadCount });
+        } catch (error) {
+            console.error('Error obteniendo contador:', error);
+            res.json({ unreadCount: 0 });
+        }
+    });
+
+    // ============================================================
+    // 🔥 DESPUÉS: RUTAS GENÉRICAS CON :id
+    // ============================================================
 
     // ============================================================
     // OBTENER NOTIFICACIONES (CON TRADUCCIÓN Y MENSAJES DETALLADOS)
@@ -18,7 +121,7 @@ module.exports = (read, write, io) => {
             const stories = read('stories.json');
             
             const currentUser = users.find(u => u.id === req.userId);
-            const userLang = currentUser ? vyinService.getUserLanguage(currentUser) : 'es';
+            const userLang = currentUser ? (currentUser.language || 'es') : 'es';
             
             let userNotifications = notifications
                 .filter(n => n.userId === req.userId)
@@ -154,6 +257,10 @@ module.exports = (read, write, io) => {
                     notificationId: req.params.id
                 });
                 
+                // Actualizar contador
+                const unreadCount = notifications.filter(n => n.userId === req.userId && !n.read).length;
+                io.to(`user_${req.userId}`).emit('notification_count_updated', { unreadCount });
+                
                 res.json({ success: true });
             } else {
                 res.status(404).json({ error: 'Notificación no encontrada' });
@@ -165,100 +272,43 @@ module.exports = (read, write, io) => {
     });
 
     // ============================================================
-    // MARCAR TODAS COMO LEÍDAS
-    // ============================================================
-    router.put('/read-all', auth, (req, res) => {
-        try {
-            let notifications = read('notifications.json');
-            let markedCount = 0;
-            
-            notifications = notifications.map(n => {
-                if (n.userId === req.userId && !n.read) {
-                    markedCount++;
-                    n.read = true;
-                }
-                return n;
-            });
-            
-            write('notifications.json', notifications);
-            
-            io.to(`user_${req.userId}`).emit('all_notifications_read');
-            
-            res.json({ 
-                success: true, 
-                markedCount: markedCount,
-                message: `Se marcaron ${markedCount} notificaciones como leídas`
-            });
-        } catch (error) {
-            console.error('Error marcando todas:', error);
-            res.status(500).json({ error: 'Error interno' });
-        }
-    });
-
-    // ============================================================
-    // ELIMINAR NOTIFICACIÓN
+    // ELIMINAR NOTIFICACIÓN INDIVIDUAL
     // ============================================================
     router.delete('/:id', auth, (req, res) => {
         try {
             let notifications = read('notifications.json');
             const notification = notifications.find(n => n.id === req.params.id);
             
-            if (!notification || notification.userId !== req.userId) {
+            if (!notification) {
                 return res.status(404).json({ error: 'Notificación no encontrada' });
             }
             
+            if (notification.userId !== req.userId) {
+                return res.status(403).json({ error: 'No tienes permiso para eliminar esta notificación' });
+            }
+            
+            // Eliminar la notificación
             notifications = notifications.filter(n => n.id !== req.params.id);
             write('notifications.json', notifications);
             
+            // Emitir evento
             io.to(`user_${req.userId}`).emit('notification_deleted', {
                 notificationId: req.params.id
             });
             
-            res.json({ success: true });
-        } catch (error) {
-            console.error('Error eliminando notificación:', error);
-            res.status(500).json({ error: 'Error interno' });
-        }
-    });
-
-    // ============================================================
-    // ELIMINAR TODAS LAS NOTIFICACIONES
-    // ============================================================
-    router.delete('/clear-all', auth, (req, res) => {
-        try {
-            let notifications = read('notifications.json');
-            const beforeCount = notifications.length;
+            // Actualizar contador
+            const unreadCount = notifications.filter(n => n.userId === req.userId && !n.read).length;
+            io.to(`user_${req.userId}`).emit('notification_count_updated', { unreadCount });
             
-            notifications = notifications.filter(n => n.userId !== req.userId);
-            write('notifications.json', notifications);
-            
-            io.to(`user_${req.userId}`).emit('all_notifications_cleared');
+            console.log(`🗑️ Notificación ${req.params.id} eliminada por usuario ${req.userId}`);
             
             res.json({ 
-                success: true, 
-                deletedCount: beforeCount - notifications.length,
-                message: `Se eliminaron todas las notificaciones`
+                success: true,
+                message: 'Notificación eliminada correctamente'
             });
         } catch (error) {
-            console.error('Error eliminando todas:', error);
-            res.status(500).json({ error: 'Error interno' });
-        }
-    });
-
-    // ============================================================
-    // CONTADOR DE NO LEÍDAS
-    // ============================================================
-    router.get('/unread-count', auth, (req, res) => {
-        try {
-            const notifications = read('notifications.json');
-            const unreadCount = notifications
-                .filter(n => n.userId === req.userId && !n.read)
-                .length;
-            
-            res.json({ unreadCount });
-        } catch (error) {
-            console.error('Error obteniendo contador:', error);
-            res.json({ unreadCount: 0 });
+            console.error('Error eliminando notificación:', error);
+            res.status(500).json({ error: 'Error interno del servidor' });
         }
     });
 
@@ -271,6 +321,12 @@ module.exports = (read, write, io) => {
             const users = read('users.json');
             const fromUser = users.find(u => u.id === fromUserId);
             const targetUser = users.find(u => u.id === userId);
+            
+            // No crear notificación si el usuario se notifica a sí mismo
+            if (fromUserId === userId) {
+                console.log('⏭️ No se crea notificación para el mismo usuario');
+                return null;
+            }
             
             if (!fromUser) {
                 console.error('Usuario no encontrado para notificación:', fromUserId);

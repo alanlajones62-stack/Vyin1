@@ -39,7 +39,7 @@ function createLoginModalHTML() {
                 
                 <div class="login-modal-header">
                     <div class="login-modal-logo">
-                        <i class="fas fa-bolt"></i> Vyin
+                        <i class="fas fa-bolt"></i> Vygora
                     </div>
                     <h2>Iniciar Sesión</h2>
                     <p class="login-modal-subtitle">Conecta con el mundo</p>
@@ -667,7 +667,7 @@ function showLoginScreen(containerId = 'feedContainer') {
                 <i class="fas fa-camera" style="font-size:42px;color:#fff;"></i>
             </div>
             
-            <h2 style="color:#fff;font-size:24px;font-weight:700;margin-bottom:8px;">Bienvenido a Vyin</h2>
+            <h2 style="color:#fff;font-size:24px;font-weight:700;margin-bottom:8px;">Bienvenido a Vygora</h2>
             <p style="color:rgba(255,255,255,0.35);font-size:14px;margin-bottom:32px;max-width:300px;">
                 Descubre historias, conecta con amigos y comparte momentos únicos
             </p>
@@ -883,7 +883,7 @@ function initLoginModule(options = {}) {
 }
 
 // ============================================================
-// 🔥 EXPORTAR (SOLO UNA VEZ)
+// 🔥 EXPORTAR
 // ============================================================
 
 export {
