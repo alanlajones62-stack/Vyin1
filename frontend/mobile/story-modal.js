@@ -1,8 +1,8 @@
 // ============================================================
 // story-modal.js - Modal para ver historias con navegación 
-// (VERSIÓN CORREGIDA - SOPORTE MÚLTIPLES SOLICITUDES + ENCUESTAS)
+// (VERSIÓN CORREGIDA - CON ACTUALIZACIÓN PARCIAL DE COMENTARIOS)
 // 🔥 NUEVO: SOPORTE PARA SUBIR ARCHIVOS EN COMENTARIOS (SOLO DUEÑO)
-// 🔥 CORREGIDO: renderComments importado y usado correctamente
+// 🔥 CORREGIDO: Re-renderización completa, parpadeo y pérdida de foco
 // ============================================================
 
 import {
@@ -15,7 +15,15 @@ import {
     loadComments, initComments, addCommentToCache, addReplyToCache, 
     updateCommentLikes, updateCommentsUIWithoutReload,
     uploadCommentFile, addComment,
-    renderComments  // 🔥 IMPORTAR renderComments
+    renderComments,
+    // 🔥 NUEVAS FUNCIONES DE ACTUALIZACIÓN PARCIAL
+    addCommentToUI,
+    addReplyToUI,
+    updateCommentLikeUI,
+    removeCommentFromUI,
+    updateCommentCounters,
+    commentsCache,
+    findCommentById
 } from './story-comments.js';
 
 const API_URL = window.location.origin;
@@ -841,7 +849,7 @@ async function handleDeleteStory() {
 }
 
 // ============================================================
-// 🔥 ENVIAR COMENTARIO (CON SOPORTE PARA ARCHIVO) - CORREGIDO
+// 🔥 ENVIAR COMENTARIO (CON ACTUALIZACIÓN PARCIAL)
 // ============================================================
 
 async function handleSendComment() {
@@ -885,15 +893,10 @@ async function handleSendComment() {
             window._pendingCommentFile = null;
             // Restaurar placeholder
             input.placeholder = 'Escribe un comentario...';
-            updateCommentCount(1);
             
-            // 🔥 RECARGAR COMENTARIOS Y RENDERIZAR
-            const comments = await loadComments(currentStoryId, true);
-            const currentUser = getCurrentUser();
-            const container = document.getElementById('commentsList');
-            if (container) {
-                renderComments(comments, currentStoryId, currentUser?.id, container);
-            }
+            // 🔥 ACTUALIZACIÓN PARCIAL - Sin re-renderizar toda la lista
+            addCommentToUI(currentStoryId, newComment);
+            
             showToast(fileData ? '📎 Comentario con archivo adjunto' : '💬 Comentario enviado');
         }
     } catch (error) {
@@ -910,7 +913,7 @@ async function handleSendComment() {
 }
 
 // ============================================================
-// 🔥 ENVIAR RESPUESTA
+// 🔥 ENVIAR RESPUESTA (CON ACTUALIZACIÓN PARCIAL)
 // ============================================================
 
 async function handleSendReply(storyId, commentId) {
@@ -955,9 +958,10 @@ async function handleSendReply(storyId, commentId) {
         if (res.ok) {
             input.value = '';
             wrapper.style.display = 'none';
-            updateCommentCount(1);
-            addReplyToCache(storyId, commentId, data);
-            updateCommentsUIWithoutReload(storyId);
+            
+            // 🔥 ACTUALIZACIÓN PARCIAL - Sin re-renderizar toda la lista
+            addReplyToUI(storyId, commentId, data);
+            
             showToast('💬 Respuesta enviada');
         } else {
             showToast(data.error || 'Error al enviar respuesta', true);
@@ -976,21 +980,12 @@ async function handleSendReply(storyId, commentId) {
 }
 
 // ============================================================
-// 🔥 ACTUALIZAR CONTADOR DE COMENTARIOS
+// 🔥 ACTUALIZAR CONTADOR DE COMENTARIOS (DEPRECADO - USAR updateCommentCounters)
 // ============================================================
 
 function updateCommentCount(increment) {
-    const commentsEl = document.getElementById('modalComments');
-    if (commentsEl) {
-        const current = parseInt(commentsEl.textContent.replace(/[^0-9]/g, '')) || 0;
-        commentsEl.textContent = formatNumber(current + increment);
-    }
-    
-    const commentsCountEl = document.getElementById('commentsCount');
-    if (commentsCountEl) {
-        const current = parseInt(commentsCountEl.textContent.replace(/[^0-9]/g, '')) || 0;
-        commentsCountEl.textContent = formatNumber(current + increment);
-    }
+    // Delegar a la función importada
+    updateCommentCounters(currentStoryId, increment);
 }
 
 // ============================================================
@@ -1738,7 +1733,7 @@ async function registerView(storyId) {
 }
 
 // ============================================================
-// MANEJAR LIKE EN MODAL
+// 🔥 MANEJAR LIKE EN MODAL - CON ACTUALIZACIÓN DE CACHÉ
 // ============================================================
 
 async function handleModalLike() {
@@ -1760,6 +1755,7 @@ async function handleModalLike() {
         currentLikes = parseInt(likesEl.textContent.replace(/[^0-9]/g, '')) || 0;
     }
     
+    // 🔥 ACTUALIZACIÓN OPTIMISTA
     if (isLiked) {
         currentLikes = Math.max(0, currentLikes - 1);
         if (likeBtn) {
@@ -1788,6 +1784,7 @@ async function handleModalLike() {
 
         const data = await res.json();
         if (res.ok) {
+            // Actualizar con el valor real del servidor
             if (likesEl) {
                 likesEl.textContent = formatNumber(data.likesCount || 0);
             }
@@ -1804,6 +1801,7 @@ async function handleModalLike() {
                 }
             }
 
+            // Actualizar caché local
             if (currentStoryData) {
                 currentStoryData.likes = data.likes || [];
             }
@@ -1817,6 +1815,7 @@ async function handleModalLike() {
 
             showToast(data.liked ? '❤️ Like' : '💔 Quitado');
         } else {
+            // Revertir cambios en caso de error
             showToast(data.error || 'Error al procesar like', true);
             await loadStoryData(currentStoryId, true);
         }
@@ -1826,6 +1825,27 @@ async function handleModalLike() {
         await loadStoryData(currentStoryId, true);
     }
 }
+
+// ============================================================
+// 🔥 FUNCIÓN GLOBAL PARA MANEJAR LIKE DE COMENTARIOS
+// ============================================================
+
+// Esta función se expone globalmente para que los comentarios puedan usarla
+window.handleCommentLike = async function(storyId, commentId) {
+    const { likeComment, commentsCache, findCommentById } = await import('./story-comments.js');
+    const liked = await likeComment(storyId, commentId);
+    if (liked !== false) {
+        // Obtener el comentario actualizado del caché
+        const comments = commentsCache.get(storyId);
+        const comment = findCommentById(comments, commentId);
+        if (comment) {
+            const likesCount = comment.likes?.length || 0;
+            // 🔥 ACTUALIZACIÓN PARCIAL - Sin re-renderizar toda la lista
+            const { updateCommentLikeUI } = await import('./story-comments.js');
+            updateCommentLikeUI(commentId, liked, likesCount);
+        }
+    }
+};
 
 // ============================================================
 // 🔥 INICIALIZAR CACHÉ
