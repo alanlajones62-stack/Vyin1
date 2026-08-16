@@ -1,8 +1,9 @@
 // profile-native.js - Perfil nativo del usuario (SECCIÓN NATIVA)
-// OPTIMIZADO: Sin estado de carga, con precarga y actualización en tiempo real
+// OPTIMIZADO: Con caché unificado (memoria + localStorage)
 // 🔥 NAVEGACIÓN: Soporte para followers-modal con fromNative=true
 // 🔥 INTEGRADO CON i18n PARA TRADUCCIÓN DE INTERFAZ
 // 🔥 CORREGIDO: Soporte para miniaturas de video y encuestas
+// 🔥 NUEVO: Sistema de caché persistente para perfiles y historias
 // ============================================================
 
 import {
@@ -14,6 +15,9 @@ import { formatNumber } from './utils.js';
 
 // 🔥 IMPORTAR SISTEMA i18n
 import { t, onLocaleChange, translateAll } from './i18n.js';
+
+// 🔥 IMPORTAR SISTEMA DE CACHÉ UNIFICADO
+import { getCache } from './services/cache.service.js';
 
 const API_URL = window.location.origin;
 
@@ -35,6 +39,9 @@ const profileCache = new Map();
 const storiesCache = new Map();
 const MAX_CACHE_SIZE = 20;
 
+// Instancia del caché unificado
+const unifiedCache = getCache();
+
 function cleanCache() {
     if (profileCache.size > MAX_CACHE_SIZE) {
         const keys = Array.from(profileCache.keys());
@@ -52,6 +59,8 @@ function clearProfileCache(userId) {
     if (userId) {
         profileCache.delete(userId);
         storiesCache.delete(userId);
+        // También limpiar caché unificado
+        unifiedCache.invalidateProfile(userId);
     }
 }
 
@@ -73,7 +82,7 @@ function initI18nForProfileNative() {
 }
 
 // ============================================================
-// 🔥 PRECARGAR PERFIL DEL USUARIO ACTUAL
+// 🔥 PRECARGAR PERFIL DEL USUARIO ACTUAL CON CACHÉ UNIFICADO
 // ============================================================
 
 function preloadCurrentUserProfile() {
@@ -82,8 +91,18 @@ function preloadCurrentUserProfile() {
     
     const userId = currentUser.id;
     
-    if (profileCache.has(userId)) {
-        console.log(`✅ Perfil de ${currentUser.fullName} ya en caché`);
+    // Verificar caché unificado primero
+    const cachedProfile = unifiedCache.getProfile(userId);
+    if (cachedProfile) {
+        profileCache.set(userId, cachedProfile);
+        console.log(`✅ Perfil de ${cachedProfile.fullName} cargado desde caché unificado`);
+        
+        // Intentar cargar historias del caché
+        const cachedStories = unifiedCache.getStories(userId);
+        if (cachedStories) {
+            storiesCache.set(userId, cachedStories.stories);
+            console.log(`✅ ${cachedStories.stories.length} historias cargadas desde caché`);
+        }
         return;
     }
     
@@ -100,8 +119,11 @@ function preloadCurrentUserProfile() {
         throw new Error('Error cargando perfil');
     })
     .then(user => {
+        // Guardar en caché unificado y memoria
+        unifiedCache.setProfile(userId, user);
         profileCache.set(userId, user);
-        console.log(`✅ Perfil de ${user.fullName} pre-cargado`);
+        console.log(`✅ Perfil de ${user.fullName} pre-cargado y en caché`);
+        
         return fetch(`${API_URL}/api/stories/user/${userId}`, {
             headers: { 'Authorization': `Bearer ${token}` }
         });
@@ -111,8 +133,9 @@ function preloadCurrentUserProfile() {
         return [];
     })
     .then(stories => {
+        unifiedCache.setStories(userId, stories);
         storiesCache.set(userId, stories);
-        console.log(`✅ ${stories.length} historias pre-cargadas`);
+        console.log(`✅ ${stories.length} historias pre-cargadas y en caché`);
     })
     .catch(err => {
         console.warn('⚠️ Error pre-cargando perfil:', err.message);
@@ -154,14 +177,39 @@ function showProfileNative(userId) {
     const navProfile = document.getElementById('navProfile');
     if (navProfile) navProfile.classList.add('active');
 
-    if (profileCache.has(userId) && storiesCache.has(userId)) {
-        console.log(`📦 Usando caché para perfil nativo de ${userId}`);
+    // 🔥 PRIORIDAD: Caché unificado → Caché en memoria → Servidor
+    const cachedProfile = unifiedCache.getProfile(userId);
+    const cachedStories = unifiedCache.getStories(userId);
+    
+    if (cachedProfile) {
+        console.log(`📦 Usando caché unificado para perfil ${userId}`);
+        profileCache.set(userId, cachedProfile);
+        currentProfileData = cachedProfile;
+        
+        if (cachedStories && cachedStories.stories) {
+            storiesCache.set(userId, cachedStories.stories);
+            updateProfileNativeUI(cachedProfile, cachedStories.stories);
+        } else if (profileCache.has(userId) && storiesCache.has(userId)) {
+            // Fallback a caché en memoria
+            const user = profileCache.get(userId);
+            const stories = storiesCache.get(userId);
+            updateProfileNativeUI(user, stories);
+        } else {
+            // Cargar historias por separado
+            loadStoriesNative(userId, cachedProfile);
+        }
+        
+        // Refrescar en segundo plano (sin bloquear)
+        refreshProfileInBackgroundNative(userId);
+    } else if (profileCache.has(userId) && storiesCache.has(userId)) {
+        console.log(`📦 Usando caché en memoria para perfil ${userId}`);
         const user = profileCache.get(userId);
         const stories = storiesCache.get(userId);
         updateProfileNativeUI(user, stories);
         currentProfileData = user;
         refreshProfileInBackgroundNative(userId);
     } else {
+        console.log(`📡 Cargando perfil ${userId} desde servidor...`);
         loadProfileDataNative(userId);
     }
 
@@ -177,7 +225,7 @@ function showProfileNative(userId) {
             clearInterval(refreshInterval);
             refreshInterval = null;
         }
-    }, 10000);
+    }, 30000);
 }
 
 // ============================================================
@@ -212,13 +260,56 @@ function hideProfileNative() {
 }
 
 // ============================================================
-// CARGAR DATOS DEL PERFIL NATIVO
+// CARGAR HISTORIAS POR SEPARADO
+// ============================================================
+
+async function loadStoriesNative(userId, user) {
+    try {
+        const token = getToken();
+        if (!token) return;
+        
+        const res = await fetch(`${API_URL}/api/stories/user/${userId}`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+        
+        if (res.ok) {
+            const stories = await res.json();
+            unifiedCache.setStories(userId, stories);
+            storiesCache.set(userId, stories);
+            if (isProfileSectionVisible && currentProfileUserId === userId) {
+                updateProfileNativeUI(user || currentProfileData, stories);
+            }
+        }
+    } catch (e) {
+        console.warn('⚠️ Error cargando historias:', e.message);
+    }
+}
+
+// ============================================================
+// CARGAR DATOS DEL PERFIL NATIVO CON CACHÉ
 // ============================================================
 
 async function loadProfileDataNative(userId) {
     const token = getToken();
     if (!token) {
         showToast(t('error.unauthorized') || 'Inicia sesión para ver tu perfil', true);
+        return;
+    }
+
+    // Intentar caché unificado primero
+    const cached = unifiedCache.getProfile(userId);
+    if (cached) {
+        profileCache.set(userId, cached);
+        currentProfileData = cached;
+        
+        // Cargar historias
+        const storiesData = unifiedCache.getStories(userId);
+        if (storiesData && storiesData.stories) {
+            storiesCache.set(userId, storiesData.stories);
+            updateProfileNativeUI(cached, storiesData.stories);
+        } else {
+            await loadStoriesNative(userId, cached);
+        }
         return;
     }
 
@@ -245,6 +336,8 @@ async function loadProfileDataNative(userId) {
         const user = await res.json();
         currentProfileData = user;
 
+        // Guardar en caché unificado y memoria
+        unifiedCache.setProfile(userId, user);
         profileCache.set(userId, user);
         cleanCache();
 
@@ -255,6 +348,7 @@ async function loadProfileDataNative(userId) {
         let stories = [];
         if (storiesRes.ok) {
             stories = await storiesRes.json();
+            unifiedCache.setStories(userId, stories);
             storiesCache.set(userId, stories);
             cleanCache();
         }
@@ -282,6 +376,8 @@ async function refreshProfileInBackgroundNative(userId) {
 
         if (res.ok) {
             const user = await res.json();
+            // Actualizar caché unificado
+            unifiedCache.setProfile(userId, user);
             profileCache.set(userId, user);
             currentProfileData = user;
 
@@ -292,6 +388,7 @@ async function refreshProfileInBackgroundNative(userId) {
             let stories = [];
             if (storiesRes.ok) {
                 stories = await storiesRes.json();
+                unifiedCache.setStories(userId, stories);
                 storiesCache.set(userId, stories);
             }
 
@@ -655,6 +752,7 @@ window.handleProfileFollowNative = async function() {
                 followersEl.textContent = formatNumber(newCount);
             }
 
+            // Invalidar caché del perfil
             clearProfileCache(currentProfileUserId);
         } else {
             showToast(data.error || t('error.general') || 'Error al seguir', true);
@@ -727,6 +825,14 @@ window.openStoryFromProfileNative = function(storyId, profileUserId) {
 };
 
 // ============================================================
+// OBTENER ESTADÍSTICAS DEL CACHÉ (para depuración)
+// ============================================================
+
+function getCacheStats() {
+    return unifiedCache.getStats();
+}
+
+// ============================================================
 // FUNCIONES EXPORTADAS
 // ============================================================
 
@@ -740,5 +846,6 @@ export {
     clearProfileCache,
     preloadCurrentUserProfile,
     translateProfileNativeUI,
-    initI18nForProfileNative
-};
+    initI18nForProfileNative,
+    getCacheStats
+};      

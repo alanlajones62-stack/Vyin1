@@ -3,10 +3,14 @@
 // 🔥 VERSIÓN REFACTORIZADA CON ACTUALIZACIÓN PARCIAL DEL DOM
 // 🔥 NUEVO: Modal de vista previa para archivos (PDF, imágenes, etc.)
 // 🔥 CORREGIDO: Apertura de PDFs y documentos con URL completa
+// 🔥 NUEVO: Caché unificado para persistencia entre sesiones
 // ============================================================
 
 import { getToken, getCurrentUser, showToast, getAvatar, formatDate, escapeHtml } from './auth.js';
 import { formatNumber } from './utils.js';
+
+// 🔥 IMPORTAR CACHÉ UNIFICADO
+import { getCache } from './services/cache.service.js';
 
 const API_URL = window.location.origin;
 
@@ -17,6 +21,9 @@ const API_URL = window.location.origin;
 let commentsCache = new Map();
 let commentLikes = new Map();
 let repliesVisibility = new Map();
+
+// 🔥 INSTANCIA DEL CACHÉ UNIFICADO
+const unifiedCache = getCache();
 
 // ============================================================
 // 🔥 FUNCIONES AUXILIARES PARA ARCHIVOS
@@ -606,7 +613,7 @@ async function uploadCommentFile(storyId, file) {
 }
 
 // ============================================================
-// CARGAR COMENTARIOS - CON CACHÉ INTELIGENTE
+// CARGAR COMENTARIOS - CON CACHÉ UNIFICADO
 // ============================================================
 
 async function loadComments(storyId, forceReload = false) {
@@ -614,14 +621,27 @@ async function loadComments(storyId, forceReload = false) {
     const token = getToken();
     if (!token) return [];
     
+    // 🔥 VERIFICAR CACHÉ UNIFICADO PRIMERO
+    if (!forceReload) {
+        const cachedData = unifiedCache.getComments(storyId);
+        if (cachedData && cachedData.comments) {
+            // Guardar en caché en memoria para acceso rápido
+            commentsCache.set(storyId, cachedData.comments);
+            console.log(`📦 [CACHE UNIFICADO] Comentarios de ${storyId} cargados (${cachedData.comments.length} comentarios)`);
+            return cachedData.comments;
+        }
+    }
+    
+    // 🔥 CACHÉ EN MEMORIA (legacy)
     if (!forceReload && commentsCache.has(storyId)) {
         const cached = commentsCache.get(storyId);
-        console.log(`📦 [CACHE] Usando comentarios en caché para ${storyId} (${cached.length} comentarios)`);
+        console.log(`📦 [CACHE MEMORIA] Comentarios de ${storyId} cargados (${cached.length} comentarios)`);
         return cached;
     }
     
     if (forceReload) {
         commentsCache.delete(storyId);
+        unifiedCache.invalidateComments(storyId);
         console.log(`🔄 [CACHE] Forzando recarga de comentarios para ${storyId}`);
     }
     
@@ -643,6 +663,11 @@ async function loadComments(storyId, forceReload = false) {
         comments.forEach(comment => {
             if (comment.replies && comment.replies.length > 0) sortReplies(comment.replies);
         });
+        
+        // 🔥 GUARDAR EN CACHÉ UNIFICADO
+        const storyTimestamp = Date.now();
+        unifiedCache.setComments(storyId, comments, storyTimestamp);
+        
         commentsCache.set(storyId, comments);
         comments.forEach(comment => {
             if (comment.replies && comment.replies.length > 0) {
@@ -669,7 +694,7 @@ async function loadComments(storyId, forceReload = false) {
 }
 
 // ============================================================
-// AGREGAR COMENTARIO
+// AGREGAR COMENTARIO - ACTUALIZA CACHÉ UNIFICADO
 // ============================================================
 
 async function addComment(storyId, content, parentCommentId = null, fileData = null) {
@@ -712,10 +737,18 @@ async function addComment(storyId, content, parentCommentId = null, fileData = n
         if (!res.ok) throw new Error('Error al comentar');
         const newComment = await res.json();
         
+        // 🔥 ACTUALIZAR CACHÉ EN MEMORIA
         if (parentCommentId) {
             addReplyToCache(storyId, parentCommentId, newComment);
         } else {
             addCommentToCache(storyId, newComment);
+        }
+        
+        // 🔥 ACTUALIZAR CACHÉ UNIFICADO
+        const existingCache = unifiedCache.getComments(storyId);
+        if (existingCache && existingCache.comments) {
+            const updatedComments = [newComment, ...existingCache.comments];
+            unifiedCache.setComments(storyId, updatedComments, Date.now());
         }
         
         const socket = window.socket;
@@ -736,7 +769,7 @@ async function addComment(storyId, content, parentCommentId = null, fileData = n
 }
 
 // ============================================================
-// ELIMINAR COMENTARIO
+// ELIMINAR COMENTARIO - ACTUALIZA CACHÉ UNIFICADO
 // ============================================================
 
 async function deleteComment(storyId, commentId, parentCommentId = null) {
@@ -758,6 +791,7 @@ async function deleteComment(storyId, commentId, parentCommentId = null) {
         });
         if (!res.ok) throw new Error('Error al eliminar');
         
+        // 🔥 ACTUALIZAR CACHÉ EN MEMORIA
         if (commentsCache.has(storyId)) {
             const comments = commentsCache.get(storyId);
             if (parentCommentId) {
@@ -769,8 +803,22 @@ async function deleteComment(storyId, commentId, parentCommentId = null) {
                 const filtered = comments.filter(c => c.id !== commentId);
                 commentsCache.set(storyId, filtered);
             }
-            console.log(`📦 [CACHE] Comentario ${commentId} eliminado del caché de ${storyId}`);
         }
+        
+        // 🔥 ACTUALIZAR CACHÉ UNIFICADO
+        const existingCache = unifiedCache.getComments(storyId);
+        if (existingCache && existingCache.comments) {
+            const updatedComments = existingCache.comments.filter(c => c.id !== commentId);
+            if (parentCommentId) {
+                const parentComment = findCommentById(updatedComments, parentCommentId);
+                if (parentComment && parentComment.replies) {
+                    parentComment.replies = parentComment.replies.filter(r => r.id !== commentId);
+                }
+            }
+            unifiedCache.setComments(storyId, updatedComments, Date.now());
+        }
+        
+        console.log(`📦 [CACHE] Comentario ${commentId} eliminado del caché de ${storyId}`);
         showToast('🗑️ Eliminado');
         return true;
     } catch (error) {
@@ -781,7 +829,7 @@ async function deleteComment(storyId, commentId, parentCommentId = null) {
 }
 
 // ============================================================
-// DAR LIKE A COMENTARIO
+// DAR LIKE A COMENTARIO - ACTUALIZA CACHÉ UNIFICADO
 // ============================================================
 
 async function likeComment(storyId, commentId) {
@@ -800,7 +848,10 @@ async function likeComment(storyId, commentId) {
         });
         if (!res.ok) throw new Error('Error al dar like');
         const data = await res.json();
+        
+        // 🔥 ACTUALIZAR CACHÉ
         updateCommentLikes(storyId, commentId, data.liked);
+        
         return data.liked;
     } catch (error) {
         console.error('Error liking comment:', error);
@@ -1373,7 +1424,7 @@ window.toggleRepliesVisibility = function(commentId) {
 };
 
 // ============================================================
-// INICIALIZAR COMENTARIOS
+// INICIALIZAR COMENTARIOS - CON CACHÉ UNIFICADO
 // ============================================================
 
 async function initComments(storyId, containerId = 'commentsList', highlightCommentId = null, forceReload = false) {
@@ -1385,12 +1436,22 @@ async function initComments(storyId, containerId = 'commentsList', highlightComm
     
     let comments;
     
-    if (!forceReload && commentsCache.has(storyId)) {
-        comments = commentsCache.get(storyId);
-        console.log(`📦 [CACHE] Usando comentarios en caché para ${storyId} (${comments.length} comentarios)`);
+    // 🔥 VERIFICAR CACHÉ UNIFICADO PRIMERO
+    if (!forceReload) {
+        const cachedData = unifiedCache.getComments(storyId);
+        if (cachedData && cachedData.comments) {
+            comments = cachedData.comments;
+            commentsCache.set(storyId, comments);
+            console.log(`📦 [CACHE UNIFICADO] Comentarios de ${storyId} cargados (${comments.length} comentarios)`);
+        } else if (commentsCache.has(storyId)) {
+            comments = commentsCache.get(storyId);
+            console.log(`📦 [CACHE MEMORIA] Comentarios de ${storyId} cargados (${comments.length} comentarios)`);
+        } else {
+            comments = await loadComments(storyId, forceReload);
+        }
     } else {
-        comments = await loadComments(storyId, forceReload);
-        console.log(`📡 [API] Cargando comentarios desde servidor para ${storyId} (${comments.length} comentarios)`);
+        comments = await loadComments(storyId, true);
+        console.log(`📡 [API] Comentarios de ${storyId} recargados (${comments.length} comentarios)`);
     }
     
     const currentUser = getCurrentUser();
@@ -1482,6 +1543,21 @@ window.openImagePreview = function(imageUrl) {
 };
 
 // ============================================================
+// OBTENER ESTADÍSTICAS DEL CACHÉ
+// ============================================================
+
+function getCacheStats() {
+    return {
+        memory: {
+            comments: commentsCache.size,
+            likes: commentLikes.size,
+            replies: repliesVisibility.size
+        },
+        unified: unifiedCache.getStats ? unifiedCache.getStats() : 'unavailable'
+    };
+}
+
+// ============================================================
 // 🔥 EXPORTACIONES
 // ============================================================
 
@@ -1519,5 +1595,7 @@ export {
     isImageFile,
     isDocumentFile,
     isVideoFile,
-    isAudioFile
+    isAudioFile,
+    // 🔥 ESTADÍSTICAS
+    getCacheStats
 };

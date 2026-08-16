@@ -1,4 +1,5 @@
 // frontend/i18n.js - Sistema de traducción de interfaz (COMPLETO Y CORREGIDO)
+// 🔥 CORREGIDO: Añadida clave faltante "feed.loadingDesc"
 // ============================================================
 
 // ============================================================
@@ -32,6 +33,7 @@ const LOCALES = {
         'feed.noStories': 'No hay historias disponibles',
         'feed.loadMore': 'Cargar más',
         'feed.loading': 'Cargando...',
+        'feed.loadingDesc': 'Cargando historias...',  // ✅ CLAVE AGREGADA
         'feed.newStory': 'Nueva historia',
         'feed.share': 'Compartir',
         'feed.like': 'Me gusta',
@@ -267,9 +269,7 @@ const LOCALES = {
         'profile.selected': 'Seleccionados',
         'profile.loadingDesc': 'Espera un momento...',
 
-        // ============================================================
-        // 🔥 CHAT - TODAS LAS CLAVES FALTANTES AÑADIDAS AQUÍ
-        // ============================================================
+        // --- CHAT ---
         'chat.title': 'Mensajes',
         'chat.conversations': 'Conversaciones',
         'chat.yourChats': 'Tus chats',
@@ -290,7 +290,6 @@ const LOCALES = {
         'chat.startChat': 'Iniciar chat',
         'chat.delete': 'Eliminar mensaje',
         'chat.cantSend': 'No puedes enviar mensajes a este usuario',
-        // 🔥 NUEVAS CLAVES DEL CHAT QUE FALTABAN
         'chat.noArchivedConversations': 'No hay conversaciones archivadas',
         'chat.noActiveConversations': 'No hay conversaciones activas',
         'chat.noPendingRequests': 'No hay solicitudes pendientes',
@@ -493,7 +492,6 @@ const LOCALES = {
         'time.weeksAgo': 'hace {n} semanas',
         'time.monthsAgo': 'hace {n} meses',
         'time.yearsAgo': 'hace {n} años',
-        // 🔥 NUEVAS CLAVES DE TIEMPO QUE FALTABAN
         'time.today': 'Hoy',
         'time.yesterday': 'Ayer',
     },
@@ -524,6 +522,7 @@ const LOCALES = {
         'feed.noStories': 'No stories available',
         'feed.loadMore': 'Load more',
         'feed.loading': 'Loading...',
+        'feed.loadingDesc': 'Loading stories...',  // ✅ CLAVE AGREGADA
         'feed.newStory': 'New story',
         'feed.share': 'Share',
         'feed.like': 'Like',
@@ -758,9 +757,7 @@ const LOCALES = {
         'profile.selected': 'Selected',
         'profile.loadingDesc': 'Wait a moment...',
 
-        // ============================================================
-        // 🔥 CHAT - ALL MISSING KEYS ADDED HERE
-        // ============================================================
+        // --- CHAT ---
         'chat.title': 'Messages',
         'chat.conversations': 'Conversations',
         'chat.yourChats': 'Your chats',
@@ -781,7 +778,6 @@ const LOCALES = {
         'chat.startChat': 'Start chat',
         'chat.delete': 'Delete message',
         'chat.cantSend': 'You cannot send messages to this user',
-        // 🔥 NEW CHAT KEYS THAT WERE MISSING
         'chat.noArchivedConversations': 'No archived conversations',
         'chat.noActiveConversations': 'No active conversations',
         'chat.noPendingRequests': 'No pending requests',
@@ -984,7 +980,6 @@ const LOCALES = {
         'time.weeksAgo': '{n} weeks ago',
         'time.monthsAgo': '{n} months ago',
         'time.yearsAgo': '{n} years ago',
-        // 🔥 NEW TIME KEYS THAT WERE MISSING
         'time.today': 'Today',
         'time.yesterday': 'Yesterday',
     },
@@ -1015,6 +1010,7 @@ const LOCALES = {
         'feed.noStories': 'Nenhuma história disponível',
         'feed.loadMore': 'Carregar mais',
         'feed.loading': 'Carregando...',
+        'feed.loadingDesc': 'Carregando histórias...',  // ✅ CLAVE AGREGADA
         'feed.newStory': 'Nova história',
         'feed.share': 'Compartilhar',
         'feed.like': 'Curtir',
@@ -1249,9 +1245,7 @@ const LOCALES = {
         'profile.selected': 'Selecionados',
         'profile.loadingDesc': 'Aguarde um momento...',
 
-        // ============================================================
-        // 🔥 CHAT - ALL MISSING KEYS ADDED HERE
-        // ============================================================
+        // --- CHAT ---
         'chat.title': 'Mensagens',
         'chat.conversations': 'Conversas',
         'chat.yourChats': 'Seus chats',
@@ -1272,7 +1266,6 @@ const LOCALES = {
         'chat.startChat': 'Iniciar chat',
         'chat.delete': 'Excluir mensagem',
         'chat.cantSend': 'Você não pode enviar mensagens para este usuário',
-        // 🔥 NEW CHAT KEYS THAT WERE MISSING
         'chat.noArchivedConversations': 'Não há conversas arquivadas',
         'chat.noActiveConversations': 'Não há conversas ativas',
         'chat.noPendingRequests': 'Não há solicitações pendentes',
@@ -1475,7 +1468,6 @@ const LOCALES = {
         'time.weeksAgo': 'há {n} semanas',
         'time.monthsAgo': 'há {n} meses',
         'time.yearsAgo': 'há {n} anos',
-        // 🔥 NEW TIME KEYS THAT WERE MISSING
         'time.today': 'Hoje',
         'time.yesterday': 'Ontem',
     }
