@@ -1,7 +1,7 @@
 // ============================================================
 // story-comments.js - Sistema de comentarios para historias
 // 🔥 VERSIÓN REFACTORIZADA CON ACTUALIZACIÓN PARCIAL DEL DOM
-// 🔥 SOLUCIONA: Re-renderización completa, pérdida de foco, parpadeo
+// 🔥 NUEVO: Modal de vista previa para archivos (PDF, imágenes, etc.)
 // ============================================================
 
 import { getToken, getCurrentUser, showToast, getAvatar, formatDate, escapeHtml } from './auth.js';
@@ -10,7 +10,7 @@ import { formatNumber } from './utils.js';
 const API_URL = window.location.origin;
 
 // ============================================================
-// ESTADO DE COMENTARIOS
+// ESTADO DE COMENTARIOS - PERSISTE ENTRE APERTURAS
 // ============================================================
 
 let commentsCache = new Map();
@@ -40,34 +40,350 @@ function formatFileSize(bytes) {
     return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
 }
 
+/**
+ * 🔥 Determina si un archivo es un documento (PDF, Word, etc.)
+ */
+function isDocumentFile(mimetype) {
+    if (!mimetype) return false;
+    const docTypes = [
+        'application/pdf',
+        'application/msword',
+        'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        'text/plain',
+        'application/rtf',
+        'application/vnd.oasis.opendocument.text'
+    ];
+    return docTypes.includes(mimetype);
+}
+
+/**
+ * 🔥 Determina si un archivo es una imagen
+ */
+function isImageFile(mimetype) {
+    if (!mimetype) return false;
+    return mimetype.startsWith('image/');
+}
+
+/**
+ * 🔥 Determina si un archivo es un video
+ */
+function isVideoFile(mimetype) {
+    if (!mimetype) return false;
+    return mimetype.startsWith('video/');
+}
+
+/**
+ * 🔥 Determina si un archivo es audio
+ */
+function isAudioFile(mimetype) {
+    if (!mimetype) return false;
+    return mimetype.startsWith('audio/');
+}
+
+// ============================================================
+// 🔥 MODAL DE VISTA PREVIA PARA ARCHIVOS
+// ============================================================
+
+/**
+ * Abre un modal de vista previa para archivos
+ * Soporta: PDF, imágenes, videos, documentos
+ */
+function openFilePreview(fileUrl, filename = 'Archivo', mimetype = null) {
+    // Verificar si ya existe un modal abierto
+    const existingModal = document.getElementById('filePreviewModal');
+    if (existingModal) {
+        existingModal.remove();
+    }
+
+    const isImage = isImageFile(mimetype);
+    const isPdf = mimetype === 'application/pdf';
+    const isVideo = isVideoFile(mimetype);
+    const isAudio = isAudioFile(mimetype);
+    const isDoc = isDocumentFile(mimetype);
+
+    // Crear el overlay del modal
+    const overlay = document.createElement('div');
+    overlay.id = 'filePreviewModal';
+    overlay.style.cssText = `
+        position: fixed;
+        top: 0; left: 0; right: 0; bottom: 0;
+        background: rgba(0,0,0,0.92);
+        z-index: 100000;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        animation: fadeIn 0.3s ease;
+        padding: 20px;
+    `;
+
+    // Contenido del modal
+    let contentHtml = '';
+
+    if (isImage) {
+        // Vista previa de imagen
+        contentHtml = `
+            <div style="position:relative;max-width:95%;max-height:95%;">
+                <img src="${fileUrl}" alt="${escapeHtml(filename)}" 
+                     style="max-width:100%;max-height:90vh;object-fit:contain;border-radius:8px;box-shadow:0 20px 60px rgba(0,0,0,0.5);" />
+                <div style="position:absolute;bottom:20px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,0.7);padding:8px 16px;border-radius:20px;color:#fff;font-size:12px;backdrop-filter:blur(10px);">
+                    <i class="fas fa-image"></i> ${escapeHtml(filename)}
+                </div>
+            </div>
+        `;
+    } else if (isPdf) {
+        // Vista previa de PDF usando iframe
+        contentHtml = `
+            <div style="position:relative;width:95%;height:90vh;max-width:1200px;">
+                <div style="position:absolute;top:-40px;left:0;right:0;display:flex;justify-content:space-between;align-items:center;padding:0 10px;color:rgba(255,255,255,0.6);font-size:13px;">
+                    <span><i class="fas fa-file-pdf" style="color:#ff6b6b;"></i> ${escapeHtml(filename)}</span>
+                    <div style="display:flex;gap:12px;">
+                        <button onclick="document.getElementById('pdfViewer').contentWindow.print()" 
+                                style="background:rgba(255,255,255,0.1);border:none;color:#fff;padding:4px 12px;border-radius:4px;cursor:pointer;font-size:12px;">
+                            <i class="fas fa-print"></i> Imprimir
+                        </button>
+                        <a href="${fileUrl}" download style="background:rgba(255,255,255,0.1);border:none;color:#fff;padding:4px 12px;border-radius:4px;cursor:pointer;font-size:12px;text-decoration:none;">
+                            <i class="fas fa-download"></i> Descargar
+                        </a>
+                    </div>
+                </div>
+                <iframe id="pdfViewer" src="${fileUrl}#toolbar=1&navpanes=1" 
+                        style="width:100%;height:100%;border:none;border-radius:8px;background:#fff;"
+                        sandbox="allow-scripts allow-same-origin allow-modals">
+                </iframe>
+            </div>
+        `;
+    } else if (isVideo) {
+        // Vista previa de video
+        contentHtml = `
+            <div style="position:relative;max-width:95%;max-height:95%;">
+                <video controls autoplay style="max-width:100%;max-height:90vh;border-radius:8px;box-shadow:0 20px 60px rgba(0,0,0,0.5);">
+                    <source src="${fileUrl}" type="${mimetype || 'video/mp4'}">
+                    Tu navegador no soporta reproducción de video.
+                </video>
+                <div style="position:absolute;bottom:20px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,0.7);padding:8px 16px;border-radius:20px;color:#fff;font-size:12px;backdrop-filter:blur(10px);">
+                    <i class="fas fa-video"></i> ${escapeHtml(filename)}
+                </div>
+            </div>
+        `;
+    } else if (isAudio) {
+        // Vista previa de audio
+        contentHtml = `
+            <div style="position:relative;max-width:500px;width:90%;padding:40px;background:rgba(255,255,255,0.05);border-radius:16px;text-align:center;">
+                <div style="font-size:64px;color:#c084fc;margin-bottom:20px;">
+                    <i class="fas fa-music"></i>
+                </div>
+                <div style="color:#fff;font-size:18px;margin-bottom:10px;">${escapeHtml(filename)}</div>
+                <audio controls autoplay style="width:100%;margin-top:16px;">
+                    <source src="${fileUrl}" type="${mimetype || 'audio/mpeg'}">
+                    Tu navegador no soporta reproducción de audio.
+                </audio>
+                <div style="margin-top:12px;color:rgba(255,255,255,0.3);font-size:12px;">
+                    <i class="fas fa-headphones"></i> Audio
+                </div>
+            </div>
+        `;
+    } else if (isDoc) {
+        // Documentos: mostrar con iframe + opción de descarga
+        contentHtml = `
+            <div style="position:relative;width:95%;height:90vh;max-width:1200px;">
+                <div style="position:absolute;top:-40px;left:0;right:0;display:flex;justify-content:space-between;align-items:center;padding:0 10px;color:rgba(255,255,255,0.6);font-size:13px;">
+                    <span><i class="fas fa-file-alt" style="color:#60a5fa;"></i> ${escapeHtml(filename)}</span>
+                    <a href="${fileUrl}" download style="background:rgba(255,255,255,0.1);border:none;color:#fff;padding:4px 12px;border-radius:4px;cursor:pointer;font-size:12px;text-decoration:none;">
+                        <i class="fas fa-download"></i> Descargar
+                    </a>
+                </div>
+                <iframe src="${fileUrl}" 
+                        style="width:100%;height:100%;border:none;border-radius:8px;background:#fff;"
+                        sandbox="allow-scripts allow-same-origin allow-modals">
+                </iframe>
+            </div>
+        `;
+    } else {
+        // Fallback: mostrar información del archivo y botón de descarga
+        contentHtml = `
+            <div style="position:relative;max-width:400px;width:90%;padding:40px;background:rgba(255,255,255,0.05);border-radius:16px;text-align:center;">
+                <div style="font-size:64px;color:#c084fc;margin-bottom:20px;">
+                    <i class="fas fa-file"></i>
+                </div>
+                <div style="color:#fff;font-size:18px;margin-bottom:8px;">${escapeHtml(filename)}</div>
+                <div style="color:rgba(255,255,255,0.3);font-size:12px;margin-bottom:20px;">
+                    Tipo: ${mimetype || 'Desconocido'}
+                </div>
+                <a href="${fileUrl}" download style="display:inline-block;background:rgba(192,132,252,0.2);color:#c084fc;padding:10px 24px;border-radius:8px;text-decoration:none;border:1px solid rgba(192,132,252,0.3);">
+                    <i class="fas fa-download"></i> Descargar archivo
+                </a>
+            </div>
+        `;
+    }
+
+    // Botón de cerrar
+    const closeBtn = `
+        <button onclick="closeFilePreview()" style="
+            position:fixed;
+            top:20px;
+            right:20px;
+            background:rgba(255,255,255,0.1);
+            border:none;
+            color:#fff;
+            font-size:28px;
+            cursor:pointer;
+            width:50px;
+            height:50px;
+            border-radius:50%;
+            display:flex;
+            align-items:center;
+            justify-content:center;
+            backdrop-filter:blur(10px);
+            transition:all 0.2s;
+            z-index:100001;
+            border:1px solid rgba(255,255,255,0.1);
+        " onmouseover="this.style.background='rgba(255,255,255,0.2)'" 
+         onmouseout="this.style.background='rgba(255,255,255,0.1)'">
+            <i class="fas fa-times"></i>
+        </button>
+    `;
+
+    overlay.innerHTML = contentHtml + closeBtn;
+    document.body.appendChild(overlay);
+
+    // Cerrar al hacer clic en el fondo
+    overlay.addEventListener('click', (e) => {
+        if (e.target === overlay) {
+            closeFilePreview();
+        }
+    });
+
+    // Cerrar con Escape
+    document.addEventListener('keydown', handleFilePreviewKeydown);
+
+    // Agregar estilos si no existen
+    if (!document.getElementById('file-preview-styles')) {
+        const style = document.createElement('style');
+        style.id = 'file-preview-styles';
+        style.textContent = `
+            @keyframes fadeIn {
+                from { opacity: 0; transform: scale(0.95); }
+                to { opacity: 1; transform: scale(1); }
+            }
+            @keyframes slideUp {
+                from { opacity: 0; transform: translateY(20px); }
+                to { opacity: 1; transform: translateY(0); }
+            }
+            #filePreviewModal {
+                animation: fadeIn 0.25s ease;
+            }
+            #filePreviewModal iframe {
+                animation: slideUp 0.3s ease;
+            }
+            #filePreviewModal img,
+            #filePreviewModal video {
+                animation: slideUp 0.3s ease;
+            }
+        `;
+        document.head.appendChild(style);
+    }
+}
+
+/**
+ * 🔥 Cierra el modal de vista previa de archivos
+ */
+function closeFilePreview() {
+    const modal = document.getElementById('filePreviewModal');
+    if (modal) {
+        modal.remove();
+        document.removeEventListener('keydown', handleFilePreviewKeydown);
+    }
+}
+
+/**
+ * 🔥 Maneja el evento keydown para el modal de archivos
+ */
+function handleFilePreviewKeydown(e) {
+    if (e.key === 'Escape') {
+        closeFilePreview();
+    }
+}
+
+// Exponer funciones globalmente
+window.openFilePreview = openFilePreview;
+window.closeFilePreview = closeFilePreview;
+
+// ============================================================
+// FUNCIÓN PARA RENDERIZAR ARCHIVO EN COMENTARIO (MODIFICADA)
+// ============================================================
+
 function renderCommentFile(comment) {
     if (!comment.hasFile || !comment.fileUrl) return '';
     
     const icon = getFileIcon(comment.mimetype);
     const size = comment.fileSizeFormatted || formatFileSize(comment.fileSize || 0);
-    const isImage = comment.mimetype?.startsWith('image/');
+    const isImage = isImageFile(comment.mimetype);
+    const isPdf = comment.mimetype === 'application/pdf';
+    const filename = comment.originalName || comment.filename || 'Archivo';
+    const fileUrl = comment.fileUrl;
     
+    // Determinar la acción al hacer clic
+    let clickAction = `window.openFilePreview('${fileUrl}', '${escapeHtml(filename)}', '${comment.mimetype || ''}')`;
+    
+    // Si es imagen, también permitir vista previa con clic
     if (isImage) {
         return `
             <div class="comment-file" style="margin-top:6px;">
                 <img src="${comment.fileUrl}" alt="Adjunto" 
-                     style="max-width:200px;max-height:200px;border-radius:8px;cursor:pointer;border:1px solid rgba(255,255,255,0.05);"
-                     onclick="event.stopPropagation(); window.openImagePreview('${comment.fileUrl}')" />
+                     style="max-width:200px;max-height:200px;border-radius:8px;cursor:pointer;border:1px solid rgba(255,255,255,0.05);transition:all 0.2s;"
+                     onclick="event.stopPropagation(); ${clickAction}"
+                     onmouseover="this.style.borderColor='rgba(192,132,252,0.3)'" 
+                     onmouseout="this.style.borderColor='rgba(255,255,255,0.05)'" />
+                <div style="font-size:10px;color:rgba(255,255,255,0.2);margin-top:4px;">${escapeHtml(filename)}</div>
             </div>
         `;
     }
     
+    // Para PDF y documentos - mostrar con botón de vista previa
+    if (isPdf || isDocumentFile(comment.mimetype)) {
+        return `
+            <div class="comment-file" style="margin-top:6px;">
+                <div style="display:flex;align-items:center;gap:10px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.06);border-radius:10px;padding:8px 12px;max-width:280px;transition:all 0.2s;">
+                    <span class="file-icon" style="font-size:22px;color:#ff6b6b;">${icon}</span>
+                    <span class="file-info" style="flex:1;min-width:0;">
+                        <span class="file-name" style="font-size:12px;font-weight:500;display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:rgba(255,255,255,0.8);">${escapeHtml(filename)}</span>
+                        <span class="file-size" style="font-size:9px;color:rgba(255,255,255,0.2);">${size}</span>
+                    </span>
+                    <div style="display:flex;gap:4px;">
+                        <button onclick="event.stopPropagation(); ${clickAction}" 
+                                style="background:rgba(192,132,252,0.15);border:1px solid rgba(192,132,252,0.2);border-radius:6px;color:#c084fc;padding:4px 8px;font-size:11px;cursor:pointer;transition:all 0.2s;"
+                                onmouseover="this.style.background='rgba(192,132,252,0.25)'" 
+                                onmouseout="this.style.background='rgba(192,132,252,0.15)'">
+                            <i class="fas fa-eye"></i> Ver
+                        </button>
+                        <a href="${fileUrl}" download target="_blank" 
+                           style="background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.05);border-radius:6px;color:rgba(255,255,255,0.4);padding:4px 8px;font-size:11px;cursor:pointer;text-decoration:none;transition:all 0.2s;"
+                           onmouseover="this.style.background='rgba(255,255,255,0.1)'" 
+                           onmouseout="this.style.background='rgba(255,255,255,0.05)'">
+                            <i class="fas fa-download"></i>
+                        </a>
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+    
+    // Para otros archivos (audio, video, etc.)
     return `
         <div class="comment-file" style="margin-top:6px;">
-            <a href="${comment.fileUrl}" target="_blank" class="message-file" download
-               style="display:flex;align-items:center;gap:10px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.06);border-radius:10px;padding:8px 12px;text-decoration:none;color:rgba(255,255,255,0.8);max-width:220px;transition:all 0.2s;">
+            <div style="display:flex;align-items:center;gap:10px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.06);border-radius:10px;padding:8px 12px;max-width:280px;transition:all 0.2s;">
                 <span class="file-icon" style="font-size:22px;color:#c084fc;">${icon}</span>
                 <span class="file-info" style="flex:1;min-width:0;">
-                    <span class="file-name" style="font-size:11px;font-weight:500;display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escapeHtml(comment.originalName || comment.filename || 'Archivo')}</span>
+                    <span class="file-name" style="font-size:12px;font-weight:500;display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:rgba(255,255,255,0.8);">${escapeHtml(filename)}</span>
                     <span class="file-size" style="font-size:9px;color:rgba(255,255,255,0.2);">${size}</span>
                 </span>
-                <span class="file-download" style="color:rgba(255,255,255,0.15);"><i class="fas fa-download"></i></span>
-            </a>
+                <button onclick="event.stopPropagation(); ${clickAction}" 
+                        style="background:rgba(192,132,252,0.15);border:1px solid rgba(192,132,252,0.2);border-radius:6px;color:#c084fc;padding:4px 8px;font-size:11px;cursor:pointer;transition:all 0.2s;"
+                        onmouseover="this.style.background='rgba(192,132,252,0.25)'" 
+                        onmouseout="this.style.background='rgba(192,132,252,0.15)'">
+                    <i class="fas fa-eye"></i> Ver
+                </button>
+            </div>
         </div>
     `;
 }
@@ -124,7 +440,7 @@ function getParentChain(comments, commentId, chain = []) {
 }
 
 // ============================================================
-// 🔥 FUNCIONES DE CACHÉ
+// 🔥 FUNCIONES DE CACHÉ - PERSISTENTES
 // ============================================================
 
 function addCommentToCache(storyId, comment) {
@@ -141,6 +457,7 @@ function addCommentToCache(storyId, comment) {
     if (comment.likes) {
         commentLikes.set(comment.id, new Set(comment.likes));
     }
+    console.log(`📦 [CACHE] Comentario ${comment.id} agregado al caché de ${storyId}`);
 }
 
 function addReplyToCache(storyId, parentCommentId, reply) {
@@ -162,6 +479,7 @@ function addReplyToCache(storyId, parentCommentId, reply) {
         commentLikes.set(reply.id, new Set(reply.likes));
     }
     repliesVisibility.set(parentCommentId, true);
+    console.log(`📦 [CACHE] Respuesta ${reply.id} agregada al caché de ${storyId}`);
 }
 
 function updateCommentLikes(storyId, commentId, liked) {
@@ -185,6 +503,7 @@ function updateCommentLikes(storyId, commentId, liked) {
         commentLikes.set(commentId, new Set(comment.likes));
     }
     commentsCache.set(storyId, comments);
+    console.log(`📦 [CACHE] Like actualizado para ${commentId}: ${liked ? '❤️' : '💔'}`);
 }
 
 // ============================================================
@@ -221,18 +540,27 @@ async function uploadCommentFile(storyId, file) {
 }
 
 // ============================================================
-// CARGAR COMENTARIOS
+// CARGAR COMENTARIOS - CON CACHÉ INTELIGENTE
 // ============================================================
 
 async function loadComments(storyId, forceReload = false) {
     if (!storyId) return [];
     const token = getToken();
     if (!token) return [];
-    if (forceReload) commentsCache.delete(storyId);
+    
     if (!forceReload && commentsCache.has(storyId)) {
-        return commentsCache.get(storyId);
+        const cached = commentsCache.get(storyId);
+        console.log(`📦 [CACHE] Usando comentarios en caché para ${storyId} (${cached.length} comentarios)`);
+        return cached;
     }
+    
+    if (forceReload) {
+        commentsCache.delete(storyId);
+        console.log(`🔄 [CACHE] Forzando recarga de comentarios para ${storyId}`);
+    }
+    
     try {
+        console.log(`📡 [API] Cargando comentarios desde servidor para ${storyId}`);
         const res = await fetch(`${API_URL}/api/stories/${storyId}/comments`, {
             headers: { 'Authorization': `Bearer ${token}` }
         });
@@ -266,6 +594,7 @@ async function loadComments(storyId, forceReload = false) {
                 });
             }
         });
+        console.log(`📦 [CACHE] ${comments.length} comentarios guardados en caché para ${storyId}`);
         return comments;
     } catch (error) {
         console.error('Error loading comments:', error);
@@ -316,11 +645,13 @@ async function addComment(storyId, content, parentCommentId = null, fileData = n
         });
         if (!res.ok) throw new Error('Error al comentar');
         const newComment = await res.json();
+        
         if (parentCommentId) {
             addReplyToCache(storyId, parentCommentId, newComment);
         } else {
             addCommentToCache(storyId, newComment);
         }
+        
         const socket = window.socket;
         if (socket) {
             socket.emit('new_comment', {
@@ -360,6 +691,7 @@ async function deleteComment(storyId, commentId, parentCommentId = null) {
             headers: { 'Authorization': `Bearer ${token}` }
         });
         if (!res.ok) throw new Error('Error al eliminar');
+        
         if (commentsCache.has(storyId)) {
             const comments = commentsCache.get(storyId);
             if (parentCommentId) {
@@ -371,6 +703,7 @@ async function deleteComment(storyId, commentId, parentCommentId = null) {
                 const filtered = comments.filter(c => c.id !== commentId);
                 commentsCache.set(storyId, filtered);
             }
+            console.log(`📦 [CACHE] Comentario ${commentId} eliminado del caché de ${storyId}`);
         }
         showToast('🗑️ Eliminado');
         return true;
@@ -411,13 +744,9 @@ async function likeComment(storyId, commentId) {
 }
 
 // ============================================================
-// 🔥🔥🔥 FUNCIONES DE ACTUALIZACIÓN PARCIAL DEL DOM
+// 🔥 FUNCIONES DE ACTUALIZACIÓN PARCIAL DEL DOM
 // ============================================================
 
-/**
- * Genera el HTML para un comentario individual (principal o respuesta)
- * Esta función es la base para crear comentarios sin re-renderizar toda la lista
- */
 function createCommentHTML(comment, storyId, currentUserId, storyOwnerId, isReply = false, isExpanded = true) {
     const isOwn = comment.userId === currentUserId;
     const isStoryOwner = storyOwnerId === currentUserId;
@@ -429,7 +758,6 @@ function createCommentHTML(comment, storyId, currentUserId, storyOwnerId, isRepl
     
     const fileHtml = renderCommentFile(comment);
     
-    // Para respuestas, usamos un formato más compacto
     if (isReply) {
         return `
             <div class="comment-item reply-item" data-reply-id="${comment.id}">
@@ -480,7 +808,6 @@ function createCommentHTML(comment, storyId, currentUserId, storyOwnerId, isRepl
         `;
     }
     
-    // Para comentarios principales
     const hasReplies = comment.replies && comment.replies.length > 0;
     const totalReplyCount = countAllReplies(comment);
     const isExpandedState = repliesVisibility.get(comment.id) || false;
@@ -540,9 +867,6 @@ function createCommentHTML(comment, storyId, currentUserId, storyOwnerId, isRepl
     `;
 }
 
-/**
- * Agrega un nuevo comentario al UI (al principio de la lista)
- */
 function addCommentToUI(storyId, newComment) {
     const container = document.getElementById('commentsList');
     if (!container) {
@@ -553,28 +877,20 @@ function addCommentToUI(storyId, newComment) {
     const currentUser = getCurrentUser();
     const storyOwnerId = window._modalUserId || window._storyOwnerId || null;
     
-    // Generar HTML para el nuevo comentario
     const commentHTML = createCommentHTML(newComment, storyId, currentUser?.id, storyOwnerId);
     
-    // Buscar el elemento "No hay comentarios"
     const noComments = container.querySelector('.no-comments');
     if (noComments) {
-        // Reemplazar el mensaje de "No hay comentarios" con el nuevo comentario
         container.innerHTML = commentHTML;
     } else {
-        // Insertar al principio de la lista
         container.insertAdjacentHTML('afterbegin', commentHTML);
     }
     
-    // Actualizar contadores en el modal
     updateCommentCounters(storyId, 1);
     
     console.log(`✅ [addCommentToUI] Comentario ${newComment.id} agregado al UI`);
 }
 
-/**
- * Agrega una nueva respuesta a un comentario padre
- */
 function addReplyToUI(storyId, parentCommentId, newReply) {
     const container = document.getElementById('commentsList');
     if (!container) {
@@ -582,7 +898,6 @@ function addReplyToUI(storyId, parentCommentId, newReply) {
         return;
     }
 
-    // Buscar el elemento del comentario padre
     const parentCommentElement = container.querySelector(`.comment-item[data-comment-id="${parentCommentId}"]`);
     if (!parentCommentElement) {
         console.warn(`⚠️ [addReplyToUI] Comentario padre ${parentCommentId} no encontrado en el DOM`);
@@ -592,20 +907,16 @@ function addReplyToUI(storyId, parentCommentId, newReply) {
     const currentUser = getCurrentUser();
     const storyOwnerId = window._modalUserId || window._storyOwnerId || null;
 
-    // Generar HTML para la nueva respuesta
     const replyHTML = createCommentHTML(newReply, storyId, currentUser?.id, storyOwnerId, true);
 
-    // Buscar o crear el contenedor de respuestas
     let repliesContainer = parentCommentElement.querySelector('.replies');
     const showRepliesBtn = parentCommentElement.querySelector('.show-replies-btn');
 
     if (!repliesContainer) {
-        // Crear el contenedor de respuestas
         repliesContainer = document.createElement('div');
         repliesContainer.className = 'replies';
         repliesContainer.style.cssText = 'margin-left:40px;margin-top:8px;display:flex;flex-direction:column;gap:8px;border-left:2px solid rgba(192,132,252,0.08);padding-left:12px;';
         
-        // Insertarlo después del input de respuesta o al final del comment-body
         const replyInputContainer = parentCommentElement.querySelector('.reply-input-container');
         if (replyInputContainer) {
             replyInputContainer.parentNode.insertBefore(repliesContainer, replyInputContainer.nextSibling);
@@ -616,36 +927,26 @@ function addReplyToUI(storyId, parentCommentId, newReply) {
             }
         }
         
-        // Mostrar el contenedor
         repliesContainer.style.display = 'flex';
     } else {
-        // Asegurarse de que el contenedor esté visible
         repliesContainer.style.display = 'flex';
     }
 
-    // Insertar la nueva respuesta al final
     repliesContainer.insertAdjacentHTML('beforeend', replyHTML);
 
-    // Actualizar el contador de respuestas
     const replyCount = repliesContainer.querySelectorAll('.comment-item').length;
     if (showRepliesBtn) {
         showRepliesBtn.innerHTML = `<i class="fas fa-chevron-down"></i> Ver ${replyCount} respuestas`;
         showRepliesBtn.style.display = 'block';
-        // Asegurarse de que las respuestas estén expandidas
         repliesVisibility.set(parentCommentId, true);
     }
 
-    // Actualizar contadores en el modal
     updateCommentCounters(storyId, 1);
     
     console.log(`✅ [addReplyToUI] Respuesta ${newReply.id} agregada al comentario ${parentCommentId}`);
 }
 
-/**
- * Actualiza el contador de likes de un comentario en el UI
- */
 function updateCommentLikeUI(commentId, liked, likesCount) {
-    // Buscar el elemento del comentario (principal o respuesta)
     const commentElement = document.querySelector(
         `.comment-item[data-comment-id="${commentId}"], .comment-item[data-reply-id="${commentId}"]`
     );
@@ -654,27 +955,23 @@ function updateCommentLikeUI(commentId, liked, likesCount) {
         return;
     }
 
-    // Buscar el botón de like
     const likeBtn = commentElement.querySelector('.btn-like-comment');
     if (!likeBtn) {
         console.warn(`⚠️ [updateCommentLikeUI] Botón de like no encontrado para ${commentId}`);
         return;
     }
 
-    // Actualizar la clase 'liked'
     if (liked) {
         likeBtn.classList.add('liked');
     } else {
         likeBtn.classList.remove('liked');
     }
 
-    // Actualizar el contador
     const likesSpan = likeBtn.querySelector('span');
     if (likesSpan) {
         likesSpan.textContent = formatNumber(likesCount || 0);
     }
 
-    // Actualizar el ícono
     const heartIcon = likeBtn.querySelector('i');
     if (heartIcon) {
         heartIcon.style.color = liked ? '#ff6b6b' : 'inherit';
@@ -683,15 +980,11 @@ function updateCommentLikeUI(commentId, liked, likesCount) {
     console.log(`✅ [updateCommentLikeUI] Like actualizado para ${commentId}: ${liked ? '❤️' : '💔'} (${likesCount})`);
 }
 
-/**
- * Elimina un comentario del UI
- */
 function removeCommentFromUI(commentId, parentCommentId = null) {
     const container = document.getElementById('commentsList');
     if (!container) return;
     
     if (parentCommentId) {
-        // Es una respuesta: buscar dentro del contenedor de respuestas del padre
         const parentElement = container.querySelector(`.comment-item[data-comment-id="${parentCommentId}"]`);
         if (parentElement) {
             const repliesContainer = parentElement.querySelector('.replies');
@@ -700,7 +993,6 @@ function removeCommentFromUI(commentId, parentCommentId = null) {
                 if (replyElement) {
                     replyElement.remove();
                     
-                    // Actualizar el contador de respuestas
                     const remainingReplies = repliesContainer.querySelectorAll('.comment-item').length;
                     const showRepliesBtn = parentElement.querySelector('.show-replies-btn');
                     if (showRepliesBtn) {
@@ -718,7 +1010,6 @@ function removeCommentFromUI(commentId, parentCommentId = null) {
             }
         }
     } else {
-        // Es un comentario principal
         const commentElement = container.querySelector(`.comment-item[data-comment-id="${commentId}"]`);
         if (commentElement) {
             commentElement.remove();
@@ -728,7 +1019,6 @@ function removeCommentFromUI(commentId, parentCommentId = null) {
         }
     }
     
-    // Si no se encontró el elemento, forzar recarga de la lista
     console.warn(`⚠️ [removeCommentFromUI] No se encontró el elemento ${commentId}, recargando...`);
     const storyId = container.dataset.storyId || window._currentStoryId;
     if (storyId) {
@@ -736,11 +1026,7 @@ function removeCommentFromUI(commentId, parentCommentId = null) {
     }
 }
 
-/**
- * Actualiza los contadores de comentarios en el modal
- */
 function updateCommentCounters(storyId, delta = 0) {
-    // Actualizar contador en el modal
     const commentsEl = document.getElementById('modalComments');
     const commentsCountEl = document.getElementById('commentsCount');
     
@@ -758,7 +1044,7 @@ function updateCommentCounters(storyId, delta = 0) {
 }
 
 // ============================================================
-// RENDER COMPLETO (SOLO PARA CARGA INICIAL O REFRESH)
+// RENDER COMPLETO
 // ============================================================
 
 function renderComments(comments, storyId, currentUserId, container, highlightCommentId = null) {
@@ -785,11 +1071,9 @@ function renderComments(comments, storyId, currentUserId, container, highlightCo
     });
     
     container.innerHTML = html;
+    
+    console.log(`📋 [renderComments] ${comments.length} comentarios renderizados para ${storyId}`);
 }
-
-// ============================================================
-// ACTUALIZAR UI DE COMENTARIOS (COMPLETA)
-// ============================================================
 
 function updateCommentsUI(storyId) {
     const container = document.getElementById('commentsList');
@@ -865,7 +1149,7 @@ function flattenReplies(replies, allComments, parentId) {
 }
 
 // ============================================================
-// RENDER RESPUESTAS (PARA EXPANSIÓN)
+// RENDER RESPUESTAS
 // ============================================================
 
 function renderFlatReplies(replies, storyId, currentUserId, parentCommentId, allComments, highlightCommentId = null, isExpanded = false, storyOwnerId = null) {
@@ -956,12 +1240,10 @@ function renderFlatReplies(replies, storyId, currentUserId, parentCommentId, all
 window.handleCommentLike = async function(storyId, commentId) {
     const liked = await likeComment(storyId, commentId);
     if (liked !== false) {
-        // Obtener el comentario actualizado del caché
         const comments = commentsCache.get(storyId);
         const comment = findCommentById(comments, commentId);
         if (comment) {
             const likesCount = comment.likes?.length || 0;
-            // 🔥 ACTUALIZACIÓN PARCIAL - Sin re-renderizar toda la lista
             updateCommentLikeUI(commentId, liked, likesCount);
         }
     }
@@ -971,7 +1253,6 @@ window.handleCommentDelete = async function(storyId, commentId, parentCommentId 
     if (!confirm('¿Eliminar este comentario?')) return;
     const success = await deleteComment(storyId, commentId, parentCommentId);
     if (success) {
-        // 🔥 ELIMINACIÓN PARCIAL - Sin re-renderizar toda la lista
         removeCommentFromUI(commentId, parentCommentId);
     }
 };
@@ -1008,7 +1289,6 @@ window.handleReplySubmit = async function(storyId, parentCommentId) {
         input.value = '';
         const container = document.getElementById(`reply-input-${parentCommentId}`);
         if (container) container.style.display = 'none';
-        // 🔥 AGREGAR RESPUESTA PARCIAL - Sin re-renderizar toda la lista
         addReplyToUI(storyId, parentCommentId, newReply);
     }
 };
@@ -1036,16 +1316,19 @@ async function initComments(storyId, containerId = 'commentsList', highlightComm
     if (!container) return;
     container.dataset.storyId = storyId;
     window._currentStoryId = storyId;
+    
     let comments;
-    if (forceReload) {
-        comments = await loadComments(storyId, true);
-    } else {
+    
+    if (!forceReload && commentsCache.has(storyId)) {
         comments = commentsCache.get(storyId);
-        if (!comments || comments.length === 0) {
-            comments = await loadComments(storyId, false);
-        }
+        console.log(`📦 [CACHE] Usando comentarios en caché para ${storyId} (${comments.length} comentarios)`);
+    } else {
+        comments = await loadComments(storyId, forceReload);
+        console.log(`📡 [API] Cargando comentarios desde servidor para ${storyId} (${comments.length} comentarios)`);
     }
+    
     const currentUser = getCurrentUser();
+    
     if (highlightCommentId) {
         const parentChain = getParentChain(comments, highlightCommentId);
         if (parentChain) {
@@ -1067,7 +1350,9 @@ async function initComments(storyId, containerId = 'commentsList', highlightComm
             }
         }
     }
+    
     renderComments(comments, storyId, currentUser?.id, container, highlightCommentId);
+    
     if (highlightCommentId) {
         setTimeout(() => {
             let highlighted = container.querySelector(`.comment-item[data-comment-id="${highlightCommentId}"]`);
@@ -1122,45 +1407,12 @@ function expandRepliesForComment(commentId) {
 }
 
 // ============================================================
-// 🔥 FUNCIÓN PARA ABRIR PREVISUALIZACIÓN DE IMAGEN
+// 🔥 FUNCIÓN PARA ABRIR PREVISUALIZACIÓN DE IMAGEN (LEGACY)
 // ============================================================
 
 window.openImagePreview = function(imageUrl) {
-    const overlay = document.createElement('div');
-    overlay.style.cssText = `
-        position: fixed;
-        top: 0; left: 0; right: 0; bottom: 0;
-        background: rgba(0,0,0,0.92);
-        z-index: 99999;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        cursor: pointer;
-        animation: fadeIn 0.3s ease;
-    `;
-    overlay.innerHTML = `
-        <img src="${imageUrl}" style="max-width:95%;max-height:95%;object-fit:contain;border-radius:8px;" />
-        <button style="position:absolute;top:20px;right:20px;background:rgba(255,255,255,0.1);border:none;color:#fff;font-size:24px;cursor:pointer;width:44px;height:44px;border-radius:50%;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(10px);">
-            <i class="fas fa-times"></i>
-        </button>
-    `;
-    overlay.onclick = () => overlay.remove();
-    overlay.querySelector('button').onclick = (e) => {
-        e.stopPropagation();
-        overlay.remove();
-    };
-    if (!document.getElementById('preview-fade-style')) {
-        const style = document.createElement('style');
-        style.id = 'preview-fade-style';
-        style.textContent = `
-            @keyframes fadeIn {
-                from { opacity: 0; transform: scale(0.95); }
-                to { opacity: 1; transform: scale(1); }
-            }
-        `;
-        document.head.appendChild(style);
-    }
-    document.body.appendChild(overlay);
+    // Usar el nuevo modal de archivos
+    openFilePreview(imageUrl, 'Imagen', 'image/*');
 };
 
 // ============================================================
@@ -1189,11 +1441,17 @@ export {
     renderCommentFile,
     getFileIcon,
     formatFileSize,
-    // 🔥 NUEVAS EXPORTACIONES PARA ACTUALIZACIÓN PARCIAL
     addCommentToUI,
     addReplyToUI,
     updateCommentLikeUI,
     removeCommentFromUI,
     createCommentHTML,
-    updateCommentCounters
+    updateCommentCounters,
+    // 🔥 NUEVAS EXPORTACIONES PARA VISTA PREVIA
+    openFilePreview,
+    closeFilePreview,
+    isImageFile,
+    isDocumentFile,
+    isVideoFile,
+    isAudioFile
 };
