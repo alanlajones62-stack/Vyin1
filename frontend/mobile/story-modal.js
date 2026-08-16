@@ -3,7 +3,7 @@
 // (VERSIÓN CORREGIDA - CON ACTUALIZACIÓN PARCIAL DE COMENTARIOS)
 // 🔥 NUEVO: SOPORTE PARA SUBIR ARCHIVOS EN COMENTARIOS (SOLO DUEÑO)
 // 🔥 CORREGIDO: Re-renderización completa, parpadeo y pérdida de foco
-// 🔥 NUEVO: Caché unificado para comentarios y traducciones
+// 🔥 NUEVO: Integración con IndexedDB para carga instantánea
 // ============================================================
 
 import {
@@ -27,7 +27,7 @@ import {
     findCommentById
 } from './story-comments.js';
 
-// 🔥 IMPORTAR CACHÉ UNIFICADO
+// 🔥 IMPORTAR CACHÉ UNIFICADO CON INDEXEDDB
 import { getCache } from './services/cache.service.js';
 
 const API_URL = window.location.origin;
@@ -41,7 +41,20 @@ let userLanguage = 'es';
 let isTranslating = false;
 
 // 🔥 INSTANCIA DEL CACHÉ UNIFICADO
-const unifiedCache = getCache();
+let unifiedCache = null;
+
+// Inicializar caché de forma segura
+function getUnifiedCache() {
+    if (!unifiedCache) {
+        try {
+            unifiedCache = getCache();
+        } catch (e) {
+            console.warn('⚠️ [Cache] No se pudo inicializar caché unificado:', e.message);
+            unifiedCache = null;
+        }
+    }
+    return unifiedCache;
+}
 
 // Caché de traducciones en memoria
 let translationCache = {};
@@ -1466,9 +1479,16 @@ async function loadStoryData(storyId, isNavigation = false) {
         }
 
         // 🔥 VERIFICAR SI LA HISTORIA ESTÁ EN CACHÉ UNIFICADO (para comentarios)
-        const cachedComments = unifiedCache.getComments(storyId);
-        if (cachedComments && !isNavigation) {
-            console.log(`📦 [CACHE UNIFICADO] Comentarios de ${storyId} disponibles (${cachedComments.comments.length})`);
+        try {
+            const cache = getUnifiedCache();
+            if (cache) {
+                const cachedComments = await cache.getComments(storyId);
+                if (cachedComments && !isNavigation) {
+                    console.log(`📦 [INDEXEDDB] Comentarios de ${storyId} disponibles (${cachedComments.comments.length})`);
+                }
+            }
+        } catch (e) {
+            console.warn('⚠️ [IndexedDB] Error verificando caché:', e.message);
         }
 
         const res = await fetch(`${API_URL}/api/stories/${storyId}/details`, {
