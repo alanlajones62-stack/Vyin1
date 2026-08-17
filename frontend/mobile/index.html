@@ -2023,8 +2023,16 @@
         }
     </script>
 
-    <!-- SCRIPTS -->
+    <!-- ============================================================
+    🔥 SCRIPTS - ORDEN CORRECTO PARA CACHÉ
+    ============================================================ -->
+    <!-- 1. i18n primero (para traducciones) -->
     <script type="module" src="/mobile/i18n.js"></script>
+    
+    <!-- 2. 🔥 clientCache.js (IndexedDB) - ANTES que app.js -->
+    <script type="module" src="/js/clientCache.js"></script>
+    
+    <!-- 3. Resto de módulos -->
     <script type="module" src="/mobile/app.js"></script>
     <script type="module" src="/mobile/auth.js"></script>
     <script type="module" src="/mobile/utils.js"></script>

@@ -1,6 +1,7 @@
 /* ============================================================
    STORY MODAL - CON SUBTÍTULOS, COMENTARIOS Y ENCUESTAS
    VERSIÓN MEJORADA - DISEÑO MODERNO Y LIMPIO
+   🔥 SOPORTE COMPLETO PARA VISOR DE ARCHIVOS
    ============================================================ */
 
 .modal-overlay {
@@ -1479,6 +1480,568 @@
 }
 
 /* ============================================================
+   🔥 VISOR DE ARCHIVOS - OVERLAY COMPLETO
+   ============================================================ */
+
+.file-viewer-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.92);
+    backdrop-filter: blur(24px);
+    -webkit-backdrop-filter: blur(24px);
+    z-index: 99999;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    animation: fileViewerFadeIn 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.file-viewer-overlay .viewer-content {
+    width: 100%;
+    max-width: 1200px;
+    height: 90vh;
+    max-height: 90vh;
+    position: relative;
+}
+
+@keyframes fileViewerFadeIn {
+    0% {
+        opacity: 0;
+        transform: scale(0.95) translateY(12px);
+    }
+    100% {
+        opacity: 1;
+        transform: scale(1) translateY(0);
+    }
+}
+
+/* ============================================================
+   🔥 PDF VIEWER - COMPLETO
+   ============================================================ */
+
+.pdf-viewer-container {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    background: #1a1a2e;
+    border-radius: 16px;
+    overflow: hidden;
+    box-shadow: 0 20px 80px rgba(0, 0, 0, 0.6);
+    border: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+.pdf-viewer-container .pdf-header {
+    padding: 12px 20px;
+    background: rgba(45, 45, 68, 0.9);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-shrink: 0;
+    z-index: 10;
+}
+
+.pdf-viewer-container .pdf-header .pdf-title {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    color: #fff;
+    font-size: 14px;
+    font-weight: 500;
+    min-width: 0;
+}
+
+.pdf-viewer-container .pdf-header .pdf-title i {
+    color: #ff6b6b;
+    font-size: 18px;
+}
+
+.pdf-viewer-container .pdf-header .pdf-title span {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.pdf-viewer-container .pdf-header .pdf-actions {
+    display: flex;
+    gap: 8px;
+    flex-shrink: 0;
+}
+
+.pdf-viewer-container .pdf-header .pdf-actions button {
+    background: rgba(255, 255, 255, 0.06);
+    border: none;
+    color: rgba(255, 255, 255, 0.5);
+    padding: 6px 14px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 12px;
+    font-family: inherit;
+    transition: all 0.25s ease;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.pdf-viewer-container .pdf-header .pdf-actions button:hover {
+    background: rgba(255, 255, 255, 0.1);
+    color: rgba(255, 255, 255, 0.8);
+}
+
+.pdf-viewer-container .pdf-header .pdf-actions button:active {
+    transform: scale(0.92);
+}
+
+.pdf-viewer-container .pdf-header .pdf-actions .btn-close-pdf {
+    color: rgba(255, 255, 255, 0.2);
+}
+
+.pdf-viewer-container .pdf-header .pdf-actions .btn-close-pdf:hover {
+    color: #ff6b6b;
+    background: rgba(255, 107, 107, 0.08);
+}
+
+.pdf-viewer-container iframe {
+    flex: 1;
+    width: 100%;
+    border: none;
+    background: #fff;
+}
+
+/* ============================================================
+   🔥 IMAGE VIEWER - COMPLETO
+   ============================================================ */
+
+.image-viewer-container {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    background: #000;
+    border-radius: 16px;
+    overflow: hidden;
+    position: relative;
+    box-shadow: 0 20px 80px rgba(0, 0, 0, 0.6);
+    border: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+.image-viewer-container .image-header {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 10;
+    padding: 14px 20px;
+    background: linear-gradient(to bottom, rgba(0, 0, 0, 0.7), transparent);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-shrink: 0;
+}
+
+.image-viewer-container .image-header .image-title {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    color: #fff;
+    font-size: 14px;
+    font-weight: 500;
+    text-shadow: 0 2px 12px rgba(0, 0, 0, 0.5);
+}
+
+.image-viewer-container .image-header .image-title i {
+    color: #34d399;
+}
+
+.image-viewer-container .image-header .image-actions {
+    display: flex;
+    gap: 8px;
+}
+
+.image-viewer-container .image-header .image-actions button {
+    background: rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    color: #fff;
+    padding: 6px 14px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 12px;
+    font-family: inherit;
+    transition: all 0.25s ease;
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.image-viewer-container .image-header .image-actions button:hover {
+    background: rgba(255, 255, 255, 0.18);
+}
+
+.image-viewer-container .image-header .image-actions button:active {
+    transform: scale(0.92);
+}
+
+.image-viewer-container .image-body {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+}
+
+.image-viewer-container .image-body img {
+    max-width: 100%;
+    max-height: 100%;
+    object-fit: contain;
+    border-radius: 8px;
+    cursor: zoom-in;
+    transition: transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.image-viewer-container .image-body img.zoomed {
+    transform: scale(1.5);
+    cursor: zoom-out;
+}
+
+/* ============================================================
+   🔥 VIDEO VIEWER - COMPLETO
+   ============================================================ */
+
+.video-viewer-container {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    background: #000;
+    border-radius: 16px;
+    overflow: hidden;
+    box-shadow: 0 20px 80px rgba(0, 0, 0, 0.6);
+    border: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+.video-viewer-container .video-header {
+    padding: 12px 20px;
+    background: rgba(0, 0, 0, 0.7);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-shrink: 0;
+    z-index: 10;
+}
+
+.video-viewer-container .video-header .video-title {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    color: #fff;
+    font-size: 14px;
+    font-weight: 500;
+    min-width: 0;
+}
+
+.video-viewer-container .video-header .video-title i {
+    color: #f472b6;
+    font-size: 18px;
+}
+
+.video-viewer-container .video-header .video-title span {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.video-viewer-container .video-header .video-actions {
+    display: flex;
+    gap: 8px;
+    flex-shrink: 0;
+}
+
+.video-viewer-container .video-header .video-actions button {
+    background: rgba(255, 255, 255, 0.06);
+    border: none;
+    color: rgba(255, 255, 255, 0.5);
+    padding: 6px 14px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 12px;
+    font-family: inherit;
+    transition: all 0.25s ease;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.video-viewer-container .video-header .video-actions button:hover {
+    background: rgba(255, 255, 255, 0.1);
+    color: rgba(255, 255, 255, 0.8);
+}
+
+.video-viewer-container .video-header .video-actions button:active {
+    transform: scale(0.92);
+}
+
+.video-viewer-container video {
+    flex: 1;
+    width: 100%;
+    max-height: calc(100vh - 120px);
+    background: #000;
+    outline: none;
+}
+
+.video-viewer-container video:focus {
+    outline: none;
+}
+
+/* ============================================================
+   🔥 AUDIO VIEWER - COMPLETO
+   ============================================================ */
+
+.audio-viewer-container {
+    width: 100%;
+    min-height: 300px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    background: linear-gradient(135deg, #1a1a2e, #2d2d44);
+    border-radius: 16px;
+    padding: 40px;
+    box-shadow: 0 20px 80px rgba(0, 0, 0, 0.6);
+    border: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+.audio-viewer-container .audio-icon {
+    font-size: 64px;
+    color: #60a5fa;
+    margin-bottom: 20px;
+    animation: audioPulse 2s ease-in-out infinite;
+}
+
+@keyframes audioPulse {
+    0%, 100% { transform: scale(1); opacity: 1; }
+    50% { transform: scale(1.05); opacity: 0.7; }
+}
+
+.audio-viewer-container .audio-title {
+    color: #fff;
+    font-size: 18px;
+    font-weight: 500;
+    margin-bottom: 8px;
+    text-align: center;
+}
+
+.audio-viewer-container .audio-subtitle {
+    color: rgba(255, 255, 255, 0.3);
+    font-size: 13px;
+    margin-bottom: 30px;
+}
+
+.audio-viewer-container audio {
+    width: 100%;
+    max-width: 400px;
+    outline: none;
+    border-radius: 12px;
+}
+
+.audio-viewer-container audio::-webkit-media-controls-panel {
+    background: rgba(255, 255, 255, 0.05);
+}
+
+.audio-viewer-container .audio-actions {
+    margin-top: 20px;
+    display: flex;
+    gap: 8px;
+}
+
+.audio-viewer-container .audio-actions button {
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    color: rgba(255, 255, 255, 0.6);
+    padding: 8px 16px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 13px;
+    font-family: inherit;
+    transition: all 0.25s ease;
+}
+
+.audio-viewer-container .audio-actions button:hover {
+    background: rgba(255, 255, 255, 0.1);
+    color: #fff;
+}
+
+.audio-viewer-container .audio-actions button:active {
+    transform: scale(0.92);
+}
+
+/* ============================================================
+   🔥 TEXT VIEWER - COMPLETO
+   ============================================================ */
+
+.text-viewer-container {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    background: #1a1a2e;
+    border-radius: 16px;
+    overflow: hidden;
+    box-shadow: 0 20px 80px rgba(0, 0, 0, 0.6);
+    border: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+.text-viewer-container .text-header {
+    padding: 12px 20px;
+    background: rgba(45, 45, 68, 0.9);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-shrink: 0;
+    z-index: 10;
+}
+
+.text-viewer-container .text-header .text-title {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    color: #fff;
+    font-size: 14px;
+    font-weight: 500;
+    min-width: 0;
+}
+
+.text-viewer-container .text-header .text-title i {
+    color: #fbbf24;
+    font-size: 18px;
+}
+
+.text-viewer-container .text-header .text-title span {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.text-viewer-container .text-header .text-actions {
+    display: flex;
+    gap: 8px;
+    flex-shrink: 0;
+}
+
+.text-viewer-container .text-header .text-actions button {
+    background: rgba(255, 255, 255, 0.06);
+    border: none;
+    color: rgba(255, 255, 255, 0.5);
+    padding: 6px 14px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 12px;
+    font-family: inherit;
+    transition: all 0.25s ease;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.text-viewer-container .text-header .text-actions button:hover {
+    background: rgba(255, 255, 255, 0.1);
+    color: rgba(255, 255, 255, 0.8);
+}
+
+.text-viewer-container .text-header .text-actions button:active {
+    transform: scale(0.92);
+}
+
+.text-viewer-container .text-body {
+    flex: 1;
+    padding: 20px;
+    margin: 0;
+    color: rgba(255, 255, 255, 0.8);
+    font-size: 14px;
+    font-family: 'Courier New', monospace;
+    overflow: auto;
+    white-space: pre-wrap;
+    word-break: break-word;
+    background: #1a1a2e;
+    line-height: 1.6;
+}
+
+.text-viewer-container .text-body::-webkit-scrollbar {
+    width: 4px;
+}
+
+.text-viewer-container .text-body::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.text-viewer-container .text-body::-webkit-scrollbar-thumb {
+    background: rgba(192, 132, 252, 0.15);
+    border-radius: 10px;
+}
+
+/* ============================================================
+   🔥 ERROR STATE - COMPLETO
+   ============================================================ */
+
+.file-viewer-error {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 40px;
+    color: #fff;
+    width: 100%;
+    height: 100%;
+    min-height: 300px;
+    background: #1a1a2e;
+    border-radius: 16px;
+    border: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+.file-viewer-error .error-icon {
+    font-size: 48px;
+    color: #ff6b6b;
+    margin-bottom: 16px;
+}
+
+.file-viewer-error .error-text {
+    font-size: 16px;
+    color: rgba(255, 255, 255, 0.6);
+    margin-bottom: 16px;
+}
+
+.file-viewer-error .error-button {
+    background: #c084fc;
+    border: none;
+    color: #fff;
+    padding: 8px 20px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 14px;
+    font-family: inherit;
+    transition: all 0.25s ease;
+}
+
+.file-viewer-error .error-button:hover {
+    background: #a78bfa;
+    transform: scale(1.02);
+}
+
+/* ============================================================
    RESPONSIVE - MÓVIL
    ============================================================ */
 
@@ -1712,6 +2275,58 @@
     .survey-stats-bars-modal {
         gap: 10px;
     }
+
+    /* Visor responsive 480px */
+    .file-viewer-overlay {
+        padding: 10px;
+    }
+    .file-viewer-overlay .viewer-content {
+        height: 95vh;
+        max-height: 95vh;
+    }
+    .pdf-viewer-container .pdf-header,
+    .video-viewer-container .video-header,
+    .text-viewer-container .text-header {
+        padding: 8px 14px;
+    }
+    .pdf-viewer-container .pdf-header .pdf-title,
+    .video-viewer-container .video-header .video-title,
+    .text-viewer-container .text-header .text-title {
+        font-size: 12px;
+    }
+    .pdf-viewer-container .pdf-header .pdf-actions button,
+    .video-viewer-container .video-header .video-actions button,
+    .text-viewer-container .text-header .text-actions button {
+        font-size: 10px;
+        padding: 4px 10px;
+    }
+    .image-viewer-container .image-header {
+        padding: 10px 14px;
+    }
+    .image-viewer-container .image-header .image-title {
+        font-size: 12px;
+    }
+    .image-viewer-container .image-header .image-actions button {
+        font-size: 10px;
+        padding: 4px 10px;
+    }
+    .audio-viewer-container {
+        padding: 24px 16px;
+        min-height: 200px;
+    }
+    .audio-viewer-container .audio-icon {
+        font-size: 40px;
+    }
+    .audio-viewer-container .audio-title {
+        font-size: 15px;
+    }
+    .audio-viewer-container audio {
+        max-width: 100%;
+    }
+    .text-viewer-container .text-body {
+        font-size: 12px;
+        padding: 14px;
+    }
 }
 
 /* ============================================================
@@ -1887,6 +2502,28 @@
     .survey-calc-result-modal {
         padding: 14px 12px;
     }
+
+    /* Visor responsive 380px */
+    .file-viewer-overlay {
+        padding: 6px;
+    }
+    .pdf-viewer-container .pdf-header .pdf-title span,
+    .video-viewer-container .video-header .video-title span,
+    .text-viewer-container .text-header .text-title span {
+        max-width: 80px;
+    }
+    .image-viewer-container .image-header .image-title span {
+        max-width: 80px;
+    }
+    .audio-viewer-container .audio-title {
+        font-size: 13px;
+    }
+    .file-viewer-error .error-icon {
+        font-size: 32px;
+    }
+    .file-viewer-error .error-text {
+        font-size: 13px;
+    }
 }
 
 /* ============================================================
@@ -2056,6 +2693,15 @@
     }
     .survey-stats-bars-modal {
         gap: 8px;
+    }
+
+    /* Visor landscape */
+    .file-viewer-overlay .viewer-content {
+        height: 85vh;
+        max-height: 85vh;
+    }
+    .file-viewer-overlay {
+        padding: 10px;
     }
 }
 

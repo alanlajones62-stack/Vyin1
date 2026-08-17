@@ -1,5 +1,6 @@
 // app.js - VERSIÓN COMPLETA CON FILTRO PUBLICIDAD, LOGIN MODULAR, PREFERENCIAS Y TRADUCCIÓN (i18n)
 // 🔥 CORREGIDO: Race condition en registro de vistas (debounce + pending views)
+// 🔥 NUEVO: Integración con IndexedDB para caché de feed e historias individuales
 // ============================================================
 
 import {
@@ -15,6 +16,9 @@ import { formatNumber } from './utils.js';
 
 // 🔥 IMPORTAR SISTEMA i18n
 import { t, setLocale, initI18n, translateAll, onLocaleChange } from './i18n.js';
+
+// 🔥🔥🔥 NUEVO: IMPORTAR CLIENT CACHE (IndexedDB)
+import clientCache from '../js/clientCache.js';
 
 // Importar modales
 import { openStoryModal, closeStoryModal } from './story-modal.js';
@@ -985,7 +989,7 @@ function hideNewStoriesBadge() {
 }
 
 // ============================================================
-// 🔥 FETCH FEED POR CURSOR
+// 🔥 FETCH FEED POR CURSOR - CON GUARDADO EN INDEXEDDB
 // ============================================================
 
 async function fetchFeedByCursor(filter, cursor = null) {
@@ -1059,7 +1063,6 @@ async function fetchFeedByCursor(filter, cursor = null) {
             console.log(`📊 [PARA TI] ${stories.length} historias con más de 10 minutos`);
             stories = stories.filter(s => !isStoryViewed(s.id));
         } else if (filter === 'ads') {
-            // 🔥 FILTRO PUBLICIDAD - NO CARGAR HISTORIAS NORMALES
             stories = [];
         }
 
@@ -1112,6 +1115,41 @@ async function fetchFeedByCursor(filter, cursor = null) {
         }
 
         console.log(`📊 ${filter} - Mostrando ${displayedStories.length} historias`);
+
+        // 🔥🔥🔥 NUEVO: GUARDAR FEED EN INDEXEDDB (solo si hay historias y no es ads)
+        if (displayedStories.length > 0 && filter !== 'ads') {
+            try {
+                const user = getCurrentUser();
+                if (user) {
+                    const cacheKey = `feed_${filter}_${user.id}`;
+                    await clientCache.set(cacheKey, {
+                        stories: displayedStories,
+                        pagination: pagination,
+                        filter: filter,
+                        cursor: feedCursor,
+                        hasMore: hasMoreStories,
+                        timestamp: Date.now()
+                    }, filter === 'recent' ? 120000 : 300000); // 2 min para recientes, 5 min para ranked
+                    console.log(`📦 Feed ${filter} guardado en IndexedDB (${displayedStories.length} historias)`);
+                }
+            } catch (e) {
+                console.warn('⚠️ Error guardando feed en IndexedDB:', e);
+            }
+        }
+
+        // 🔥 GUARDAR HISTORIAS INDIVIDUALES EN INDEXEDDB
+        for (const story of displayedStories) {
+            if (story.expiresAt) {
+                const ttl = Math.max(0, new Date(story.expiresAt).getTime() - Date.now());
+                if (ttl > 0) {
+                    try {
+                        await clientCache.set(`story_${story.id}`, story, ttl);
+                    } catch (e) {
+                        // Silencioso para no saturar consola
+                    }
+                }
+            }
+        }
 
         // 🔥 Si es el filtro de publicidad, mostrar anuncios
         if (filter === 'ads') {
@@ -1244,7 +1282,7 @@ function preloadNextPage() {
 }
 
 // ============================================================
-// 🔥 LOAD MORE STORIES
+// 🔥 LOAD MORE STORIES - CON GUARDADO EN INDEXEDDB
 // ============================================================
 
 async function loadMoreStories(preload = false) {
@@ -1343,6 +1381,40 @@ async function loadMoreStories(preload = false) {
                 hasMoreStories = false;
             }
             
+            // 🔥 ACTUALIZAR CACHÉ CON NUEVAS HISTORIAS
+            if (displayedStories.length > 0 && currentFilter !== 'ads') {
+                try {
+                    const user = getCurrentUser();
+                    if (user) {
+                        const cacheKey = `feed_${currentFilter}_${user.id}`;
+                        await clientCache.set(cacheKey, {
+                            stories: displayedStories,
+                            pagination: pagination,
+                            filter: currentFilter,
+                            cursor: feedCursor,
+                            hasMore: hasMoreStories,
+                            timestamp: Date.now()
+                        }, currentFilter === 'recent' ? 120000 : 300000);
+                    }
+                } catch (e) {
+                    console.warn('⚠️ Error actualizando feed en caché:', e);
+                }
+            }
+            
+            // 🔥 GUARDAR NUEVAS HISTORIAS INDIVIDUALES
+            for (const story of newStories) {
+                if (story.expiresAt) {
+                    const ttl = Math.max(0, new Date(story.expiresAt).getTime() - Date.now());
+                    if (ttl > 0) {
+                        try {
+                            await clientCache.set(`story_${story.id}`, story, ttl);
+                        } catch (e) {
+                            // Silencioso
+                        }
+                    }
+                }
+            }
+            
             if (!preload) {
                 renderFeed(displayedStories);
                 console.log(`📊 Cargados ${newStories.length} historias más (total: ${displayedStories.length})`);
@@ -1390,25 +1462,18 @@ function applyFilter(filter) {
     if (!token) {
         console.log('🔒 Sin sesión - Abriendo modal de login');
         showToast(t('error.unauthorized') || 'Inicia sesión para ver historias', true);
-        // 🔥 ABRIR MODAL DE LOGIN EN VEZ DE REDIRIGIR
         openLoginModal();
         return;
     }
 
     console.log(`📂 Aplicando filtro: ${filter}`);
     
-    // 🔥 GUARDAR EL FILTRO EN LOCALSTORAGE
     saveFilterState(filter);
-    
-    // 🔥 ACTUALIZAR currentFilter
     currentFilter = filter;
     
-    // 🔥 ACTUALIZAR LA UI DE LOS FILTROS (CORREGIDO - SIEMPRE ACTUALIZA)
     document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
     
     let activeBtn = null;
-    
-    // Mapeo de filtros a IDs
     if (filter === 'ranked') {
         activeBtn = document.getElementById('filterRanked');
     } else if (filter === 'recent') {
@@ -1420,22 +1485,18 @@ function applyFilter(filter) {
     if (activeBtn) {
         activeBtn.classList.add('active');
         console.log(`✅ Filtro activado en UI: ${filter}`);
-    } else {
-        console.warn(`⚠️ No se encontró botón para filtro: ${filter}`);
     }
 
     if (filter !== 'recent') {
         hideNewStoriesBadge();
     }
 
-    // 🔥 LIMPIAR ESTADOS ANTERIORES
     displayedStories = [];
     feedCursor = null;
     hasMoreStories = true;
     totalRemaining = 0;
 
     if (filter === 'ads') {
-        // 🔥 Si es publicidad, mostrar anuncios
         if (activeAds.length === 0) {
             loadAdsInBackground().then(() => {
                 renderAdsFeed(activeAds);
@@ -1446,13 +1507,39 @@ function applyFilter(filter) {
         return;
     }
 
-    const savedCursor = restoreFeedCursor();
-    if (savedCursor && savedCursor !== 'null') {
-        feedCursor = savedCursor;
-        console.log(`📍 Usando cursor guardado: ${feedCursor}`);
-    }
-
-    fetchFeedByCursor(filter, feedCursor);
+    // 🔥🔥🔥 NUEVO: INTENTAR CARGAR DESDE INDEXEDDB PRIMERO
+    (async () => {
+        try {
+            const user = getCurrentUser();
+            if (user) {
+                const cacheKey = `feed_${filter}_${user.id}`;
+                const cachedData = await clientCache.get(cacheKey);
+                
+                if (cachedData && cachedData.stories && cachedData.stories.length > 0) {
+                    console.log(`📦 Cargando feed ${filter} desde IndexedDB (${cachedData.stories.length} historias)`);
+                    displayedStories = cachedData.stories;
+                    feedCursor = cachedData.cursor || null;
+                    hasMoreStories = cachedData.hasMore || true;
+                    renderFeed(displayedStories);
+                    // Actualizar en segundo plano
+                    setTimeout(() => {
+                        fetchFeedByCursor(filter, feedCursor);
+                    }, 500);
+                    return;
+                }
+            }
+        } catch (e) {
+            console.warn('⚠️ Error cargando feed desde IndexedDB:', e);
+        }
+        
+        // Si no hay caché, cargar normal
+        const savedCursor = restoreFeedCursor();
+        if (savedCursor && savedCursor !== 'null') {
+            feedCursor = savedCursor;
+            console.log(`📍 Usando cursor guardado: ${feedCursor}`);
+        }
+        fetchFeedByCursor(filter, feedCursor);
+    })();
 }
 
 // ============================================================
@@ -1596,9 +1683,6 @@ function renderFeed(storiesData) {
 
         let mediaHtml = '';
         
-        // ============================================================
-        // 🔥 SOPORTE PARA ENCUESTAS (SURVEY)
-        // ============================================================
         if (story.mediaType === 'image' && story.mediaUrl) {
             mediaHtml = `<img src="${story.mediaUrl}" loading="lazy" decoding="async" onerror="this.src='https://placehold.co/800x800/1a1a2e/c084fc?text=Imagen'" />`;
         } else if (story.mediaType === 'video' && story.mediaUrl) {
@@ -1768,13 +1852,11 @@ function renderFeed(storiesData) {
     let pendingViews = new Set();
 
     const observer = new IntersectionObserver((entries) => {
-        // 🔥 Limpiar timeout anterior
         if (viewTimeout) {
             clearTimeout(viewTimeout);
             viewTimeout = null;
         }
 
-        // 🔥 Recopilar todas las historias visibles
         entries.forEach(entry => {
             if (entry.isIntersecting) {
                 const card = entry.target;
@@ -1783,28 +1865,24 @@ function renderFeed(storiesData) {
                 
                 if (storyId && !isViewed && !isStoryViewed(storyId)) {
                     pendingViews.add(storyId);
-                    // Marcar como vista en el DOM para evitar duplicados
                     card.dataset.viewed = 'true';
                 }
             }
         });
 
-        // 🔥 Si hay vistas pendientes, esperar un momento antes de registrarlas
         if (pendingViews.size > 0) {
             viewTimeout = setTimeout(() => {
-                // 🔥 Registrar todas las vistas pendientes en una sola tanda
                 const viewsToRegister = Array.from(pendingViews);
                 pendingViews.clear();
                 
-                // 🔥 Registrar cada vista con un pequeño delay entre ellas
                 viewsToRegister.forEach((storyId, index) => {
                     setTimeout(() => {
                         registerView(storyId);
-                    }, index * 100); // 100ms entre cada vista
+                    }, index * 100);
                 });
                 
                 viewTimeout = null;
-            }, 300); // Esperar 300ms después de que el usuario deje de hacer scroll
+            }, 300);
         }
     }, {
         threshold: 0.3,
@@ -2244,6 +2322,19 @@ async function refreshFeed() {
 }
 
 // ============================================================
+// 🔥 LIMPIAR CACHÉ DEL CLIENTE (al hacer logout)
+// ============================================================
+
+async function clearClientCache() {
+    try {
+        await clientCache.clear();
+        console.log('🧹 Caché de IndexedDB limpiado');
+    } catch (e) {
+        console.warn('⚠️ Error limpiando caché:', e);
+    }
+}
+
+// ============================================================
 // 🔥🔥🔥 FUNCIONES GLOBALES
 // ============================================================
 
@@ -2256,6 +2347,7 @@ window.translateStory = window.translateStory || translateStory;
 window.getLanguageInfo = getLanguageInfo;
 window.getAvailableLanguages = getAvailableLanguages;
 window.LANGUAGES = LANGUAGES;
+window.clearClientCache = clearClientCache;
 
 window.openStoryModal = openStoryModal;
 window.closeStoryModal = closeStoryModal;
@@ -2499,7 +2591,6 @@ function setupEvents() {
         document.querySelectorAll('.bottom-nav button').forEach(b => b.classList.remove('active'));
         document.getElementById('navFeed').classList.add('active');
         
-        // 🔥 RESTAURAR EL FILTRO GUARDADO AL VOLVER AL FEED
         const savedFilter = restoreFilterState();
         if (savedFilter) {
             applyFilter(savedFilter);

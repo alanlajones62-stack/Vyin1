@@ -1,9 +1,10 @@
 // profile-native.js - Perfil nativo del usuario (SECCIÓN NATIVA)
-// OPTIMIZADO: Con caché unificado (memoria + localStorage)
+// 🔥 INTEGRADO CON IndexedDB PARA CACHÉ DE CLIENTE
+// OPTIMIZADO: Con caché en memoria + IndexedDB, actualización en tiempo real
 // 🔥 NAVEGACIÓN: Soporte para followers-modal con fromNative=true
 // 🔥 INTEGRADO CON i18n PARA TRADUCCIÓN DE INTERFAZ
 // 🔥 CORREGIDO: Soporte para miniaturas de video y encuestas
-// 🔥 NUEVO: Sistema de caché persistente para perfiles y historias
+// 🔥 MANTENIDOS: TODOS los contadores (vistas, likes, comentarios, seguidores, siguiendo, historias)
 // ============================================================
 
 import {
@@ -16,8 +17,8 @@ import { formatNumber } from './utils.js';
 // 🔥 IMPORTAR SISTEMA i18n
 import { t, onLocaleChange, translateAll } from './i18n.js';
 
-// 🔥 IMPORTAR SISTEMA DE CACHÉ UNIFICADO
-import { getCache } from './services/cache.service.js';
+// 🔥🔥🔥 NUEVO: IMPORTAR CLIENT CACHE (IndexedDB)
+import clientCache from '../js/clientCache.js';
 
 const API_URL = window.location.origin;
 
@@ -32,15 +33,12 @@ let refreshInterval = null;
 let localeUnsubscribe = null;
 
 // ============================================================
-// CACHÉ
+// CACHÉ EN MEMORIA (Map)
 // ============================================================
 
 const profileCache = new Map();
 const storiesCache = new Map();
 const MAX_CACHE_SIZE = 20;
-
-// Instancia del caché unificado
-const unifiedCache = getCache();
 
 function cleanCache() {
     if (profileCache.size > MAX_CACHE_SIZE) {
@@ -59,8 +57,9 @@ function clearProfileCache(userId) {
     if (userId) {
         profileCache.delete(userId);
         storiesCache.delete(userId);
-        // También limpiar caché unificado
-        unifiedCache.invalidateProfile(userId);
+        // 🔥 NUEVO: También limpiar de IndexedDB (sin afectar contadores)
+        clientCache.delete(`profile_${userId}`).catch(() => {});
+        clientCache.delete(`profile_stories_${userId}`).catch(() => {});
     }
 }
 
@@ -82,71 +81,87 @@ function initI18nForProfileNative() {
 }
 
 // ============================================================
-// 🔥 PRECARGAR PERFIL DEL USUARIO ACTUAL CON CACHÉ UNIFICADO
+// 🔥 PRECARGAR PERFIL DEL USUARIO ACTUAL (CON IndexedDB)
 // ============================================================
 
-function preloadCurrentUserProfile() {
+async function preloadCurrentUserProfile() {
     const currentUser = getCurrentUser();
     if (!currentUser || !currentUser.id) return;
     
     const userId = currentUser.id;
     
-    // Verificar caché unificado primero
-    const cachedProfile = unifiedCache.getProfile(userId);
-    if (cachedProfile) {
-        profileCache.set(userId, cachedProfile);
-        console.log(`✅ Perfil de ${cachedProfile.fullName} cargado desde caché unificado`);
-        
-        // Intentar cargar historias del caché
-        const cachedStories = unifiedCache.getStories(userId);
-        if (cachedStories) {
-            storiesCache.set(userId, cachedStories.stories);
-            console.log(`✅ ${cachedStories.stories.length} historias cargadas desde caché`);
-        }
+    // Verificar caché en memoria primero
+    if (profileCache.has(userId)) {
+        console.log(`✅ Perfil de ${currentUser.fullName} ya en caché (memoria)`);
         return;
     }
     
-    console.log(`🔄 Pre-cargando perfil de ${currentUser.fullName}...`);
+    // 🔥 Verificar IndexedDB
+    try {
+        const cachedUser = await clientCache.get(`profile_${userId}`);
+        const cachedStories = await clientCache.get(`profile_stories_${userId}`);
+        
+        if (cachedUser && cachedStories) {
+            console.log(`📦 Perfil de ${cachedUser.fullName} cargado desde IndexedDB`);
+            profileCache.set(userId, cachedUser);
+            storiesCache.set(userId, cachedStories);
+            return;
+        }
+    } catch (e) {
+        console.warn('⚠️ Error leyendo caché de perfil:', e);
+    }
+    
+    // Si no hay caché, cargar desde servidor
+    console.log(`🔄 Pre-cargando perfil de ${currentUser.fullName} desde servidor...`);
     
     const token = getToken();
     if (!token) return;
     
-    fetch(`${API_URL}/api/users/profile/${userId}`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-    })
-    .then(res => {
-        if (res.ok) return res.json();
-        throw new Error('Error cargando perfil');
-    })
-    .then(user => {
-        // Guardar en caché unificado y memoria
-        unifiedCache.setProfile(userId, user);
-        profileCache.set(userId, user);
-        console.log(`✅ Perfil de ${user.fullName} pre-cargado y en caché`);
-        
-        return fetch(`${API_URL}/api/stories/user/${userId}`, {
+    try {
+        const res = await fetch(`${API_URL}/api/users/profile/${userId}`, {
             headers: { 'Authorization': `Bearer ${token}` }
         });
-    })
-    .then(res => {
-        if (res && res.ok) return res.json();
-        return [];
-    })
-    .then(stories => {
-        unifiedCache.setStories(userId, stories);
-        storiesCache.set(userId, stories);
-        console.log(`✅ ${stories.length} historias pre-cargadas y en caché`);
-    })
-    .catch(err => {
+        
+        if (!res.ok) throw new Error('Error cargando perfil');
+        const user = await res.json();
+        
+        profileCache.set(userId, user);
+        console.log(`✅ Perfil de ${user.fullName} pre-cargado`);
+        
+        // 🔥 Guardar en IndexedDB
+        try {
+            await clientCache.set(`profile_${userId}`, user, 3600000); // 1 hora
+        } catch (e) {
+            console.warn('⚠️ Error guardando perfil en IndexedDB:', e);
+        }
+        
+        const storiesRes = await fetch(`${API_URL}/api/stories/user/${userId}`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+        
+        let stories = [];
+        if (storiesRes.ok) {
+            stories = await storiesRes.json();
+            storiesCache.set(userId, stories);
+            console.log(`✅ ${stories.length} historias pre-cargadas`);
+            
+            // 🔥 Guardar historias en IndexedDB
+            try {
+                await clientCache.set(`profile_stories_${userId}`, stories, 1800000); // 30 minutos
+            } catch (e) {
+                console.warn('⚠️ Error guardando historias en IndexedDB:', e);
+            }
+        }
+    } catch (err) {
         console.warn('⚠️ Error pre-cargando perfil:', err.message);
-    });
+    }
 }
 
 // ============================================================
 // MOSTRAR PERFIL NATIVO (CON CACHÉ PRIMERO)
 // ============================================================
 
-function showProfileNative(userId) {
+async function showProfileNative(userId) {
     if (!userId) {
         showToast(t('error.notFound') || 'Usuario no encontrado', true);
         return;
@@ -177,42 +192,47 @@ function showProfileNative(userId) {
     const navProfile = document.getElementById('navProfile');
     if (navProfile) navProfile.classList.add('active');
 
-    // 🔥 PRIORIDAD: Caché unificado → Caché en memoria → Servidor
-    const cachedProfile = unifiedCache.getProfile(userId);
-    const cachedStories = unifiedCache.getStories(userId);
-    
-    if (cachedProfile) {
-        console.log(`📦 Usando caché unificado para perfil ${userId}`);
-        profileCache.set(userId, cachedProfile);
-        currentProfileData = cachedProfile;
-        
-        if (cachedStories && cachedStories.stories) {
-            storiesCache.set(userId, cachedStories.stories);
-            updateProfileNativeUI(cachedProfile, cachedStories.stories);
-        } else if (profileCache.has(userId) && storiesCache.has(userId)) {
-            // Fallback a caché en memoria
-            const user = profileCache.get(userId);
-            const stories = storiesCache.get(userId);
-            updateProfileNativeUI(user, stories);
-        } else {
-            // Cargar historias por separado
-            loadStoriesNative(userId, cachedProfile);
-        }
-        
-        // Refrescar en segundo plano (sin bloquear)
-        refreshProfileInBackgroundNative(userId);
-    } else if (profileCache.has(userId) && storiesCache.has(userId)) {
-        console.log(`📦 Usando caché en memoria para perfil ${userId}`);
+    // 🔥 INTENTAR CARGAR DESDE CACHÉ PRIMERO (SIN AFECTAR CONTADORES)
+    let loadedFromCache = false;
+
+    // 1. Verificar caché en memoria
+    if (profileCache.has(userId) && storiesCache.has(userId)) {
+        console.log(`📦 Usando caché en memoria para perfil nativo de ${userId}`);
         const user = profileCache.get(userId);
         const stories = storiesCache.get(userId);
         updateProfileNativeUI(user, stories);
         currentProfileData = user;
+        loadedFromCache = true;
+        // Actualizar en segundo plano
         refreshProfileInBackgroundNative(userId);
     } else {
-        console.log(`📡 Cargando perfil ${userId} desde servidor...`);
-        loadProfileDataNative(userId);
+        // 2. Verificar IndexedDB
+        try {
+            const cachedUser = await clientCache.get(`profile_${userId}`);
+            const cachedStories = await clientCache.get(`profile_stories_${userId}`);
+            
+            if (cachedUser && cachedStories) {
+                console.log(`📦 Usando caché IndexedDB para perfil nativo de ${userId}`);
+                profileCache.set(userId, cachedUser);
+                storiesCache.set(userId, cachedStories);
+                updateProfileNativeUI(cachedUser, cachedStories);
+                currentProfileData = cachedUser;
+                loadedFromCache = true;
+                // Actualizar en segundo plano
+                refreshProfileInBackgroundNative(userId);
+            }
+        } catch (e) {
+            console.warn('⚠️ Error leyendo IndexedDB:', e);
+        }
     }
 
+    // Si no hay caché, cargar desde servidor
+    if (!loadedFromCache) {
+        console.log(`📡 Cargando perfil nativo ${userId} desde servidor...`);
+        await loadProfileDataNative(userId);
+    }
+
+    // Configurar actualización periódica
     if (refreshInterval) {
         clearInterval(refreshInterval);
         refreshInterval = null;
@@ -225,7 +245,7 @@ function showProfileNative(userId) {
             clearInterval(refreshInterval);
             refreshInterval = null;
         }
-    }, 30000);
+    }, 10000);
 }
 
 // ============================================================
@@ -260,56 +280,13 @@ function hideProfileNative() {
 }
 
 // ============================================================
-// CARGAR HISTORIAS POR SEPARADO
-// ============================================================
-
-async function loadStoriesNative(userId, user) {
-    try {
-        const token = getToken();
-        if (!token) return;
-        
-        const res = await fetch(`${API_URL}/api/stories/user/${userId}`, {
-            headers: { 'Authorization': `Bearer ${token}` }
-        });
-        
-        if (res.ok) {
-            const stories = await res.json();
-            unifiedCache.setStories(userId, stories);
-            storiesCache.set(userId, stories);
-            if (isProfileSectionVisible && currentProfileUserId === userId) {
-                updateProfileNativeUI(user || currentProfileData, stories);
-            }
-        }
-    } catch (e) {
-        console.warn('⚠️ Error cargando historias:', e.message);
-    }
-}
-
-// ============================================================
-// CARGAR DATOS DEL PERFIL NATIVO CON CACHÉ
+// CARGAR DATOS DEL PERFIL NATIVO (CON GUARDADO EN IndexedDB)
 // ============================================================
 
 async function loadProfileDataNative(userId) {
     const token = getToken();
     if (!token) {
         showToast(t('error.unauthorized') || 'Inicia sesión para ver tu perfil', true);
-        return;
-    }
-
-    // Intentar caché unificado primero
-    const cached = unifiedCache.getProfile(userId);
-    if (cached) {
-        profileCache.set(userId, cached);
-        currentProfileData = cached;
-        
-        // Cargar historias
-        const storiesData = unifiedCache.getStories(userId);
-        if (storiesData && storiesData.stories) {
-            storiesCache.set(userId, storiesData.stories);
-            updateProfileNativeUI(cached, storiesData.stories);
-        } else {
-            await loadStoriesNative(userId, cached);
-        }
         return;
     }
 
@@ -336,10 +313,16 @@ async function loadProfileDataNative(userId) {
         const user = await res.json();
         currentProfileData = user;
 
-        // Guardar en caché unificado y memoria
-        unifiedCache.setProfile(userId, user);
         profileCache.set(userId, user);
         cleanCache();
+
+        // 🔥 Guardar en IndexedDB (1 hora)
+        try {
+            await clientCache.set(`profile_${userId}`, user, 3600000);
+            console.log(`📦 Perfil de ${user.fullName} guardado en IndexedDB`);
+        } catch (e) {
+            console.warn('⚠️ Error guardando perfil en IndexedDB:', e);
+        }
 
         const storiesRes = await fetch(`${API_URL}/api/stories/user/${userId}`, {
             headers: { 'Authorization': `Bearer ${token}` }
@@ -348,9 +331,16 @@ async function loadProfileDataNative(userId) {
         let stories = [];
         if (storiesRes.ok) {
             stories = await storiesRes.json();
-            unifiedCache.setStories(userId, stories);
             storiesCache.set(userId, stories);
             cleanCache();
+            
+            // 🔥 Guardar historias en IndexedDB (30 minutos)
+            try {
+                await clientCache.set(`profile_stories_${userId}`, stories, 1800000);
+                console.log(`📦 ${stories.length} historias de perfil guardadas en IndexedDB`);
+            } catch (e) {
+                console.warn('⚠️ Error guardando historias en IndexedDB:', e);
+            }
         }
 
         updateProfileNativeUI(user, stories);
@@ -362,7 +352,7 @@ async function loadProfileDataNative(userId) {
 }
 
 // ============================================================
-// 🔥 REFRESCAR PERFIL EN SEGUNDO PLANO
+// 🔥 REFRESCAR PERFIL EN SEGUNDO PLANO (CON ACTUALIZACIÓN DE CACHÉ)
 // ============================================================
 
 async function refreshProfileInBackgroundNative(userId) {
@@ -376,10 +366,15 @@ async function refreshProfileInBackgroundNative(userId) {
 
         if (res.ok) {
             const user = await res.json();
-            // Actualizar caché unificado
-            unifiedCache.setProfile(userId, user);
             profileCache.set(userId, user);
             currentProfileData = user;
+            
+            // 🔥 Actualizar IndexedDB
+            try {
+                await clientCache.set(`profile_${userId}`, user, 3600000);
+            } catch (e) {
+                console.warn('⚠️ Error actualizando perfil en IndexedDB:', e);
+            }
 
             const storiesRes = await fetch(`${API_URL}/api/stories/user/${userId}`, {
                 headers: { 'Authorization': `Bearer ${token}` }
@@ -388,8 +383,14 @@ async function refreshProfileInBackgroundNative(userId) {
             let stories = [];
             if (storiesRes.ok) {
                 stories = await storiesRes.json();
-                unifiedCache.setStories(userId, stories);
                 storiesCache.set(userId, stories);
+                
+                // 🔥 Actualizar historias en IndexedDB
+                try {
+                    await clientCache.set(`profile_stories_${userId}`, stories, 1800000);
+                } catch (e) {
+                    console.warn('⚠️ Error actualizando historias en IndexedDB:', e);
+                }
             }
 
             if (isProfileSectionVisible && currentProfileUserId === userId) {
@@ -405,13 +406,14 @@ async function refreshProfileInBackgroundNative(userId) {
 
 // ============================================================
 // 🔥 GENERAR MINIATURA DE HISTORIA - SOPORTE PARA TODOS LOS TIPOS
+// 🔥 MANTIENE CONTADORES: likes, votos, etc.
 // ============================================================
 
 function generateStoryThumbnail(story, userId) {
     const storyId = story.id;
     const mediaType = story.mediaType || 'image';
     
-    // 🔥 Para encuestas
+    // 🔥 Para encuestas (CON CONTADOR DE VOTOS)
     if (mediaType === 'survey' && story.surveyData) {
         const survey = story.surveyData;
         const question = survey.question || '📊 Encuesta';
@@ -434,20 +436,22 @@ function generateStoryThumbnail(story, userId) {
         `;
     }
     
-    // 🔥 Para imágenes
+    // 🔥 Para imágenes (CON CONTADOR DE LIKES)
     if (mediaType === 'image' && story.mediaUrl) {
+        const likesCount = story.likes?.length || 0;
         return `
             <div class="profile-story-thumb-native" onclick="window.openStoryFromProfileNative('${storyId}', '${userId}')">
                 <img src="${story.mediaUrl}" alt="Historia" loading="lazy" decoding="async" />
                 <div class="thumb-overlay">
-                    <i class="fas fa-heart"></i> ${formatNumber(story.likes?.length || 0)}
+                    <i class="fas fa-heart"></i> ${formatNumber(likesCount)}
                 </div>
             </div>
         `;
     }
     
-    // 🔥 Para videos
+    // 🔥 Para videos (CON CONTADOR DE LIKES)
     if (mediaType === 'video' && story.mediaUrl) {
+        const likesCount = story.likes?.length || 0;
         return `
             <div class="profile-story-thumb-native" onclick="window.openStoryFromProfileNative('${storyId}', '${userId}')">
                 <div class="text-thumb" style="background:linear-gradient(135deg, rgba(96,165,250,0.1), rgba(6,182,212,0.05));">
@@ -459,15 +463,16 @@ function generateStoryThumbnail(story, userId) {
                 </div>
                 <div class="thumb-overlay">
                     <i class="fas fa-play"></i>
-                    <i class="fas fa-heart" style="margin-left:6px;"></i> ${formatNumber(story.likes?.length || 0)}
+                    <i class="fas fa-heart" style="margin-left:6px;"></i> ${formatNumber(likesCount)}
                 </div>
             </div>
         `;
     }
     
-    // 🔥 Para texto
+    // 🔥 Para texto (CON CONTADOR DE LIKES)
     if (mediaType === 'text' && story.textContent) {
         const text = story.textContent || '';
+        const likesCount = story.likes?.length || 0;
         return `
             <div class="profile-story-thumb-native" onclick="window.openStoryFromProfileNative('${storyId}', '${userId}')">
                 <div class="text-thumb" style="background:${story.textBgColor || '#1a1a2e'}">
@@ -475,7 +480,7 @@ function generateStoryThumbnail(story, userId) {
                 </div>
                 <div class="thumb-overlay">
                     <i class="fas fa-font"></i>
-                    <i class="fas fa-heart" style="margin-left:6px;"></i> ${formatNumber(story.likes?.length || 0)}
+                    <i class="fas fa-heart" style="margin-left:6px;"></i> ${formatNumber(likesCount)}
                 </div>
             </div>
         `;
@@ -578,7 +583,7 @@ function translateProfileNativeUI() {
 }
 
 // ============================================================
-// ACTUALIZAR UI DEL PERFIL NATIVO - CON SOPORTE PARA TODOS LOS TIPOS
+// ACTUALIZAR UI DEL PERFIL NATIVO - CON TODOS LOS CONTADORES
 // ============================================================
 
 function updateProfileNativeUI(user, stories) {
@@ -590,8 +595,10 @@ function updateProfileNativeUI(user, stories) {
     const hasPendingRequest = user.hasPendingRequest || false;
     const isOwnProfile = currentUser?.id === user.id;
 
+    // 🔥 CONTADORES: followers, following, stories
     const followersCount = user.followersCount || 0;
     const followingCount = user.followingCount || 0;
+    const storiesCount = stories?.length || 0;
 
     const badgeHtml = getVerificationBadgeNative(user);
 
@@ -679,7 +686,7 @@ function updateProfileNativeUI(user, stories) {
                     <span class="label">${t('profile.following') || 'Siguiendo'}</span>
                 </div>
                 <div class="stat">
-                    <span class="number">${formatNumber(stories?.length || 0)}</span>
+                    <span class="number">${formatNumber(storiesCount)}</span>
                     <span class="label">${t('profile.stories') || 'Historias'}</span>
                 </div>
             </div>
@@ -687,7 +694,7 @@ function updateProfileNativeUI(user, stories) {
             <div class="profile-stories-native">
                 <div class="section-title">
                     <i class="fas fa-images"></i> ${t('profile.stories') || 'Historias'}
-                    <span style="font-size:9px;color:rgba(255,255,255,0.15);margin-left:auto;">${stories?.length || 0}</span>
+                    <span style="font-size:9px;color:rgba(255,255,255,0.15);margin-left:auto;">${formatNumber(storiesCount)}</span>
                 </div>
                 ${storiesHtml}
             </div>
@@ -745,6 +752,7 @@ window.handleProfileFollowNative = async function() {
                 showToast(`❌ ${t('profile.unfollowed') || 'Dejaste de seguir'}`);
             }
 
+            // 🔥 ACTUALIZAR CONTADOR DE SEGUIDORES
             const followersEl = document.querySelector('.profile-stats-native .stat:first-child .number');
             if (followersEl) {
                 const current = parseInt(followersEl.textContent.replace(/[^0-9]/g, '')) || 0;
@@ -752,7 +760,6 @@ window.handleProfileFollowNative = async function() {
                 followersEl.textContent = formatNumber(newCount);
             }
 
-            // Invalidar caché del perfil
             clearProfileCache(currentProfileUserId);
         } else {
             showToast(data.error || t('error.general') || 'Error al seguir', true);
@@ -825,14 +832,6 @@ window.openStoryFromProfileNative = function(storyId, profileUserId) {
 };
 
 // ============================================================
-// OBTENER ESTADÍSTICAS DEL CACHÉ (para depuración)
-// ============================================================
-
-function getCacheStats() {
-    return unifiedCache.getStats();
-}
-
-// ============================================================
 // FUNCIONES EXPORTADAS
 // ============================================================
 
@@ -846,6 +845,5 @@ export {
     clearProfileCache,
     preloadCurrentUserProfile,
     translateProfileNativeUI,
-    initI18nForProfileNative,
-    getCacheStats
-};      
+    initI18nForProfileNative
+};

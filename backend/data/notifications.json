@@ -2974,5 +2974,61 @@
     "fromAvatar": "https://ui-avatars.com/api/?name=AAAAA&background=a855f7&color=fff",
     "message": "AAAAA le dio like a tu historia: \"MISS ECUADOR\"",
     "icon": "❤️"
+  },
+  {
+    "id": "1786926612442_x1xlai",
+    "userId": "1783122622538",
+    "type": "reply",
+    "fromUserId": "1786667275566",
+    "fromName": "AAAAA",
+    "fromUsername": "AAAAA",
+    "fromAvatar": "https://ui-avatars.com/api/?name=AAAAA&background=a855f7&color=fff",
+    "storyId": "1786919037207",
+    "commentId": "1786919579728",
+    "replyId": "1786926612380",
+    "replyPreview": "xd",
+    "message": "AAAAA respondió a tu comentario: \"xd\"",
+    "icon": "💬",
+    "data": {
+      "replyPreview": "xd",
+      "storyId": "1786919037207",
+      "commentId": "1786919579728",
+      "replyId": "1786926612380",
+      "isReplyToReply": false,
+      "repliedToUserId": "1783122622538",
+      "repliedToName": "Usuario Demo"
+    },
+    "read": false,
+    "translated": false,
+    "language": "es",
+    "createdAt": "2026-08-17T00:30:12.443Z"
+  },
+  {
+    "id": "1786926720214_5mzf5p",
+    "userId": "1783122622538",
+    "type": "reply_to_reply",
+    "fromUserId": "1786667275566",
+    "fromName": "AAAAA",
+    "fromUsername": "AAAAA",
+    "fromAvatar": "https://ui-avatars.com/api/?name=AAAAA&background=a855f7&color=fff",
+    "storyId": "1786919724501",
+    "commentId": "1786926504819",
+    "replyId": "1786926720179",
+    "replyPreview": "xd",
+    "message": "AAAAA respondió a tu comentario: \"xd\"",
+    "icon": "💬",
+    "data": {
+      "replyPreview": "xd",
+      "storyId": "1786919724501",
+      "commentId": "1786926504819",
+      "replyId": "1786926720179",
+      "isReplyToReply": true,
+      "repliedToUserId": "1783122622538",
+      "repliedToName": "Usuario Demo"
+    },
+    "read": false,
+    "translated": false,
+    "language": "es",
+    "createdAt": "2026-08-17T00:32:00.214Z"
   }
 ]

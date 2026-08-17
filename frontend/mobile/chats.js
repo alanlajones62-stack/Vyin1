@@ -4,6 +4,7 @@
 // 🔥 CON SOPORTE i18n
 // 🔥 CON SOPORTE PARA SUBIR IMÁGENES Y ARCHIVOS
 // 🔥 CON LONG PRESS PARA ARCHIVAR CONVERSACIONES
+// 🔥 CORREGIDO: Menú de long press con bloqueo de interacciones
 // ============================================================
 
 import { getToken, getCurrentUser, showToast as authShowToast } from './auth.js';
@@ -36,7 +37,7 @@ let scrollTimeout = null;
 let isInitialLoad = true;
 
 // ============================================================
-// 🔥 LONG PRESS - VARIABLES
+// 🔥 LONG PRESS - VARIABLES CORREGIDAS
 // ============================================================
 
 let longPressTimer = null;
@@ -46,6 +47,7 @@ let longPressMenu = null;
 let longPressStartX = 0;
 let longPressStartY = 0;
 const LONG_PRESS_DELAY = 500;
+let isMenuOpen = false; // 🔥 NUEVO: Para saber si el menú está abierto
 
 // ============================================================
 // 🔥 i18n - INICIALIZAR Y ESCUCHAR CAMBIOS
@@ -1393,10 +1395,16 @@ function handleScroll() {
 }
 
 // ============================================================
-// 🔥 SELECCIONAR CONVERSACIÓN
+// 🔥 SELECCIONAR CONVERSACIÓN - CORREGIDA
 // ============================================================
 
 window.selectConversation = async function(userIdOrObject) {
+    // 🔥 Si el menú está abierto, NO hacer nada
+    if (isMenuOpen) {
+        console.log('⏳ Menú abierto, ignorando selección');
+        return;
+    }
+    
     let userId, userData;
     if (typeof userIdOrObject === 'string') {
         userId = userIdOrObject;
@@ -2009,7 +2017,7 @@ window.deleteConversation = async function(userId) {
 };
 
 // ============================================================
-// 🔥 CREAR MENÚ CONTEXTUAL DE LONG PRESS
+// 🔥 CREAR MENÚ CONTEXTUAL DE LONG PRESS - CORREGIDO
 // ============================================================
 
 function createLongPressMenu(userId, isArchived, x, y) {
@@ -2018,6 +2026,16 @@ function createLongPressMenu(userId, isArchived, x, y) {
     const menu = document.createElement('div');
     menu.className = 'long-press-menu show';
     menu.id = 'longPressMenu';
+    menu.dataset.userId = userId;
+    menu.dataset.isArchived = isArchived;
+    
+    // 🔥 Evitar que el click en el menú propague al item
+    menu.addEventListener('click', (e) => {
+        e.stopPropagation();
+    });
+    menu.addEventListener('touchstart', (e) => {
+        e.stopPropagation();
+    });
     
     const menuWidth = 200;
     const menuHeight = 180;
@@ -2061,51 +2079,106 @@ function createLongPressMenu(userId, isArchived, x, y) {
     
     menu.innerHTML = menuItems;
 
+    // 🔥 Los eventos de los botones ahora usan stopPropagation y cierran el menú primero
     menu.querySelectorAll('.menu-item').forEach(btn => {
         btn.addEventListener('click', (e) => {
-            e.stopPropagation();
+            e.stopPropagation(); // 🔥 Evitar que el click llegue al item
+            e.preventDefault();
             const action = btn.dataset.action;
+            const currentUserId = menu.dataset.userId;
             
-            switch(action) {
-                case 'archive':
-                    window.archiveConversation(userId);
-                    break;
-                case 'unarchive':
-                    window.unarchiveConversation(userId);
-                    break;
-                case 'open':
-                    closeLongPressMenu();
-                    window.selectConversation(userId);
-                    break;
-                case 'delete':
-                    window.deleteConversation(userId);
-                    break;
-                default:
-                    closeLongPressMenu();
-            }
+            // 🔥 Cerrar el menú ANTES de ejecutar la acción
+            closeLongPressMenu();
+            
+            // 🔥 Pequeño retraso para que el cierre del menú se procese antes de la acción
+            setTimeout(() => {
+                switch(action) {
+                    case 'archive':
+                        window.archiveConversation(currentUserId);
+                        break;
+                    case 'unarchive':
+                        window.unarchiveConversation(currentUserId);
+                        break;
+                    case 'open':
+                        window.selectConversation(currentUserId);
+                        break;
+                    case 'delete':
+                        window.deleteConversation(currentUserId);
+                        break;
+                    default:
+                        break;
+                }
+            }, 50);
+        });
+        
+        // 🔥 Prevenir touch también
+        btn.addEventListener('touchstart', (e) => {
+            e.stopPropagation();
+        });
+        btn.addEventListener('touchend', (e) => {
+            e.stopPropagation();
         });
     });
 
     document.body.appendChild(menu);
     longPressMenu = menu;
+    isMenuOpen = true; // 🔥 Marcar que el menú está abierto
     
+    // 🔥 Cerrar al hacer clic fuera del menú (con verificación de que no sea un item)
     setTimeout(() => {
-        document.addEventListener('click', closeLongPressMenu);
-        document.addEventListener('touchstart', closeLongPressMenu);
+        const closeHandler = (e) => {
+            // Si el click fue en el menú o en un botón del menú, no cerrar
+            if (menu.contains(e.target)) return;
+            // Si el click fue en un item de conversación, no cerrar (se maneja aparte)
+            if (e.target.closest('.conversation-item')) {
+                // Si el click fue en un botón de acción, no hacer nada
+                if (e.target.closest('.pending-actions') || e.target.closest('button')) {
+                    return;
+                }
+                // El click en el item está bloqueado por isMenuOpen
+                return;
+            }
+            closeLongPressMenu();
+        };
+        
+        const touchHandler = (e) => {
+            if (menu.contains(e.target)) return;
+            if (e.target.closest('.conversation-item')) {
+                if (e.target.closest('.pending-actions') || e.target.closest('button')) {
+                    return;
+                }
+                return;
+            }
+            closeLongPressMenu();
+        };
+        
+        document.addEventListener('click', closeHandler);
+        document.addEventListener('touchstart', touchHandler);
+        
+        // Guardar referencias para limpiar
+        menu._closeHandler = closeHandler;
+        menu._touchHandler = touchHandler;
     }, 10);
 }
 
 // ============================================================
-// 🔥 CERRAR MENÚ CONTEXTUAL
+// 🔥 CERRAR MENÚ CONTEXTUAL - CORREGIDO
 // ============================================================
 
 function closeLongPressMenu() {
     if (longPressMenu) {
+        // Limpiar event listeners del menú
+        if (longPressMenu._closeHandler) {
+            document.removeEventListener('click', longPressMenu._closeHandler);
+        }
+        if (longPressMenu._touchHandler) {
+            document.removeEventListener('touchstart', longPressMenu._touchHandler);
+        }
         longPressMenu.remove();
         longPressMenu = null;
     }
-    document.removeEventListener('click', closeLongPressMenu);
-    document.removeEventListener('touchstart', closeLongPressMenu);
+    
+    isMenuOpen = false; // 🔥 Marcar que el menú está cerrado
     
     if (longPressTarget) {
         longPressTarget.classList.remove('long-press-active');
@@ -2119,13 +2192,14 @@ function closeLongPressMenu() {
 }
 
 // ============================================================
-// 🔥 CONFIGURAR LONG PRESS EN CONVERSACIONES
+// 🔥 CONFIGURAR LONG PRESS EN CONVERSACIONES - CORREGIDO
 // ============================================================
 
 function setupLongPressOnConversations() {
     const items = document.querySelectorAll('.conversation-item');
     
     items.forEach(item => {
+        // Remover listeners antiguos
         item.removeEventListener('touchstart', handleTouchStart);
         item.removeEventListener('touchmove', handleTouchMove);
         item.removeEventListener('touchend', handleTouchEnd);
@@ -2134,7 +2208,9 @@ function setupLongPressOnConversations() {
         item.removeEventListener('mouseup', handleMouseUp);
         item.removeEventListener('mouseleave', handleMouseUp);
         item.removeEventListener('contextmenu', handleContextMenu);
+        item.removeEventListener('click', handleItemClick);
         
+        // Agregar nuevos listeners
         item.addEventListener('touchstart', handleTouchStart, { passive: false });
         item.addEventListener('touchmove', handleTouchMove, { passive: true });
         item.addEventListener('touchend', handleTouchEnd, { passive: true });
@@ -2143,11 +2219,54 @@ function setupLongPressOnConversations() {
         item.addEventListener('mouseup', handleMouseUp);
         item.addEventListener('mouseleave', handleMouseUp);
         item.addEventListener('contextmenu', handleContextMenu);
+        item.addEventListener('click', handleItemClick);
     });
 }
 
 // ============================================================
-// 🔥 MANEJADORES DE LONG PRESS
+// 🔥 MANEJADOR DE CLICK EN ITEM - CORREGIDO
+// ============================================================
+
+function handleItemClick(e) {
+    // 🔥 Si el menú está abierto, NO abrir el chat
+    if (isMenuOpen) {
+        e.stopPropagation();
+        e.preventDefault();
+        console.log('⏳ Menú abierto, ignorando click');
+        return;
+    }
+    
+    // Si se hizo clic en un botón de acción (aceptar/rechazar), no hacer nada
+    if (e.target.closest('.pending-actions') || e.target.closest('button')) {
+        return;
+    }
+    
+    // Si fue un long press, ya se manejó
+    if (isLongPressTriggered) {
+        e.stopPropagation();
+        e.preventDefault();
+        return;
+    }
+    
+    // Si el click vino del menú, no hacer nada
+    if (e.target.closest('.long-press-menu')) {
+        e.stopPropagation();
+        e.preventDefault();
+        return;
+    }
+    
+    // Obtener el userId del item
+    const item = e.currentTarget;
+    const userId = getUserIdFromItem(item);
+    if (userId) {
+        e.stopPropagation();
+        e.preventDefault();
+        window.selectConversation(userId);
+    }
+}
+
+// ============================================================
+// 🔥 MANEJADORES DE LONG PRESS - CORREGIDOS
 // ============================================================
 
 function handleTouchStart(e) {
@@ -2157,6 +2276,11 @@ function handleTouchStart(e) {
     const userId = getUserIdFromItem(item);
     if (!userId) return;
     
+    // 🔥 Si el menú está abierto, cancelar
+    if (isMenuOpen) {
+        return;
+    }
+    
     if (messagesPanelEl && messagesPanelEl.classList.contains('active')) {
         return;
     }
@@ -2165,13 +2289,14 @@ function handleTouchStart(e) {
         return;
     }
     
+    // 🔥 Guardar el target para el long press
     longPressTarget = item;
     isLongPressTriggered = false;
     longPressStartX = touch.clientX;
     longPressStartY = touch.clientY;
     
     longPressTimer = setTimeout(() => {
-        if (longPressTarget && !isLongPressTriggered) {
+        if (longPressTarget && !isLongPressTriggered && !isMenuOpen) {
             isLongPressTriggered = true;
             longPressTarget.classList.add('long-press-active');
             
@@ -2182,7 +2307,11 @@ function handleTouchStart(e) {
             const rect = longPressTarget.getBoundingClientRect();
             const isArchived = longPressTarget.dataset.archived === 'true';
             
-            createLongPressMenu(userId, isArchived, touch.clientX, touch.clientY);
+            // 🔥 Guardar el userId en el target para usarlo después
+            const userId = getUserIdFromItem(longPressTarget);
+            if (userId) {
+                createLongPressMenu(userId, isArchived, touch.clientX, touch.clientY);
+            }
         }
     }, LONG_PRESS_DELAY);
 }
@@ -2211,12 +2340,19 @@ function handleTouchEnd(e) {
     
     if (!isLongPressTriggered && longPressTarget) {
         setTimeout(() => {
-            longPressTarget.classList.remove('long-press-active');
+            if (longPressTarget) {
+                longPressTarget.classList.remove('long-press-active');
+            }
         }, 100);
     }
 }
 
 function handleMouseDown(e) {
+    // 🔥 Si el menú está abierto, cancelar
+    if (isMenuOpen) {
+        return;
+    }
+    
     if (e.button === 2) {
         e.preventDefault();
         const item = e.currentTarget;
@@ -2256,14 +2392,17 @@ function handleMouseDown(e) {
     longPressStartY = e.clientY;
     
     longPressTimer = setTimeout(() => {
-        if (longPressTarget && !isLongPressTriggered) {
+        if (longPressTarget && !isLongPressTriggered && !isMenuOpen) {
             isLongPressTriggered = true;
             longPressTarget.classList.add('long-press-active');
             
             const rect = longPressTarget.getBoundingClientRect();
             const isArchived = longPressTarget.dataset.archived === 'true';
             
-            createLongPressMenu(userId, isArchived, e.clientX, e.clientY);
+            const userId = getUserIdFromItem(longPressTarget);
+            if (userId) {
+                createLongPressMenu(userId, isArchived, e.clientX, e.clientY);
+            }
         }
     }, LONG_PRESS_DELAY);
 }
@@ -2276,13 +2415,21 @@ function handleMouseUp(e) {
     
     if (longPressTarget && !isLongPressTriggered) {
         setTimeout(() => {
-            longPressTarget.classList.remove('long-press-active');
+            if (longPressTarget) {
+                longPressTarget.classList.remove('long-press-active');
+            }
         }, 100);
     }
 }
 
 function handleContextMenu(e) {
     e.preventDefault();
+    
+    // 🔥 Si el menú está abierto, cancelar
+    if (isMenuOpen) {
+        return;
+    }
+    
     const item = e.currentTarget;
     const userId = getUserIdFromItem(item);
     if (!userId) return;

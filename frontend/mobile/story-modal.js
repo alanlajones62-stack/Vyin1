@@ -1,9 +1,10 @@
 // ============================================================
 // story-modal.js - Modal para ver historias con navegación 
-// (VERSIÓN CORREGIDA - CON ACTUALIZACIÓN PARCIAL DE COMENTARIOS)
-// 🔥 NUEVO: SOPORTE PARA SUBIR ARCHIVOS EN COMENTARIOS (SOLO DUEÑO)
-// 🔥 CORREGIDO: Re-renderización completa, parpadeo y pérdida de foco
-// 🔥 NUEVO: Integración con IndexedDB para carga instantánea
+// (VERSIÓN COMPLETA - CON VISOR DE ARCHIVOS Y PROGRESO)
+// 🔥 SOPORTE PARA SUBIR ARCHIVOS EN COMENTARIOS (SOLO DUEÑO)
+// 🔥 VISOR DE ARCHIVOS INTEGRADO (PDF, imágenes, videos, audio, texto)
+// 🔥 BARRA DE PROGRESO PARA SUBIDA DE ARCHIVOS
+// 🔥 OPTIMIZADO - USA LA FUNCIÓN DE SUBIDA DE story-comments.js
 // ============================================================
 
 import {
@@ -16,19 +17,8 @@ import {
     loadComments, initComments, addCommentToCache, addReplyToCache, 
     updateCommentLikes, updateCommentsUIWithoutReload,
     uploadCommentFile, addComment,
-    renderComments,
-    // 🔥 NUEVAS FUNCIONES DE ACTUALIZACIÓN PARCIAL
-    addCommentToUI,
-    addReplyToUI,
-    updateCommentLikeUI,
-    removeCommentFromUI,
-    updateCommentCounters,
-    commentsCache,
-    findCommentById
+    renderComments
 } from './story-comments.js';
-
-// 🔥 IMPORTAR CACHÉ UNIFICADO CON INDEXEDDB
-import { getCache } from './services/cache.service.js';
 
 const API_URL = window.location.origin;
 let currentStoryId = null;
@@ -40,30 +30,14 @@ let isNavigating = false;
 let userLanguage = 'es';
 let isTranslating = false;
 
-// 🔥 INSTANCIA DEL CACHÉ UNIFICADO
-let unifiedCache = null;
-
-// Inicializar caché de forma segura
-function getUnifiedCache() {
-    if (!unifiedCache) {
-        try {
-            unifiedCache = getCache();
-        } catch (e) {
-            console.warn('⚠️ [Cache] No se pudo inicializar caché unificado:', e.message);
-            unifiedCache = null;
-        }
-    }
-    return unifiedCache;
-}
-
 // Caché de traducciones en memoria
 let translationCache = {};
 
-// 🔥 CLAVE PARA localStorage
+// CLAVE PARA localStorage
 const TRANSLATION_STORAGE_KEY = 'vyin_translations';
 
 // ============================================================
-// 🔥 FUNCIONES DE PERSISTENCIA EN localStorage
+// FUNCIONES DE PERSISTENCIA EN localStorage
 // ============================================================
 
 function loadTranslationsFromStorage() {
@@ -143,7 +117,7 @@ function saveTranslationToCache(storyId, language, translated, original, engine 
 }
 
 // ============================================================
-// 🔥 FUNCIÓN PARA ACTUALIZAR EL BOTÓN DE TRADUCCIÓN
+// FUNCIÓN PARA ACTUALIZAR EL BOTÓN DE TRADUCCIÓN
 // ============================================================
 
 function updateTranslateButton() {
@@ -224,6 +198,369 @@ function updateTranslateButton() {
             if (existingBadge) existingBadge.remove();
         }
     }
+}
+
+// ============================================================
+// VISOR DE ARCHIVOS INTEGRADO
+// ============================================================
+
+function openFileViewer(fileUrl, mimetype = null, filename = 'Archivo') {
+    if (!fileUrl) {
+        showToast('URL del archivo no válida', true);
+        return;
+    }
+
+    if (!mimetype) {
+        mimetype = detectMimeType(fileUrl);
+    }
+
+    console.log(`📂 Abriendo visor para: ${filename} (${mimetype})`);
+
+    if (mimetype === 'application/pdf' || fileUrl.toLowerCase().endsWith('.pdf')) {
+        openPDFViewer(fileUrl, filename);
+        return;
+    }
+
+    if (mimetype.startsWith('image/') || isImageExtension(fileUrl)) {
+        openImageViewer(fileUrl, filename);
+        return;
+    }
+
+    if (mimetype.startsWith('video/') || isVideoExtension(fileUrl)) {
+        openVideoViewer(fileUrl, filename);
+        return;
+    }
+
+    if (mimetype.startsWith('audio/') || isAudioExtension(fileUrl)) {
+        openAudioViewer(fileUrl, filename);
+        return;
+    }
+
+    if (mimetype === 'text/plain' || fileUrl.toLowerCase().endsWith('.txt')) {
+        openTextViewer(fileUrl, filename);
+        return;
+    }
+
+    if (mimetype.includes('word') || mimetype.includes('excel') || 
+        mimetype.includes('spreadsheet') || mimetype.includes('presentation') ||
+        mimetype.includes('officedocument')) {
+        downloadFile(fileUrl, filename);
+        return;
+    }
+
+    showToast('📥 Descargando archivo...');
+    downloadFile(fileUrl, filename);
+}
+
+function detectMimeType(fileUrl) {
+    const url = fileUrl.toLowerCase();
+    
+    if (url.match(/\.(jpg|jpeg|png|gif|webp|bmp|svg|ico|avif)$/)) return 'image/jpeg';
+    if (url.match(/\.(mp4|webm|ogg|mov|avi|mkv|flv|wmv|m4v)$/)) return 'video/mp4';
+    if (url.match(/\.(mp3|wav|ogg|aac|flac|m4a|wma)$/)) return 'audio/mpeg';
+    if (url.match(/\.pdf$/)) return 'application/pdf';
+    if (url.match(/\.(txt|log|md)$/)) return 'text/plain';
+    if (url.match(/\.(doc|docx)$/)) return 'application/msword';
+    if (url.match(/\.(xls|xlsx|csv)$/)) return 'application/vnd.ms-excel';
+    if (url.match(/\.(ppt|pptx)$/)) return 'application/vnd.ms-powerpoint';
+    
+    return 'application/octet-stream';
+}
+
+function isImageExtension(fileUrl) {
+    return fileUrl.toLowerCase().match(/\.(jpg|jpeg|png|gif|webp|bmp|svg|ico|avif)$/);
+}
+
+function isVideoExtension(fileUrl) {
+    return fileUrl.toLowerCase().match(/\.(mp4|webm|ogg|mov|avi|mkv|flv|wmv|m4v)$/);
+}
+
+function isAudioExtension(fileUrl) {
+    return fileUrl.toLowerCase().match(/\.(mp3|wav|ogg|aac|flac|m4a|wma)$/);
+}
+
+function downloadFile(fileUrl, filename) {
+    const link = document.createElement('a');
+    link.href = fileUrl;
+    link.download = filename || 'archivo';
+    link.target = '_blank';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    showToast('📥 Descargando...');
+}
+
+// ============================================================
+// VISORES ESPECÍFICOS
+// ============================================================
+
+function createViewerOverlay() {
+    const existing = document.querySelector('.file-viewer-overlay');
+    if (existing) existing.remove();
+    
+    const overlay = document.createElement('div');
+    overlay.className = 'file-viewer-overlay';
+    overlay.style.cssText = `
+        position: fixed;
+        top: 0; left: 0; right: 0; bottom: 0;
+        background: rgba(0,0,0,0.85);
+        backdrop-filter: blur(20px);
+        -webkit-backdrop-filter: blur(20px);
+        z-index: 99999;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 20px;
+        animation: fileViewerFadeIn 0.3s ease;
+    `;
+    
+    const content = document.createElement('div');
+    content.className = 'viewer-content';
+    content.style.cssText = `
+        width: 100%;
+        max-width: 1200px;
+        height: 90vh;
+        max-height: 90vh;
+        position: relative;
+    `;
+    
+    overlay.appendChild(content);
+    
+    overlay.addEventListener('click', (e) => {
+        if (e.target === overlay) {
+            overlay.remove();
+        }
+    });
+    
+    const closeHandler = (e) => {
+        if (e.key === 'Escape') {
+            overlay.remove();
+            document.removeEventListener('keydown', closeHandler);
+        }
+    };
+    document.addEventListener('keydown', closeHandler);
+    
+    if (!document.getElementById('file-viewer-styles')) {
+        const style = document.createElement('style');
+        style.id = 'file-viewer-styles';
+        style.textContent = `
+            @keyframes fileViewerFadeIn {
+                from { opacity: 0; transform: scale(0.95); }
+                to { opacity: 1; transform: scale(1); }
+            }
+            .file-viewer-overlay {
+                animation: fileViewerFadeIn 0.3s ease;
+            }
+        `;
+        document.head.appendChild(style);
+    }
+    
+    return overlay;
+}
+
+function openPDFViewer(fileUrl, filename) {
+    const overlay = createViewerOverlay();
+    const content = overlay.querySelector('.viewer-content');
+    
+    const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+    
+    if (isMobile) {
+        window.open(fileUrl, '_blank');
+        overlay.remove();
+        return;
+    }
+    
+    content.innerHTML = `
+        <div style="width:100%;height:100%;display:flex;flex-direction:column;background:#1a1a2e;border-radius:12px;overflow:hidden;">
+            <div style="padding:12px 20px;background:#2d2d44;border-bottom:1px solid rgba(255,255,255,0.05);display:flex;justify-content:space-between;align-items:center;flex-shrink:0;">
+                <span style="color:#fff;font-size:14px;font-weight:500;display:flex;align-items:center;gap:8px;">
+                    <i class="fas fa-file-pdf" style="color:#ff6b6b;"></i>
+                    ${escapeHtml(filename)}
+                </span>
+                <div style="display:flex;gap:8px;">
+                    <button onclick="window.downloadFile('${fileUrl}', '${escapeHtml(filename)}')" 
+                            style="background:rgba(255,255,255,0.08);border:none;color:#fff;padding:4px 12px;border-radius:6px;cursor:pointer;font-size:12px;">
+                        <i class="fas fa-download"></i> Descargar
+                    </button>
+                    <button onclick="this.closest('.file-viewer-overlay').remove()" 
+                            style="background:rgba(255,255,255,0.08);border:none;color:#fff;padding:4px 12px;border-radius:6px;cursor:pointer;font-size:12px;">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+            </div>
+            <iframe src="${fileUrl}" 
+                    style="flex:1;width:100%;border:none;background:#fff;"
+                    sandbox="allow-scripts allow-same-origin allow-modals">
+            </iframe>
+        </div>
+    `;
+    
+    document.body.appendChild(overlay);
+}
+
+function openImageViewer(fileUrl, filename) {
+    const overlay = createViewerOverlay();
+    const content = overlay.querySelector('.viewer-content');
+    
+    content.innerHTML = `
+        <div style="width:100%;height:100%;display:flex;flex-direction:column;background:#000;border-radius:12px;overflow:hidden;position:relative;">
+            <div style="position:absolute;top:0;left:0;right:0;z-index:10;padding:12px 20px;background:linear-gradient(to bottom,rgba(0,0,0,0.7),transparent);display:flex;justify-content:space-between;align-items:center;flex-shrink:0;">
+                <span style="color:#fff;font-size:14px;font-weight:500;display:flex;align-items:center;gap:8px;text-shadow:0 2px 4px rgba(0,0,0,0.5);">
+                    <i class="fas fa-image" style="color:#34d399;"></i>
+                    ${escapeHtml(filename)}
+                </span>
+                <div style="display:flex;gap:8px;">
+                    <button onclick="window.downloadFile('${fileUrl}', '${escapeHtml(filename)}')" 
+                            style="background:rgba(255,255,255,0.15);border:1px solid rgba(255,255,255,0.1);color:#fff;padding:4px 12px;border-radius:6px;cursor:pointer;font-size:12px;backdrop-filter:blur(10px);">
+                        <i class="fas fa-download"></i>
+                    </button>
+                    <button onclick="this.closest('.file-viewer-overlay').remove()" 
+                            style="background:rgba(255,255,255,0.15);border:1px solid rgba(255,255,255,0.1);color:#fff;padding:4px 12px;border-radius:6px;cursor:pointer;font-size:12px;backdrop-filter:blur(10px);">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+            </div>
+            <div style="flex:1;display:flex;align-items:center;justify-content:center;padding:20px;">
+                <img src="${fileUrl}" 
+                     alt="${escapeHtml(filename)}" 
+                     style="max-width:100%;max-height:100%;object-fit:contain;border-radius:4px;cursor:zoom-in;"
+                     onclick="this.style.transform = this.style.transform === 'scale(1.5)' ? 'scale(1)' : 'scale(1.5)'; this.style.transition = 'transform 0.3s ease';" />
+            </div>
+        </div>
+    `;
+    
+    document.body.appendChild(overlay);
+}
+
+function openVideoViewer(fileUrl, filename) {
+    const overlay = createViewerOverlay();
+    const content = overlay.querySelector('.viewer-content');
+    
+    content.innerHTML = `
+        <div style="width:100%;height:100%;display:flex;flex-direction:column;background:#000;border-radius:12px;overflow:hidden;">
+            <div style="padding:12px 20px;background:#2d2d44;border-bottom:1px solid rgba(255,255,255,0.05);display:flex;justify-content:space-between;align-items:center;flex-shrink:0;">
+                <span style="color:#fff;font-size:14px;font-weight:500;display:flex;align-items:center;gap:8px;">
+                    <i class="fas fa-video" style="color:#f472b6;"></i>
+                    ${escapeHtml(filename)}
+                </span>
+                <div style="display:flex;gap:8px;">
+                    <button onclick="window.downloadFile('${fileUrl}', '${escapeHtml(filename)}')" 
+                            style="background:rgba(255,255,255,0.08);border:none;color:#fff;padding:4px 12px;border-radius:6px;cursor:pointer;font-size:12px;">
+                        <i class="fas fa-download"></i>
+                    </button>
+                    <button onclick="this.closest('.file-viewer-overlay').remove()" 
+                            style="background:rgba(255,255,255,0.08);border:none;color:#fff;padding:4px 12px;border-radius:6px;cursor:pointer;font-size:12px;">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+            </div>
+            <video controls autoplay style="flex:1;width:100%;max-height:calc(100vh - 120px);background:#000;">
+                <source src="${fileUrl}" />
+                Tu navegador no soporta este formato de video.
+            </video>
+        </div>
+    `;
+    
+    document.body.appendChild(overlay);
+}
+
+function openAudioViewer(fileUrl, filename) {
+    const overlay = createViewerOverlay();
+    const content = overlay.querySelector('.viewer-content');
+    
+    content.innerHTML = `
+        <div style="width:100%;min-height:300px;display:flex;flex-direction:column;align-items:center;justify-content:center;background:linear-gradient(135deg,#1a1a2e,#2d2d44);border-radius:12px;padding:40px;">
+            <div style="font-size:64px;color:#60a5fa;margin-bottom:20px;">
+                <i class="fas fa-music"></i>
+            </div>
+            <span style="color:#fff;font-size:18px;font-weight:500;margin-bottom:8px;">${escapeHtml(filename)}</span>
+            <span style="color:rgba(255,255,255,0.4);font-size:13px;margin-bottom:30px;">Audio</span>
+            <audio controls autoplay style="width:100%;max-width:400px;">
+                <source src="${fileUrl}" />
+                Tu navegador no soporta este formato de audio.
+            </audio>
+            <div style="margin-top:20px;display:flex;gap:8px;">
+                <button onclick="window.downloadFile('${fileUrl}', '${escapeHtml(filename)}')" 
+                        style="background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.1);color:#fff;padding:8px 16px;border-radius:8px;cursor:pointer;font-size:13px;">
+                    <i class="fas fa-download"></i> Descargar
+                </button>
+                <button onclick="this.closest('.file-viewer-overlay').remove()" 
+                        style="background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.1);color:#fff;padding:8px 16px;border-radius:8px;cursor:pointer;font-size:13px;">
+                    <i class="fas fa-times"></i> Cerrar
+                </button>
+            </div>
+        </div>
+    `;
+    
+    document.body.appendChild(overlay);
+}
+
+async function openTextViewer(fileUrl, filename) {
+    const overlay = createViewerOverlay();
+    const content = overlay.querySelector('.viewer-content');
+    
+    try {
+        const response = await fetch(fileUrl);
+        const text = await response.text();
+        
+        content.innerHTML = `
+            <div style="width:100%;height:100%;display:flex;flex-direction:column;background:#1a1a2e;border-radius:12px;overflow:hidden;">
+                <div style="padding:12px 20px;background:#2d2d44;border-bottom:1px solid rgba(255,255,255,0.05);display:flex;justify-content:space-between;align-items:center;flex-shrink:0;">
+                    <span style="color:#fff;font-size:14px;font-weight:500;display:flex;align-items:center;gap:8px;">
+                        <i class="fas fa-file-alt" style="color:#fbbf24;"></i>
+                        ${escapeHtml(filename)}
+                    </span>
+                    <div style="display:flex;gap:8px;">
+                        <button onclick="window.downloadFile('${fileUrl}', '${escapeHtml(filename)}')" 
+                                style="background:rgba(255,255,255,0.08);border:none;color:#fff;padding:4px 12px;border-radius:6px;cursor:pointer;font-size:12px;">
+                            <i class="fas fa-download"></i>
+                        </button>
+                        <button onclick="this.closest('.file-viewer-overlay').remove()" 
+                                style="background:rgba(255,255,255,0.08);border:none;color:#fff;padding:4px 12px;border-radius:6px;cursor:pointer;font-size:12px;">
+                            <i class="fas fa-times"></i>
+                        </button>
+                    </div>
+                </div>
+                <pre style="flex:1;padding:20px;margin:0;color:rgba(255,255,255,0.8);font-size:14px;font-family:monospace;overflow:auto;white-space:pre-wrap;word-break:break-word;background:#1a1a2e;">${escapeHtml(text)}</pre>
+            </div>
+        `;
+    } catch (error) {
+        content.innerHTML = `
+            <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;padding:40px;color:#fff;">
+                <i class="fas fa-exclamation-triangle" style="font-size:48px;color:#ff6b6b;margin-bottom:16px;"></i>
+                <p>No se pudo cargar el contenido del archivo</p>
+                <button onclick="window.downloadFile('${fileUrl}', '${escapeHtml(filename)}')" 
+                        style="margin-top:16px;background:#c084fc;border:none;color:#fff;padding:8px 20px;border-radius:8px;cursor:pointer;">
+                    <i class="fas fa-download"></i> Descargar
+                </button>
+            </div>
+        `;
+    }
+    
+    document.body.appendChild(overlay);
+}
+
+// ============================================================
+// FUNCIONES AUXILIARES PARA ARCHIVOS
+// ============================================================
+
+function formatFileSize(bytes) {
+    if (bytes === 0) return '0 B';
+    const k = 1024;
+    const sizes = ['B', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+}
+
+function getFileIcon(mimetype) {
+    if (!mimetype) return '<i class="fas fa-file"></i>';
+    if (mimetype.startsWith('image/')) return '<i class="fas fa-image" style="color:#34d399;"></i>';
+    if (mimetype.startsWith('video/')) return '<i class="fas fa-video" style="color:#f472b6;"></i>';
+    if (mimetype.startsWith('audio/')) return '<i class="fas fa-music" style="color:#60a5fa;"></i>';
+    if (mimetype === 'application/pdf') return '<i class="fas fa-file-pdf" style="color:#ff6b6b;"></i>';
+    if (mimetype.includes('word')) return '<i class="fas fa-file-word" style="color:#60a5fa;"></i>';
+    if (mimetype === 'text/plain') return '<i class="fas fa-file-alt" style="color:#fbbf24;"></i>';
+    return '<i class="fas fa-file"></i>';
 }
 
 // ============================================================
@@ -419,6 +756,8 @@ export function closeStoryModal() {
         commentInput.value = '';
         commentInput.disabled = false;
         commentInput.placeholder = 'Escribe un comentario...';
+        commentInput.style.borderColor = '';
+        commentInput.style.boxShadow = '';
     }
     
     const sendBtn = document.getElementById('sendCommentBtn');
@@ -443,7 +782,7 @@ export function closeStoryModal() {
         subtitlesIndicator.style.display = 'none';
     }
     
-    // 🔥 OCULTAR BOTÓN DE ARCHIVO
+    // OCULTAR BOTÓN DE ARCHIVO
     const attachBtn = document.getElementById('commentAttachBtn');
     if (attachBtn) {
         attachBtn.style.display = 'none';
@@ -605,7 +944,7 @@ function createModalHTML() {
     document.body.appendChild(div.firstElementChild);
     console.log('📱 [STORY-MODAL] HTML creado e insertado');
 
-    // 🔥 INPUT OCULTO PARA SUBIR ARCHIVOS
+    // INPUT OCULTO PARA SUBIR ARCHIVOS
     const fileInput = document.createElement('input');
     fileInput.type = 'file';
     fileInput.id = 'commentFileInput';
@@ -701,7 +1040,7 @@ function setupModalEvents() {
         });
     }
 
-    // 🔥 CONFIGURAR SUBIDA DE ARCHIVO
+    // CONFIGURAR SUBIDA DE ARCHIVO (USA uploadCommentFile DE story-comments.js)
     setupCommentFileUpload();
 
     let touchStartX = 0;
@@ -731,7 +1070,8 @@ function setupModalEvents() {
 }
 
 // ============================================================
-// 🔥 CONFIGURAR SUBIDA DE ARCHIVO EN COMENTARIOS
+// CONFIGURAR SUBIDA DE ARCHIVO EN COMENTARIOS
+// USA LA FUNCIÓN uploadCommentFile DE story-comments.js
 // ============================================================
 
 function setupCommentFileUpload() {
@@ -758,6 +1098,7 @@ function setupCommentFileUpload() {
     
     newAttachBtn.addEventListener('click', (e) => {
         e.stopPropagation();
+        fileInput.value = '';
         fileInput.click();
     });
     
@@ -769,19 +1110,47 @@ function setupCommentFileUpload() {
         const file = e.target.files[0];
         if (!file) return;
         
-        // Validar tamaño (máx 20MB)
-        if (file.size > 20 * 1024 * 1024) {
+        // Validaciones rápidas
+        const maxSize = 20 * 1024 * 1024;
+        if (file.size > maxSize) {
             showToast('El archivo no puede superar los 20MB', true);
             newFileInput.value = '';
             return;
         }
+
+        // Tipos permitidos
+        const allowedTypes = [
+            'image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/bmp',
+            'video/mp4', 'video/webm', 'video/ogg', 'video/quicktime',
+            'audio/mp3', 'audio/wav', 'audio/ogg', 'audio/mpeg',
+            'application/pdf', 'application/msword',
+            'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+            'text/plain'
+        ];
         
-        showToast('📤 Subiendo archivo...');
+        if (!allowedTypes.includes(file.type)) {
+            showToast('Formato de archivo no soportado', true);
+            newFileInput.value = '';
+            return;
+        }
         
+        // Mostrar indicador visual en el input
+        const commentInput = document.getElementById('commentInput');
+        if (commentInput) {
+            commentInput.placeholder = `📎 Subiendo ${file.name}...`;
+            commentInput.disabled = true;
+        }
+        
+        // 🔥 USAR LA FUNCIÓN DE story-comments.js (CON PROGRESO)
         const result = await uploadCommentFile(currentStoryId, file);
         
+        // Restaurar input
+        if (commentInput) {
+            commentInput.disabled = false;
+        }
+        
         if (result && result.success) {
-            // Guardar datos del archivo para enviar con el comentario
+            // Guardar datos del archivo
             window._pendingCommentFile = {
                 fileUrl: result.fileUrl,
                 filename: result.filename,
@@ -791,12 +1160,18 @@ function setupCommentFileUpload() {
             };
             
             // Mostrar indicador de archivo adjunto
-            showToast(`📎 ${result.originalName} adjuntado`);
-            
-            // Actualizar placeholder del input
-            const commentInput = document.getElementById('commentInput');
             if (commentInput) {
-                commentInput.placeholder = `📎 ${result.originalName} - Escribe un comentario...`;
+                commentInput.placeholder = `📎 ${result.originalName} (${formatFileSize(result.size)}) - Escribe un comentario...`;
+                commentInput.style.borderColor = 'rgba(52,211,153,0.4)';
+                commentInput.style.boxShadow = '0 0 0 2px rgba(52,211,153,0.1)';
+            }
+            
+            showToast(`✅ ${result.originalName} adjuntado (${formatFileSize(result.size)})`);
+        } else {
+            if (commentInput) {
+                commentInput.placeholder = 'Escribe un comentario...';
+                commentInput.style.borderColor = '';
+                commentInput.style.boxShadow = '';
             }
         }
         
@@ -805,7 +1180,7 @@ function setupCommentFileUpload() {
 }
 
 // ============================================================
-// 🔥 ELIMINAR HISTORIA
+// ELIMINAR HISTORIA
 // ============================================================
 
 async function handleDeleteStory() {
@@ -869,7 +1244,7 @@ async function handleDeleteStory() {
 }
 
 // ============================================================
-// 🔥 ENVIAR COMENTARIO (CON ACTUALIZACIÓN PARCIAL)
+// ENVIAR COMENTARIO (CON SOPORTE PARA ARCHIVO)
 // ============================================================
 
 async function handleSendComment() {
@@ -904,19 +1279,22 @@ async function handleSendComment() {
     }
 
     try {
-        // Usar addComment con fileData
         const newComment = await addComment(currentStoryId, content, null, fileData);
         
         if (newComment) {
             input.value = '';
-            // Limpiar archivo pendiente
             window._pendingCommentFile = null;
-            // Restaurar placeholder
             input.placeholder = 'Escribe un comentario...';
+            input.style.borderColor = '';
+            input.style.boxShadow = '';
+            updateCommentCount(1);
             
-            // 🔥 ACTUALIZACIÓN PARCIAL - Sin re-renderizar toda la lista
-            addCommentToUI(currentStoryId, newComment);
-            
+            const comments = await loadComments(currentStoryId, true);
+            const currentUser = getCurrentUser();
+            const container = document.getElementById('commentsList');
+            if (container) {
+                renderComments(comments, currentStoryId, currentUser?.id, container);
+            }
             showToast(fileData ? '📎 Comentario con archivo adjunto' : '💬 Comentario enviado');
         }
     } catch (error) {
@@ -933,7 +1311,7 @@ async function handleSendComment() {
 }
 
 // ============================================================
-// 🔥 ENVIAR RESPUESTA (CON ACTUALIZACIÓN PARCIAL)
+// ENVIAR RESPUESTA
 // ============================================================
 
 async function handleSendReply(storyId, commentId) {
@@ -978,10 +1356,9 @@ async function handleSendReply(storyId, commentId) {
         if (res.ok) {
             input.value = '';
             wrapper.style.display = 'none';
-            
-            // 🔥 ACTUALIZACIÓN PARCIAL - Sin re-renderizar toda la lista
-            addReplyToUI(storyId, commentId, data);
-            
+            updateCommentCount(1);
+            addReplyToCache(storyId, commentId, data);
+            updateCommentsUIWithoutReload(storyId);
             showToast('💬 Respuesta enviada');
         } else {
             showToast(data.error || 'Error al enviar respuesta', true);
@@ -1000,12 +1377,21 @@ async function handleSendReply(storyId, commentId) {
 }
 
 // ============================================================
-// 🔥 ACTUALIZAR CONTADOR DE COMENTARIOS (DEPRECADO - USAR updateCommentCounters)
+// ACTUALIZAR CONTADOR DE COMENTARIOS
 // ============================================================
 
 function updateCommentCount(increment) {
-    // Delegar a la función importada
-    updateCommentCounters(currentStoryId, increment);
+    const commentsEl = document.getElementById('modalComments');
+    if (commentsEl) {
+        const current = parseInt(commentsEl.textContent.replace(/[^0-9]/g, '')) || 0;
+        commentsEl.textContent = formatNumber(current + increment);
+    }
+    
+    const commentsCountEl = document.getElementById('commentsCount');
+    if (commentsCountEl) {
+        const current = parseInt(commentsCountEl.textContent.replace(/[^0-9]/g, '')) || 0;
+        commentsCountEl.textContent = formatNumber(current + increment);
+    }
 }
 
 // ============================================================
@@ -1077,7 +1463,7 @@ function formatVTTTime(seconds) {
 }
 
 // ============================================================
-// 🔥 ALTERNAR TRADUCCIÓN/ORIGINAL
+// ALTERNAR TRADUCCIÓN/ORIGINAL
 // ============================================================
 
 async function toggleTranslation() {
@@ -1258,7 +1644,7 @@ async function toggleTranslation() {
 }
 
 // ============================================================
-// 🔥 ACTUALIZAR SOLO textContent
+// ACTUALIZAR SOLO textContent
 // ============================================================
 
 function updateTextContentOnly(updatedData) {
@@ -1283,7 +1669,7 @@ function updateTextContentOnly(updatedData) {
 }
 
 // ============================================================
-// 🔥 ACTUALIZAR ESTADÍSTICAS DEL MODAL
+// ACTUALIZAR ESTADÍSTICAS DEL MODAL
 // ============================================================
 
 function updateModalStats(story) {
@@ -1305,7 +1691,7 @@ function updateModalStats(story) {
 }
 
 // ============================================================
-// 🔥 RENDERIZAR ENCUESTA EN EL MODAL
+// RENDERIZAR ENCUESTA EN EL MODAL
 // ============================================================
 
 function renderSurveyInModal(story) {
@@ -1398,7 +1784,7 @@ function renderSurveyInModal(story) {
 }
 
 // ============================================================
-// 🔥 MANEJAR VOTO EN ENCUESTA
+// MANEJAR VOTO EN ENCUESTA
 // ============================================================
 
 async function handleSurveyVote(storyId, optionId) {
@@ -1434,10 +1820,8 @@ async function handleSurveyVote(storyId, optionId) {
 
         if (res.ok) {
             showToast('✅ Voto registrado');
-            // Actualizar los datos de la encuesta
             if (currentStoryData) {
                 currentStoryData.surveyData = data.surveyData;
-                // Re-renderizar la encuesta
                 renderSurveyInModal(currentStoryData);
             }
         } else {
@@ -1450,7 +1834,7 @@ async function handleSurveyVote(storyId, optionId) {
 }
 
 // ============================================================
-// CARGAR DATOS DE LA HISTORIA - CON CACHÉ UNIFICADO
+// CARGAR DATOS DE LA HISTORIA
 // ============================================================
 
 async function loadStoryData(storyId, isNavigation = false) {
@@ -1462,35 +1846,6 @@ async function loadStoryData(storyId, isNavigation = false) {
     }
 
     try {
-        // 🔥 VERIFICAR SI TENEMOS LA HISTORIA EN CACHÉ
-        const cachedStory = currentStoriesList.find(s => s.id === storyId);
-        if (cachedStory && !isNavigation && currentStoryData?.id === storyId) {
-            console.log('📦 [STORY-MODAL] Usando historia del caché local');
-            currentStoryData = cachedStory;
-            updateModalUI(currentStoryData);
-            updateProgress();
-            
-            const highlightCommentId = window._activityCommentId || null;
-            // 🔥 NO FORZAR RECARGA - usar caché
-            await initComments(storyId, 'commentsList', highlightCommentId, false);
-            
-            setTimeout(() => updateTranslateButton(), 50);
-            return;
-        }
-
-        // 🔥 VERIFICAR SI LA HISTORIA ESTÁ EN CACHÉ UNIFICADO (para comentarios)
-        try {
-            const cache = getUnifiedCache();
-            if (cache) {
-                const cachedComments = await cache.getComments(storyId);
-                if (cachedComments && !isNavigation) {
-                    console.log(`📦 [INDEXEDDB] Comentarios de ${storyId} disponibles (${cachedComments.comments.length})`);
-                }
-            }
-        } catch (e) {
-            console.warn('⚠️ [IndexedDB] Error verificando caché:', e.message);
-        }
-
         const res = await fetch(`${API_URL}/api/stories/${storyId}/details`, {
             headers: { 'Authorization': `Bearer ${token}` }
         });
@@ -1501,7 +1856,7 @@ async function loadStoryData(storyId, isNavigation = false) {
                 updateModalUI(currentStoryData);
                 updateProgress();
                 const highlightCommentId = window._activityCommentId || null;
-                await initComments(storyId, 'commentsList', highlightCommentId, false);
+                await initComments(storyId, 'commentsList', highlightCommentId, true);
                 setTimeout(() => updateTranslateButton(), 50);
                 return;
             }
@@ -1512,7 +1867,7 @@ async function loadStoryData(storyId, isNavigation = false) {
                     updateModalUI(currentStoryData);
                     updateProgress();
                     const highlightCommentId = window._activityCommentId || null;
-                    await initComments(storyId, 'commentsList', highlightCommentId, false);
+                    await initComments(storyId, 'commentsList', highlightCommentId, true);
                     setTimeout(() => updateTranslateButton(), 50);
                     return;
                 }
@@ -1581,8 +1936,7 @@ async function loadStoryData(storyId, isNavigation = false) {
         updateProgress();
         
         const highlightCommentId = window._activityCommentId || null;
-        // 🔥 NO FORZAR RECARGA - usar caché
-        await initComments(storyId, 'commentsList', highlightCommentId, false);
+        await initComments(storyId, 'commentsList', highlightCommentId, true);
         
         setTimeout(() => updateTranslateButton(), 100);
         
@@ -1627,7 +1981,7 @@ function updateModalUI(story) {
 
     const mediaContainer = document.getElementById('modalMedia');
     if (mediaContainer) {
-        // 🔥 Si es encuesta, renderizar encuesta
+        // Si es encuesta, renderizar encuesta
         if (story.mediaType === 'survey' && story.surveyData) {
             renderSurveyInModal(story);
             return;
@@ -1747,7 +2101,7 @@ function updateModalUI(story) {
         }
     }
     
-    // 🔥 CONFIGURAR BOTÓN DE ARCHIVO SEGÚN DUEÑO
+    // CONFIGURAR BOTÓN DE ARCHIVO SEGÚN DUEÑO
     setupCommentFileUpload();
     
     setTimeout(() => updateTranslateButton(), 50);
@@ -1783,7 +2137,7 @@ async function registerView(storyId) {
 }
 
 // ============================================================
-// 🔥 MANEJAR LIKE EN MODAL - CON ACTUALIZACIÓN DE CACHÉ
+// MANEJAR LIKE EN MODAL
 // ============================================================
 
 async function handleModalLike() {
@@ -1805,7 +2159,6 @@ async function handleModalLike() {
         currentLikes = parseInt(likesEl.textContent.replace(/[^0-9]/g, '')) || 0;
     }
     
-    // 🔥 ACTUALIZACIÓN OPTIMISTA
     if (isLiked) {
         currentLikes = Math.max(0, currentLikes - 1);
         if (likeBtn) {
@@ -1834,7 +2187,6 @@ async function handleModalLike() {
 
         const data = await res.json();
         if (res.ok) {
-            // Actualizar con el valor real del servidor
             if (likesEl) {
                 likesEl.textContent = formatNumber(data.likesCount || 0);
             }
@@ -1851,7 +2203,6 @@ async function handleModalLike() {
                 }
             }
 
-            // Actualizar caché local
             if (currentStoryData) {
                 currentStoryData.likes = data.likes || [];
             }
@@ -1865,7 +2216,6 @@ async function handleModalLike() {
 
             showToast(data.liked ? '❤️ Like' : '💔 Quitado');
         } else {
-            // Revertir cambios en caso de error
             showToast(data.error || 'Error al procesar like', true);
             await loadStoryData(currentStoryId, true);
         }
@@ -1877,28 +2227,7 @@ async function handleModalLike() {
 }
 
 // ============================================================
-// 🔥 FUNCIÓN GLOBAL PARA MANEJAR LIKE DE COMENTARIOS
-// ============================================================
-
-// Esta función se expone globalmente para que los comentarios puedan usarla
-window.handleCommentLike = async function(storyId, commentId) {
-    const { likeComment, commentsCache, findCommentById } = await import('./story-comments.js');
-    const liked = await likeComment(storyId, commentId);
-    if (liked !== false) {
-        // Obtener el comentario actualizado del caché
-        const comments = commentsCache.get(storyId);
-        const comment = findCommentById(comments, commentId);
-        if (comment) {
-            const likesCount = comment.likes?.length || 0;
-            // 🔥 ACTUALIZACIÓN PARCIAL - Sin re-renderizar toda la lista
-            const { updateCommentLikeUI } = await import('./story-comments.js');
-            updateCommentLikeUI(commentId, liked, likesCount);
-        }
-    }
-};
-
-// ============================================================
-// 🔥 INICIALIZAR CACHÉ
+// INICIALIZAR CACHÉ
 // ============================================================
 
 loadTranslationsFromStorage();
@@ -1912,6 +2241,8 @@ window.closeStoryModal = closeStoryModal;
 window.navigateStory = navigateStory;
 window.handleSendReply = handleSendReply;
 window.handleSendComment = handleSendComment;
+window.openFileViewer = openFileViewer;
+window.downloadFile = downloadFile;
 window.voteSurvey = async function(storyId, optionId) {
     await handleSurveyVote(storyId, optionId);
 };
@@ -1953,5 +2284,6 @@ export {
     saveTranslationsToStorage,
     handleSurveyVote,
     renderSurveyInModal,
-    setupCommentFileUpload
+    setupCommentFileUpload,
+    openFileViewer
 };

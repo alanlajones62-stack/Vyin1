@@ -1,11 +1,39 @@
 // ============================================================
 // auth.js - AUTENTICACIÓN Y SESIÓN (VERSIÓN CORREGIDA CON FIRSTLOGIN)
+// 🔥 NUEVO: Integración con IndexedDB para limpiar caché al logout
 // ============================================================
 
 const API_URL = window.location.origin || 'http://localhost:3000';
 
 let currentUser = null;
 let token = localStorage.getItem('token');
+
+// ============================================================
+// 🔥 IMPORTAR CLIENT CACHE (IndexedDB) - SIN DEPENDENCIA CIRCULAR
+// ============================================================
+
+let clientCache = null;
+
+async function getClientCache() {
+    if (!clientCache) {
+        try {
+            const module = await import('../js/clientCache.js');
+            clientCache = module.default || module;
+            console.log('✅ clientCache cargado en auth.js');
+        } catch (e) {
+            console.warn('⚠️ No se pudo cargar clientCache:', e.message);
+            // Fallback: objeto con métodos vacíos
+            clientCache = {
+                clear: async () => {},
+                delete: async () => {},
+                cleanExpired: async () => {},
+                get: async () => null,
+                set: async () => {}
+            };
+        }
+    }
+    return clientCache;
+}
 
 // ============================================================
 // TOKEN Y HEADERS
@@ -400,20 +428,71 @@ export async function verifySession() {
     }
 }
 
-export function logout() {
+// ============================================================
+// 🔥 LOGOUT CON LIMPIEZA DE INDEXEDDB
+// ============================================================
+
+export async function logout() {
     console.log('🔓 Cerrando sesión...');
+    
+    // 🔥🔥🔥 LIMPIAR CACHÉ DE INDEXEDDB
+    try {
+        const cache = await getClientCache();
+        await cache.clear();
+        console.log('🧹 Caché de IndexedDB limpiado al cerrar sesión');
+    } catch (e) {
+        console.warn('⚠️ Error limpiando caché de IndexedDB:', e.message);
+    }
+    
+    // Limpiar localStorage
+    localStorage.removeItem('token');
+    localStorage.removeItem('user');
+    token = null;
+    currentUser = null;
+    
+    // Desconectar socket
+    if (window.socket) {
+        try {
+            window.socket.disconnect();
+        } catch (e) {}
+        window.socket = null;
+    }
+    
+    // Redirigir al login
+    window.location.href = 'index.html';
+}
+
+// ============================================================
+// LOGOUT SIN REDIRECCIÓN (para uso interno)
+// ============================================================
+
+export async function logoutSilent() {
+    console.log('🔓 Cerrando sesión (silencioso)...');
+    
+    try {
+        const cache = await getClientCache();
+        await cache.clear();
+        console.log('🧹 Caché de IndexedDB limpiado (silencioso)');
+    } catch (e) {
+        console.warn('⚠️ Error limpiando caché:', e.message);
+    }
+    
     localStorage.removeItem('token');
     localStorage.removeItem('user');
     token = null;
     currentUser = null;
     
     if (window.socket) {
-        window.socket.disconnect();
+        try {
+            window.socket.disconnect();
+        } catch (e) {}
         window.socket = null;
     }
-    
-    window.location.href = 'index.html';
 }
+
+// ============================================================
+// IR AL PERFIL
+// ============================================================
 
 export function goToProfile() {
     const user = getCurrentUser();
@@ -495,3 +574,9 @@ export function escapeHtml(text) {
     div.textContent = text;
     return div.innerHTML;
 }
+
+// ============================================================
+// EXPORTAR getClientCache PARA USO EXTERNO
+// ============================================================
+
+export { getClientCache };
