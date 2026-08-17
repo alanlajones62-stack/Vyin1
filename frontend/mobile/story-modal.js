@@ -5,7 +5,7 @@
 // 🔥 VISOR DE ARCHIVOS INTEGRADO (PDF, imágenes, videos, audio, texto)
 // 🔥 BARRA DE PROGRESO PARA SUBIDA DE ARCHIVOS
 // 🔥 OPTIMIZADO - USA LA FUNCIÓN DE SUBIDA DE story-comments.js
-// 🔥 RESPUESTAS ESTILO TIKTOK - BADGE DENTRO DEL INPUT
+// 🔥 RESPUESTAS ESTILO TIKTOK - BADGE DENTRO DEL INPUT CON BACKSPACE
 // ============================================================
 
 import {
@@ -1056,17 +1056,33 @@ function setupModalEvents() {
     if (input) {
         const newInput = input.cloneNode(true);
         input.parentNode.replaceChild(newInput, input);
+        
+        // 🔥 Evento para Enter y Backspace
         newInput.addEventListener('keydown', (e) => {
+            // Enviar con Enter
             if (e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault();
                 handleSendComment();
             }
-            // 🔥 Backspace para cancelar respuesta
+            
+            // 🔥 Cancelar respuesta con Backspace (cuando el input está vacío)
             if (e.key === 'Backspace' && replyContext && this.value === '') {
                 e.preventDefault();
                 cancelReply();
             }
         });
+        
+        // 🔥 También cancelar cuando el usuario hace clic en el badge
+        const indicator = document.getElementById('replyIndicator');
+        if (indicator) {
+            indicator.style.cursor = 'pointer';
+            indicator.addEventListener('click', (e) => {
+                e.stopPropagation();
+                if (replyContext) {
+                    cancelReply();
+                }
+            });
+        }
     }
 
     // CONFIGURAR SUBIDA DE ARCHIVO (USA uploadCommentFile DE story-comments.js)
@@ -1269,22 +1285,31 @@ window.cancelReply = cancelReply;
  */
 function updateReplyIndicator() {
     const indicator = document.getElementById('replyIndicator');
+    const inputContainer = document.querySelector('.input-container');
     const input = document.getElementById('commentInput');
-    if (!indicator) return;
+    
+    if (!indicator || !inputContainer) return;
     
     if (replyContext) {
+        // 🔥 Mostrar badge
         indicator.style.display = 'flex';
+        inputContainer.classList.add('reply-active');
+        
         // Animación de entrada
         indicator.style.animation = 'none';
         requestAnimationFrame(() => {
-            indicator.style.animation = 'replyIndicatorIn 0.3s ease';
+            indicator.style.animation = 'replyIndicatorIn 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)';
         });
-        // Añadir padding al input para el indicador
+        
+        // Ajustar padding del input
         if (input) {
-            input.style.paddingLeft = '95px';
+            input.style.paddingLeft = '90px';
         }
     } else {
+        // 🔥 Ocultar badge
         indicator.style.display = 'none';
+        inputContainer.classList.remove('reply-active');
+        
         if (input) {
             input.style.paddingLeft = '16px';
         }

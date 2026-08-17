@@ -2,6 +2,7 @@
    STORY MODAL - CON SUBTÍTULOS, COMENTARIOS Y ENCUESTAS
    VERSIÓN MEJORADA - DISEÑO MODERNO Y LIMPIO
    🔥 SOPORTE COMPLETO PARA VISOR DE ARCHIVOS
+   🔥 BADGE DE RESPUESTA DENTRO DEL INPUT (ESTILO TIKTOK)
    ============================================================ */
 
 .modal-overlay {
@@ -1235,66 +1236,209 @@
 }
 
 /* ============================================================
-   🔥 INPUT DE RESPUESTA - MEJORADO
+   🔥 INPUT DE RESPUESTA - MEJORADO (YA NO SE USA, PERO SE MANTIENE POR COMPATIBILIDAD)
    ============================================================ */
 
 .reply-input-container {
-    display: none;
-    align-items: center;
-    gap: 8px;
-    margin-top: 6px;
-    padding: 4px 0;
+    display: none !important;
 }
 
-.reply-input-container .reply-input {
+/* ============================================================
+   🔥 INPUT PRINCIPAL CON BADGE DENTRO - ESTILO TIKTOK
+   ============================================================ */
+
+.comment-input-wrapper {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 4px;
+    border-top: 1px solid rgba(255, 255, 255, 0.04);
+    flex-shrink: 0;
+    background: rgba(0, 0, 0, 0.1);
+    border-radius: 0 0 12px 12px;
+}
+
+.comment-input-wrapper .input-container {
     flex: 1;
+    position: relative;
+    display: flex;
+    align-items: center;
     background: rgba(255, 255, 255, 0.04);
     border: 1px solid rgba(255, 255, 255, 0.04);
     border-radius: 50px;
-    padding: 6px 14px;
+    transition: all 0.3s;
+    min-height: 34px;
+    overflow: hidden;
+}
+
+.comment-input-wrapper .input-container:focus-within {
+    border-color: rgba(192, 132, 252, 0.2);
+    background: rgba(255, 255, 255, 0.06);
+}
+
+.comment-input-wrapper .comment-attach-btn {
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.04);
+    border-radius: 50px;
+    padding: 0 12px;
+    color: rgba(255, 255, 255, 0.15);
+    font-size: 14px;
+    cursor: pointer;
+    transition: all 0.25s;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    min-height: 34px;
+    flex-shrink: 0;
+}
+
+.comment-input-wrapper .comment-attach-btn:hover {
+    background: rgba(255, 255, 255, 0.08);
+    color: rgba(255, 255, 255, 0.3);
+    border-color: rgba(255, 255, 255, 0.08);
+}
+
+.comment-input-wrapper .comment-attach-btn:active {
+    transform: scale(0.92);
+}
+
+.comment-input-wrapper .comment-attach-btn.has-file {
+    color: #34d399;
+    background: rgba(52, 211, 153, 0.06);
+    border-color: rgba(52, 211, 153, 0.1);
+}
+
+/* 🔥 BADGE DENTRO DEL INPUT - FLOTANTE */
+.comment-input-wrapper .input-container .reply-indicator {
+    display: none;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 10px 2px 8px;
+    background: rgba(52, 211, 153, 0.12);
+    border: 1px solid rgba(52, 211, 153, 0.15);
+    border-radius: 30px;
+    font-size: 11px;
+    font-weight: 600;
+    color: #34d399;
+    flex-shrink: 0;
+    margin-left: 4px;
+    position: absolute;
+    left: 2px;
+    top: 50%;
+    transform: translateY(-50%);
+    z-index: 2;
+    pointer-events: auto;
+    cursor: pointer;
+    white-space: nowrap;
+    user-select: none;
+    animation: replyIndicatorIn 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+    transition: all 0.2s ease;
+}
+
+.comment-input-wrapper .input-container .reply-indicator:hover {
+    background: rgba(52, 211, 153, 0.18);
+    border-color: rgba(52, 211, 153, 0.25);
+}
+
+.comment-input-wrapper .input-container .reply-indicator:active {
+    transform: translateY(-50%) scale(0.92);
+}
+
+.comment-input-wrapper .input-container .reply-indicator i {
+    font-size: 9px;
+    color: #34d399;
+}
+
+.comment-input-wrapper .input-container .reply-indicator::after {
+    content: '';
+    position: absolute;
+    right: -6px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 1px;
+    height: 50%;
+    background: rgba(255, 255, 255, 0.06);
+}
+
+/* 🔥 INPUT - CON PADDING PARA EL BADGE */
+.comment-input-wrapper .input-container input {
+    flex: 1;
+    background: transparent;
+    border: none;
+    padding: 6px 16px;
+    padding-left: 16px;
     color: #fff;
     font-size: 13px;
     font-family: inherit;
     outline: none;
     transition: all 0.3s;
-    min-height: 32px;
+    min-height: 34px;
+    position: relative;
+    z-index: 1;
+    width: 100%;
 }
 
-.reply-input-container .reply-input::placeholder {
+.comment-input-wrapper .input-container input::placeholder {
     color: rgba(255, 255, 255, 0.12);
-    font-size: 12px;
+    font-size: 13px;
+    transition: opacity 0.3s;
 }
 
-.reply-input-container .reply-input:focus {
-    border-color: rgba(192, 132, 252, 0.2);
-    background: rgba(255, 255, 255, 0.06);
-    box-shadow: 0 0 0 3px rgba(192, 132, 252, 0.04);
+/* 🔥 CUANDO EL BADGE ESTÁ ACTIVO, EL PLACEHOLDER SE CORRE */
+.comment-input-wrapper .input-container.reply-active input {
+    padding-left: 90px;
 }
 
-.reply-input-container .reply-send-btn {
+.comment-input-wrapper .input-container.reply-active input::placeholder {
+    opacity: 0.3;
+}
+
+.comment-input-wrapper .input-container input:disabled {
+    opacity: 0.3;
+    cursor: not-allowed;
+}
+
+.comment-input-wrapper button {
     background: linear-gradient(135deg, #c084fc, #db2777);
     border: none;
     border-radius: 50px;
-    padding: 6px 14px;
+    padding: 6px 18px;
     color: #fff;
     font-weight: 600;
-    font-size: 12px;
+    font-size: 13px;
     cursor: pointer;
     transition: all 0.25s;
     font-family: inherit;
-    min-height: 32px;
-    display: flex;
-    align-items: center;
-    gap: 4px;
+    white-space: nowrap;
+    flex-shrink: 0;
+    min-height: 34px;
 }
 
-.reply-input-container .reply-send-btn:hover {
+.comment-input-wrapper button:hover {
     transform: scale(1.03);
     box-shadow: 0 4px 16px rgba(192, 132, 252, 0.2);
 }
 
-.reply-input-container .reply-send-btn:active {
+.comment-input-wrapper button:active {
     transform: scale(0.92);
+}
+
+.comment-input-wrapper button:disabled {
+    opacity: 0.3;
+    cursor: not-allowed;
+    transform: none !important;
+    box-shadow: none !important;
+}
+
+@keyframes replyIndicatorIn {
+    0% {
+        opacity: 0;
+        transform: translateY(-50%) scale(0.92) translateX(-4px);
+    }
+    100% {
+        opacity: 1;
+        transform: translateY(-50%) scale(1) translateX(0);
+    }
 }
 
 /* ============================================================
@@ -1342,115 +1486,6 @@
     gap: 4px;
     border-left: 1.5px solid rgba(192, 132, 252, 0.06);
     padding-left: 12px;
-}
-
-/* ============================================================
-   🔥 INPUT PRINCIPAL - MEJORADO
-   ============================================================ */
-
-.comment-input-wrapper {
-    display: flex;
-    gap: 8px;
-    padding: 4px 0 6px;
-    border-top: 1px solid rgba(255, 255, 255, 0.04);
-    flex-shrink: 0;
-    background: rgba(0, 0, 0, 0.1);
-    border-radius: 0 0 12px 12px;
-    padding: 8px 4px;
-}
-
-.comment-input-wrapper .comment-attach-btn {
-    background: rgba(255, 255, 255, 0.04);
-    border: 1px solid rgba(255, 255, 255, 0.04);
-    border-radius: 50px;
-    padding: 0 12px;
-    color: rgba(255, 255, 255, 0.15);
-    font-size: 14px;
-    cursor: pointer;
-    transition: all 0.25s;
-    display: none;
-    align-items: center;
-    justify-content: center;
-    min-height: 34px;
-    flex-shrink: 0;
-}
-
-.comment-input-wrapper .comment-attach-btn:hover {
-    background: rgba(255, 255, 255, 0.08);
-    color: rgba(255, 255, 255, 0.3);
-    border-color: rgba(255, 255, 255, 0.08);
-}
-
-.comment-input-wrapper .comment-attach-btn:active {
-    transform: scale(0.92);
-}
-
-.comment-input-wrapper .comment-attach-btn.has-file {
-    color: #34d399;
-    background: rgba(52, 211, 153, 0.06);
-    border-color: rgba(52, 211, 153, 0.1);
-}
-
-.comment-input-wrapper input {
-    flex: 1;
-    background: rgba(255, 255, 255, 0.04);
-    border: 1px solid rgba(255, 255, 255, 0.04);
-    border-radius: 50px;
-    padding: 6px 16px;
-    color: #fff;
-    font-size: 13px;
-    font-family: inherit;
-    outline: none;
-    transition: all 0.3s;
-    min-height: 34px;
-}
-
-.comment-input-wrapper input::placeholder {
-    color: rgba(255, 255, 255, 0.12);
-    font-size: 13px;
-}
-
-.comment-input-wrapper input:focus {
-    border-color: rgba(192, 132, 252, 0.2);
-    background: rgba(255, 255, 255, 0.06);
-    box-shadow: 0 0 0 3px rgba(192, 132, 252, 0.04);
-}
-
-.comment-input-wrapper input:disabled {
-    opacity: 0.3;
-    cursor: not-allowed;
-}
-
-.comment-input-wrapper button {
-    background: linear-gradient(135deg, #c084fc, #db2777);
-    border: none;
-    border-radius: 50px;
-    padding: 6px 18px;
-    color: #fff;
-    font-weight: 600;
-    font-size: 13px;
-    cursor: pointer;
-    transition: all 0.25s;
-    font-family: inherit;
-    white-space: nowrap;
-    flex-shrink: 0;
-    min-height: 34px;
-}
-
-.comment-input-wrapper button:hover {
-    transform: scale(1.03);
-    box-shadow: 0 4px 16px rgba(192, 132, 252, 0.2);
-}
-
-.comment-input-wrapper button:active {
-    transform: scale(0.92);
-}
-
-.comment-input-wrapper button:disabled {
-    opacity: 0.3;
-    cursor: not-allowed;
-    transform: none !important;
-    box-shadow: none !important;
 }
 
 /* ============================================================
@@ -2176,16 +2211,6 @@
         padding-left: 8px;
         border-left-width: 1.5px;
     }
-    .reply-input-container .reply-input {
-        font-size: 12px;
-        padding: 5px 12px;
-        min-height: 28px;
-    }
-    .reply-input-container .reply-send-btn {
-        font-size: 11px;
-        padding: 5px 12px;
-        min-height: 28px;
-    }
     .comment-input-wrapper {
         padding: 6px 2px;
         gap: 6px;
@@ -2195,10 +2220,25 @@
         padding: 0 10px;
         font-size: 13px;
     }
-    .comment-input-wrapper input {
+    .comment-input-wrapper .input-container {
+        min-height: 30px;
+    }
+    .comment-input-wrapper .input-container .reply-indicator {
+        font-size: 10px;
+        padding: 2px 8px 2px 6px;
+        gap: 3px;
+    }
+    .comment-input-wrapper .input-container .reply-indicator i {
+        font-size: 8px;
+    }
+    .comment-input-wrapper .input-container input {
         font-size: 12px;
         padding: 5px 12px;
+        padding-left: 12px;
         min-height: 30px;
+    }
+    .comment-input-wrapper .input-container.reply-active input {
+        padding-left: 80px;
     }
     .comment-input-wrapper button {
         font-size: 12px;
@@ -2443,20 +2483,39 @@
         margin-left: 20px;
         padding-left: 6px;
     }
-    .comment-input-wrapper input {
-        font-size: 11px;
-        padding: 4px 10px;
-        min-height: 26px;
-    }
-    .comment-input-wrapper button {
-        font-size: 11px;
-        padding: 4px 10px;
-        min-height: 26px;
+    .comment-input-wrapper {
+        padding: 4px 2px;
+        gap: 4px;
     }
     .comment-input-wrapper .comment-attach-btn {
         min-height: 26px;
         padding: 0 8px;
         font-size: 12px;
+    }
+    .comment-input-wrapper .input-container {
+        min-height: 26px;
+    }
+    .comment-input-wrapper .input-container .reply-indicator {
+        font-size: 9px;
+        padding: 1px 6px 1px 5px;
+        gap: 2px;
+    }
+    .comment-input-wrapper .input-container .reply-indicator i {
+        font-size: 7px;
+    }
+    .comment-input-wrapper .input-container input {
+        font-size: 11px;
+        padding: 4px 10px;
+        padding-left: 10px;
+        min-height: 26px;
+    }
+    .comment-input-wrapper .input-container.reply-active input {
+        padding-left: 70px;
+    }
+    .comment-input-wrapper button {
+        font-size: 11px;
+        padding: 4px 10px;
+        min-height: 26px;
     }
 
     /* Encuestas responsive 380px */
@@ -2594,20 +2653,34 @@
         padding: 1px 6px;
         height: 20px;
     }
-    .comment-input-wrapper input {
-        min-height: 28px;
-        font-size: 12px;
-        padding: 4px 10px;
-    }
-    .comment-input-wrapper button {
-        min-height: 28px;
-        font-size: 12px;
-        padding: 4px 12px;
+    .comment-input-wrapper {
+        padding: 4px 2px;
+        gap: 4px;
     }
     .comment-input-wrapper .comment-attach-btn {
         min-height: 28px;
         padding: 0 10px;
         font-size: 12px;
+    }
+    .comment-input-wrapper .input-container {
+        min-height: 28px;
+    }
+    .comment-input-wrapper .input-container .reply-indicator {
+        font-size: 9px;
+        padding: 1px 6px 1px 5px;
+    }
+    .comment-input-wrapper .input-container input {
+        font-size: 12px;
+        padding: 4px 10px;
+        min-height: 28px;
+    }
+    .comment-input-wrapper .input-container.reply-active input {
+        padding-left: 75px;
+    }
+    .comment-input-wrapper button {
+        font-size: 12px;
+        padding: 4px 12px;
+        min-height: 28px;
     }
     .story-progress {
         padding: 3px 10px 2px;
