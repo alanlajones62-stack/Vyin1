@@ -256,7 +256,6 @@ backend/data/*.corrupt.*
 frontend/feed/
 frontend/pay/
 frontend/profile/
-frontend/js/
 
 
 # ============================================================

@@ -6,6 +6,7 @@
 // 🔥 SOPORTE PARA SUBIR ARCHIVOS (SOLO DUEÑO DE HISTORIA)
 // 🔥 VISOR DE ARCHIVOS INTEGRADO (PDF, imágenes, videos, audio, texto)
 // 🔥 SUBIDA CON BARRA DE PROGRESO
+// 🔥 RESPUESTAS ESTILO TIKTOK - USANDO INPUT PRINCIPAL
 // ============================================================
 
 import { getToken, getCurrentUser, showToast, getAvatar, formatDate, escapeHtml } from './auth.js';
@@ -734,6 +735,7 @@ function flattenReplies(replies, allComments, parentId) {
 
 // ============================================================
 // 🔥 RENDER COMENTARIOS (VERSIÓN CORREGIDA - CON data-comment-id)
+// 🔥 ELIMINADOS LOS INPUTS DE RESPUESTA INLINE
 // ============================================================
 
 function renderComments(comments, storyId, currentUserId, container, highlightCommentId = null) {
@@ -792,13 +794,6 @@ function renderComments(comments, storyId, currentUserId, container, highlightCo
                             </button>
                         ` : ''}
                     </div>
-                    <div class="reply-input-container" id="reply-input-${comment.id}" style="display:none;margin-top:8px;">
-                        <input type="text" class="reply-input" id="replyInput-${comment.id}" 
-                               placeholder="Escribe una respuesta..." maxlength="500" />
-                        <button class="reply-send-btn" onclick="window.handleReplySubmit('${storyId}', '${comment.id}')">
-                            <i class="fas fa-paper-plane"></i>
-                        </button>
-                    </div>
                     ${hasReplies ? renderFlatReplies(comment.replies, storyId, currentUserId, comment.id, comments, highlightCommentId, isExpanded, storyOwnerId) : ''}
                     ${hasReplies ? `
                         <div class="show-replies-btn" data-comment-id="${comment.id}" onclick="window.toggleRepliesVisibility('${comment.id}')" style="font-size:12px; color:rgba(192,132,252,0.4); cursor:pointer; margin-top:4px;">
@@ -815,6 +810,7 @@ function renderComments(comments, storyId, currentUserId, container, highlightCo
 
 // ============================================================
 // 🔥 RENDER RESPUESTAS (VERSIÓN CORREGIDA - CON data-total-replies)
+// 🔥 ELIMINADOS LOS INPUTS DE RESPUESTA INLINE
 // ============================================================
 
 function renderFlatReplies(replies, storyId, currentUserId, parentCommentId, allComments, highlightCommentId = null, isExpanded = false, storyOwnerId = null) {
@@ -879,15 +875,6 @@ function renderFlatReplies(replies, storyId, currentUserId, parentCommentId, all
                             </button>
                         ` : ''}
                     </div>
-                    <div class="reply-input-container" id="reply-input-${reply.id}" style="display:none;margin-top:6px;">
-                        <input type="text" class="reply-input" id="replyInput-${reply.id}" 
-                               placeholder="Escribe una respuesta..." maxlength="500"
-                               style="flex:1;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);border-radius:12px;padding:6px 12px;font-size:13px;color:#fff;outline:none;" />
-                        <button class="reply-send-btn" onclick="window.handleReplySubmit('${storyId}', '${reply.id}')"
-                                style="background:rgba(192,132,252,0.15);border:1px solid rgba(192,132,252,0.2);border-radius:12px;color:#c084fc;padding:6px 14px;font-size:12px;cursor:pointer;transition:all 0.2s;">
-                            <i class="fas fa-paper-plane"></i>
-                        </button>
-                    </div>
                 </div>
             </div>
         `;
@@ -912,25 +899,6 @@ window.handleCommentDelete = async function(storyId, commentId, parentCommentId 
     const success = await deleteComment(storyId, commentId, parentCommentId);
     if (success) {
         updateCommentsUI(storyId);
-    }
-};
-
-window.toggleReplyInput = function(storyId, commentId) {
-    document.querySelectorAll('.reply-input-container').forEach(el => {
-        if (el.id !== `reply-input-${commentId}`) {
-            el.style.display = 'none';
-        }
-    });
-    const container = document.getElementById(`reply-input-${commentId}`);
-    if (container) {
-        const isVisible = container.style.display !== 'none';
-        container.style.display = isVisible ? 'none' : 'flex';
-        container.style.gap = '8px';
-        container.style.alignItems = 'center';
-        if (!isVisible) {
-            const input = document.getElementById(`replyInput-${commentId}`);
-            if (input) input.focus();
-        }
     }
 };
 
@@ -1037,15 +1005,6 @@ function renderRepliesOnly(storyId, commentId, comment) {
                             </button>
                         ` : ''}
                     </div>
-                    <div class="reply-input-container" id="reply-input-${reply.id}" style="display:none;margin-top:6px;">
-                        <input type="text" class="reply-input" id="replyInput-${reply.id}" 
-                               placeholder="Escribe una respuesta..." maxlength="500"
-                               style="flex:1;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);border-radius:12px;padding:6px 12px;font-size:13px;color:#fff;outline:none;" />
-                        <button class="reply-send-btn" onclick="window.handleReplySubmit('${storyId}', '${reply.id}')"
-                                style="background:rgba(192,132,252,0.15);border:1px solid rgba(192,132,252,0.2);border-radius:12px;color:#c084fc;padding:6px 14px;font-size:12px;cursor:pointer;transition:all 0.2s;">
-                            <i class="fas fa-paper-plane"></i>
-                        </button>
-                    </div>
                 </div>
             </div>
         `;
@@ -1122,48 +1081,6 @@ window.toggleRepliesVisibility = function(commentId) {
     
     // RENDERIZAR SOLO LAS RESPUESTAS DE ESTE COMENTARIO
     renderRepliesOnly(storyId, commentId, comment);
-};
-
-// ============================================================
-// 🔥 HANDLE REPLY SUBMIT - VERSIÓN CORREGIDA
-// ============================================================
-
-window.handleReplySubmit = async function(storyId, parentCommentId) {
-    const input = document.getElementById(`replyInput-${parentCommentId}`);
-    if (!input) return;
-    const content = input.value.trim();
-    if (!content) {
-        showToast('Escribe una respuesta', true);
-        return;
-    }
-    const newReply = await addComment(storyId, content, parentCommentId);
-    if (newReply) {
-        input.value = '';
-        const container = document.getElementById(`reply-input-${parentCommentId}`);
-        if (container) container.style.display = 'none';
-        
-        // Asegurar que las respuestas del padre se expandan automáticamente
-        repliesVisibility.set(parentCommentId, true);
-        
-        // Usar withoutReload para preservar el estado
-        updateCommentsUIWithoutReload(storyId);
-        
-        // Asegurar que el contenedor de respuestas esté visible
-        setTimeout(() => {
-            const repliesContainer = document.getElementById(`replies-${parentCommentId}`);
-            if (repliesContainer) {
-                repliesContainer.style.display = 'flex';
-                const btn = document.querySelector(`.show-replies-btn[data-comment-id="${parentCommentId}"]`);
-                if (btn) {
-                    const total = repliesContainer.dataset.totalReplies || '0';
-                    btn.innerHTML = `
-                        <i class="fas fa-chevron-up"></i> 
-                        Ocultar ${total} respuestas
-                    `;
-                }
-            }
-        }, 100);
-    }
 };
 
 // ============================================================

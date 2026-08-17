@@ -5,6 +5,7 @@
 // 🔥 VISOR DE ARCHIVOS INTEGRADO (PDF, imágenes, videos, audio, texto)
 // 🔥 BARRA DE PROGRESO PARA SUBIDA DE ARCHIVOS
 // 🔥 OPTIMIZADO - USA LA FUNCIÓN DE SUBIDA DE story-comments.js
+// 🔥 RESPUESTAS ESTILO TIKTOK - USANDO INPUT PRINCIPAL
 // ============================================================
 
 import {
@@ -17,7 +18,10 @@ import {
     loadComments, initComments, addCommentToCache, addReplyToCache, 
     updateCommentLikes, updateCommentsUIWithoutReload,
     uploadCommentFile, addComment,
-    renderComments
+    renderComments,
+    findCommentById,
+    commentsCache,
+    repliesVisibility
 } from './story-comments.js';
 
 const API_URL = window.location.origin;
@@ -29,6 +33,9 @@ let currentStoryIndex = 0;
 let isNavigating = false;
 let userLanguage = 'es';
 let isTranslating = false;
+
+// 🔥 NUEVO: Estado para respuestas estilo TikTok
+let replyContext = null; // { commentId: string, userName: string }
 
 // Caché de traducciones en memoria
 let translationCache = {};
@@ -663,6 +670,11 @@ export function closeStoryModal() {
     // Limpiar archivo pendiente
     window._pendingCommentFile = null;
 
+    // 🔥 Cancelar respuesta si existe
+    if (replyContext) {
+        cancelReply();
+    }
+
     const video = document.getElementById('storyVideo');
     if (video) {
         video.pause();
@@ -830,6 +842,10 @@ export async function navigateStory(direction) {
         isTranslating = false;
         // Limpiar archivo pendiente al navegar
         window._pendingCommentFile = null;
+        // 🔥 Cancelar respuesta al navegar
+        if (replyContext) {
+            cancelReply();
+        }
         await loadStoryData(newStory.id, true);
     }
     
@@ -930,6 +946,14 @@ function createModalHTML() {
                             <button class="comment-attach-btn" id="commentAttachBtn" style="display:none;" title="Adjuntar archivo">
                                 <i class="fas fa-paperclip"></i>
                             </button>
+                            <!-- 🔥 INDICADOR DE RESPUESTA ESTILO TIKTOK -->
+                            <div class="reply-indicator" id="replyIndicator" style="display:none;">
+                                <span class="reply-to-label">Respondiendo a</span>
+                                <span class="reply-to-name" id="replyToName">Usuario</span>
+                                <button class="reply-cancel-btn" onclick="window.cancelReply()">
+                                    <i class="fas fa-times"></i>
+                                </button>
+                            </div>
                             <input type="text" id="commentInput" placeholder="Escribe un comentario..." maxlength="500" />
                             <button id="sendCommentBtn">Enviar</button>
                         </div>
@@ -1180,6 +1204,96 @@ function setupCommentFileUpload() {
 }
 
 // ============================================================
+// 🔥 FUNCIONES DE RESPUESTA ESTILO TIKTOK
+// ============================================================
+
+/**
+ * Activa el modo de respuesta para un comentario específico
+ */
+window.toggleReplyInput = function(storyId, commentId) {
+    const comments = commentsCache.get(storyId);
+    if (!comments) return;
+    
+    const comment = findCommentById(comments, commentId);
+    if (!comment) return;
+    
+    const userName = comment.fullName || comment.username || 'Usuario';
+    const commentInput = document.getElementById('commentInput');
+    
+    if (!commentInput) return;
+    
+    // 🔥 Si ya estamos respondiendo a este comentario, cancelar
+    if (replyContext && replyContext.commentId === commentId) {
+        cancelReply();
+        return;
+    }
+    
+    // 🔥 Si estamos respondiendo a otro comentario, cancelar primero
+    if (replyContext) {
+        cancelReply();
+    }
+    
+    // 🔥 Establecer contexto de respuesta
+    replyContext = {
+        commentId: commentId,
+        userName: userName
+    };
+    
+    // 🔥 Enfocar el input y mostrar el indicador
+    commentInput.focus();
+    updateReplyIndicator();
+    
+    // 🔥 Actualizar el placeholder
+    commentInput.placeholder = `Respondiendo a @${userName}...`;
+    commentInput.style.borderColor = 'rgba(192, 132, 252, 0.3)';
+    commentInput.style.boxShadow = '0 0 0 2px rgba(192, 132, 252, 0.05)';
+    
+    // 🔥 Scroll al input
+    commentInput.scrollIntoView({ behavior: 'smooth', block: 'center' });
+};
+
+/**
+ * Cancela el modo de respuesta actual
+ */
+function cancelReply() {
+    replyContext = null;
+    const commentInput = document.getElementById('commentInput');
+    if (commentInput) {
+        commentInput.placeholder = 'Escribe un comentario...';
+        commentInput.style.borderColor = '';
+        commentInput.style.boxShadow = '';
+        commentInput.focus();
+    }
+    updateReplyIndicator();
+}
+
+// Exponer cancelReply globalmente
+window.cancelReply = cancelReply;
+
+/**
+ * Actualiza el indicador de respuesta en el input
+ */
+function updateReplyIndicator() {
+    const indicator = document.getElementById('replyIndicator');
+    if (!indicator) return;
+    
+    if (replyContext) {
+        indicator.style.display = 'flex';
+        const nameEl = document.getElementById('replyToName');
+        if (nameEl) {
+            nameEl.textContent = replyContext.userName;
+        }
+        // Animación de entrada
+        indicator.style.animation = 'none';
+        requestAnimationFrame(() => {
+            indicator.style.animation = 'replyIndicatorIn 0.3s ease';
+        });
+    } else {
+        indicator.style.display = 'none';
+    }
+}
+
+// ============================================================
 // ELIMINAR HISTORIA
 // ============================================================
 
@@ -1225,6 +1339,7 @@ async function handleDeleteStory() {
                         if (nextStory) {
                             currentStoryIndex = nextIndex;
                             isTranslating = false;
+                            if (replyContext) cancelReply();
                             await loadStoryData(nextStory.id, true);
                             return;
                         }
@@ -1244,7 +1359,7 @@ async function handleDeleteStory() {
 }
 
 // ============================================================
-// ENVIAR COMENTARIO (CON SOPORTE PARA ARCHIVO)
+// 🔥 ENVIAR COMENTARIO (CON SOPORTE PARA RESPUESTAS ESTILO TIKTOK)
 // ============================================================
 
 async function handleSendComment() {
@@ -1279,11 +1394,22 @@ async function handleSendComment() {
     }
 
     try {
-        const newComment = await addComment(currentStoryId, content, null, fileData);
+        // 🔥 Si hay contexto de respuesta, usar parentCommentId
+        const parentCommentId = replyContext ? replyContext.commentId : null;
+        const newComment = await addComment(currentStoryId, content, parentCommentId, fileData);
         
         if (newComment) {
             input.value = '';
             window._pendingCommentFile = null;
+            
+            // 🔥 Guardar el ID del comentario padre para expandir después
+            const repliedToId = parentCommentId;
+            
+            // 🔥 Cancelar respuesta si existía
+            if (replyContext) {
+                cancelReply();
+            }
+            
             input.placeholder = 'Escribe un comentario...';
             input.style.borderColor = '';
             input.style.boxShadow = '';
@@ -1295,77 +1421,31 @@ async function handleSendComment() {
             if (container) {
                 renderComments(comments, currentStoryId, currentUser?.id, container);
             }
+            
+            // 🔥 Si era una respuesta, asegurar que las respuestas se expandan
+            if (repliedToId) {
+                repliesVisibility.set(repliedToId, true);
+                setTimeout(() => {
+                    const repliesContainer = document.getElementById(`replies-${repliedToId}`);
+                    if (repliesContainer) {
+                        repliesContainer.style.display = 'flex';
+                        const btn = document.querySelector(`.show-replies-btn[data-comment-id="${repliedToId}"]`);
+                        if (btn) {
+                            const total = repliesContainer.dataset.totalReplies || '0';
+                            btn.innerHTML = `
+                                <i class="fas fa-chevron-up"></i> 
+                                Ocultar ${total} respuestas
+                            `;
+                        }
+                    }
+                }, 150);
+            }
+            
             showToast(fileData ? '📎 Comentario con archivo adjunto' : '💬 Comentario enviado');
         }
     } catch (error) {
         console.error('Error enviando comentario:', error);
         showToast('Error al enviar comentario', true);
-    } finally {
-        input.disabled = false;
-        if (sendBtn) {
-            sendBtn.disabled = false;
-            sendBtn.textContent = 'Enviar';
-        }
-        input.focus();
-    }
-}
-
-// ============================================================
-// ENVIAR RESPUESTA
-// ============================================================
-
-async function handleSendReply(storyId, commentId) {
-    const wrapper = document.getElementById(`reply-input-${commentId}`);
-    if (!wrapper) return;
-
-    const input = wrapper.querySelector('.reply-input');
-    if (!input) return;
-
-    const content = input.value.trim();
-    if (!content) {
-        showToast('Escribe una respuesta', true);
-        return;
-    }
-
-    const token = getToken();
-    if (!token) {
-        showToast('Inicia sesión para responder', true);
-        return;
-    }
-
-    const sendBtn = wrapper.querySelector('.reply-send-btn');
-    
-    input.disabled = true;
-    if (sendBtn) {
-        sendBtn.disabled = true;
-        sendBtn.textContent = 'Enviando...';
-    }
-
-    try {
-        const res = await fetch(`${API_URL}/api/stories/${storyId}/comments/${commentId}/replies`, {
-            method: 'POST',
-            headers: {
-                'Authorization': `Bearer ${token}`,
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({ content })
-        });
-
-        const data = await res.json();
-
-        if (res.ok) {
-            input.value = '';
-            wrapper.style.display = 'none';
-            updateCommentCount(1);
-            addReplyToCache(storyId, commentId, data);
-            updateCommentsUIWithoutReload(storyId);
-            showToast('💬 Respuesta enviada');
-        } else {
-            showToast(data.error || 'Error al enviar respuesta', true);
-        }
-    } catch (error) {
-        console.error('Error enviando respuesta:', error);
-        showToast('Error al enviar respuesta', true);
     } finally {
         input.disabled = false;
         if (sendBtn) {
@@ -2239,7 +2319,8 @@ loadTranslationsFromStorage();
 window.openStoryModal = openStoryModal;
 window.closeStoryModal = closeStoryModal;
 window.navigateStory = navigateStory;
-window.handleSendReply = handleSendReply;
+window.toggleReplyInput = window.toggleReplyInput;
+window.cancelReply = cancelReply;
 window.handleSendComment = handleSendComment;
 window.openFileViewer = openFileViewer;
 window.downloadFile = downloadFile;
@@ -2285,5 +2366,7 @@ export {
     handleSurveyVote,
     renderSurveyInModal,
     setupCommentFileUpload,
-    openFileViewer
+    openFileViewer,
+    cancelReply,
+    updateReplyIndicator
 };
