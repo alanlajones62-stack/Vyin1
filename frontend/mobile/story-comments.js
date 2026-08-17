@@ -6,7 +6,7 @@
 // 🔥 SOPORTE PARA SUBIR ARCHIVOS (SOLO DUEÑO DE HISTORIA)
 // 🔥 VISOR DE ARCHIVOS INTEGRADO (PDF, imágenes, videos, audio, texto)
 // 🔥 SUBIDA CON BARRA DE PROGRESO
-// 🔥 RESPUESTAS ESTILO TIKTOK - USANDO INPUT PRINCIPAL
+// 🔥 RESPUESTAS ESTILO TIKTOK - USANDO INPUT PRINCIPAL (story-modal.js)
 // ============================================================
 
 import { getToken, getCurrentUser, showToast, getAvatar, formatDate, escapeHtml } from './auth.js';
@@ -1081,6 +1081,25 @@ window.toggleRepliesVisibility = function(commentId) {
     
     // RENDERIZAR SOLO LAS RESPUESTAS DE ESTE COMENTARIO
     renderRepliesOnly(storyId, commentId, comment);
+};
+
+// ============================================================
+// 🔥 toggleReplyInput - PUENTE A story-modal.js
+// ============================================================
+
+window.toggleReplyInput = function(storyId, commentId) {
+    // Delegar a story-modal.js si está disponible
+    if (typeof window._toggleReplyInputFromModal === 'function') {
+        window._toggleReplyInputFromModal(storyId, commentId);
+        return;
+    }
+    
+    // Fallback: ocultar inputs inline (por si acaso)
+    document.querySelectorAll('.reply-input-container').forEach(el => {
+        el.style.display = 'none';
+    });
+    
+    showToast('💬 Usa el input principal para responder');
 };
 
 // ============================================================

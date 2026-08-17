@@ -5,7 +5,7 @@
 // 🔥 VISOR DE ARCHIVOS INTEGRADO (PDF, imágenes, videos, audio, texto)
 // 🔥 BARRA DE PROGRESO PARA SUBIDA DE ARCHIVOS
 // 🔥 OPTIMIZADO - USA LA FUNCIÓN DE SUBIDA DE story-comments.js
-// 🔥 RESPUESTAS ESTILO TIKTOK - USANDO INPUT PRINCIPAL
+// 🔥 RESPUESTAS ESTILO TIKTOK - BADGE DENTRO DEL INPUT
 // ============================================================
 
 import {
@@ -34,8 +34,8 @@ let isNavigating = false;
 let userLanguage = 'es';
 let isTranslating = false;
 
-// 🔥 NUEVO: Estado para respuestas estilo TikTok
-let replyContext = null; // { commentId: string, userName: string }
+// 🔥 NUEVO: Estado para respuestas estilo TikTok (solo ID)
+let replyContext = null; // { commentId: string }
 
 // Caché de traducciones en memoria
 let translationCache = {};
@@ -768,6 +768,7 @@ export function closeStoryModal() {
         commentInput.value = '';
         commentInput.disabled = false;
         commentInput.placeholder = 'Escribe un comentario...';
+        commentInput.style.paddingLeft = '16px';
         commentInput.style.borderColor = '';
         commentInput.style.boxShadow = '';
     }
@@ -946,15 +947,14 @@ function createModalHTML() {
                             <button class="comment-attach-btn" id="commentAttachBtn" style="display:none;" title="Adjuntar archivo">
                                 <i class="fas fa-paperclip"></i>
                             </button>
-                            <!-- 🔥 INDICADOR DE RESPUESTA ESTILO TIKTOK -->
-                            <div class="reply-indicator" id="replyIndicator" style="display:none;">
-                                <span class="reply-to-label">Respondiendo a</span>
-                                <span class="reply-to-name" id="replyToName">Usuario</span>
-                                <button class="reply-cancel-btn" onclick="window.cancelReply()">
-                                    <i class="fas fa-times"></i>
-                                </button>
+                            <div class="input-container">
+                                <!-- 🔥 INDICADOR DE RESPUESTA - BADGE DENTRO DEL INPUT -->
+                                <span class="reply-indicator" id="replyIndicator" style="display:none;">
+                                    <i class="fas fa-reply"></i>
+                                    Respondiendo
+                                </span>
+                                <input type="text" id="commentInput" placeholder="Escribe un comentario..." maxlength="500" />
                             </div>
-                            <input type="text" id="commentInput" placeholder="Escribe un comentario..." maxlength="500" />
                             <button id="sendCommentBtn">Enviar</button>
                         </div>
                     </div>
@@ -1060,6 +1060,11 @@ function setupModalEvents() {
             if (e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault();
                 handleSendComment();
+            }
+            // 🔥 Backspace para cancelar respuesta
+            if (e.key === 'Backspace' && replyContext && this.value === '') {
+                e.preventDefault();
+                cancelReply();
             }
         });
     }
@@ -1204,7 +1209,7 @@ function setupCommentFileUpload() {
 }
 
 // ============================================================
-// 🔥 FUNCIONES DE RESPUESTA ESTILO TIKTOK
+// 🔥 FUNCIONES DE RESPUESTA ESTILO TIKTOK - BADGE EN INPUT
 // ============================================================
 
 /**
@@ -1217,9 +1222,7 @@ window.toggleReplyInput = function(storyId, commentId) {
     const comment = findCommentById(comments, commentId);
     if (!comment) return;
     
-    const userName = comment.fullName || comment.username || 'Usuario';
     const commentInput = document.getElementById('commentInput');
-    
     if (!commentInput) return;
     
     // 🔥 Si ya estamos respondiendo a este comentario, cancelar
@@ -1233,20 +1236,14 @@ window.toggleReplyInput = function(storyId, commentId) {
         cancelReply();
     }
     
-    // 🔥 Establecer contexto de respuesta
+    // 🔥 Establecer contexto de respuesta (solo ID, sin nombre)
     replyContext = {
-        commentId: commentId,
-        userName: userName
+        commentId: commentId
     };
     
     // 🔥 Enfocar el input y mostrar el indicador
     commentInput.focus();
     updateReplyIndicator();
-    
-    // 🔥 Actualizar el placeholder
-    commentInput.placeholder = `Respondiendo a @${userName}...`;
-    commentInput.style.borderColor = 'rgba(192, 132, 252, 0.3)';
-    commentInput.style.boxShadow = '0 0 0 2px rgba(192, 132, 252, 0.05)';
     
     // 🔥 Scroll al input
     commentInput.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -1259,9 +1256,6 @@ function cancelReply() {
     replyContext = null;
     const commentInput = document.getElementById('commentInput');
     if (commentInput) {
-        commentInput.placeholder = 'Escribe un comentario...';
-        commentInput.style.borderColor = '';
-        commentInput.style.boxShadow = '';
         commentInput.focus();
     }
     updateReplyIndicator();
@@ -1271,25 +1265,29 @@ function cancelReply() {
 window.cancelReply = cancelReply;
 
 /**
- * Actualiza el indicador de respuesta en el input
+ * Actualiza el indicador de respuesta en el input (badge dentro del input)
  */
 function updateReplyIndicator() {
     const indicator = document.getElementById('replyIndicator');
+    const input = document.getElementById('commentInput');
     if (!indicator) return;
     
     if (replyContext) {
         indicator.style.display = 'flex';
-        const nameEl = document.getElementById('replyToName');
-        if (nameEl) {
-            nameEl.textContent = replyContext.userName;
-        }
         // Animación de entrada
         indicator.style.animation = 'none';
         requestAnimationFrame(() => {
             indicator.style.animation = 'replyIndicatorIn 0.3s ease';
         });
+        // Añadir padding al input para el indicador
+        if (input) {
+            input.style.paddingLeft = '95px';
+        }
     } else {
         indicator.style.display = 'none';
+        if (input) {
+            input.style.paddingLeft = '16px';
+        }
     }
 }
 
@@ -1411,6 +1409,7 @@ async function handleSendComment() {
             }
             
             input.placeholder = 'Escribe un comentario...';
+            input.style.paddingLeft = '16px';
             input.style.borderColor = '';
             input.style.boxShadow = '';
             updateCommentCount(1);
