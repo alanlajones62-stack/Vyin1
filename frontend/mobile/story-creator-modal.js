@@ -5,6 +5,10 @@
 // 🔥 MEJORADO: Calidad de cámara, zoom, flash
 // 🔥 NUEVO: Soporte para encuestas (survey-modal superpuesto)
 // 🔥 CORREGIDO: Flujo de texto (editar en lugar de volver a cámara)
+// 🔥 CORREGIDO: Zoom estable sin bugs al cambiar de modo
+// 🔥 CORREGIDO: Zoom oculto en modos texto/encuesta
+// 🔥 MEJORADO: UI profesional con animaciones suaves
+// 🔥 ELIMINADO: Paleta de colores (innecesaria para historias de texto)
 // ============================================================
 
 import { getToken, getCurrentUser, showToast } from './auth.js';
@@ -30,8 +34,6 @@ let recordedChunks = [];
 let timerInterval = null;
 let recordingSeconds = 0;
 let processedVideoData = null;
-let selectedTextBg = '#1a1a2e';
-let captureMode = 'video';
 let isPublishing = false;
 let currentStep = 'camera';
 let audioStreamForRecording = null;
@@ -40,19 +42,11 @@ let zoomLevel = 1;
 let flashEnabled = false;
 let torchSupported = false;
 let savedTextContent = '';
+let isZoomActive = false;
+let zoomTimeout = null;
 
-// ============================================================
-// PALETA DE COLORES
-// ============================================================
-
-const COLOR_PALETTE = [
-    '#1a1a2e', '#2d1b4e', '#4a1942', '#1a3a4a', 
-    '#0a0a0a', '#2d2d2d', '#1a2a3a', '#3d1a3a',
-    '#1a3a2a', '#3a2a1a', '#4a2a4a', '#2a1a3a',
-    '#1a2a2a', '#3a1a2a', '#2a3a1a', '#1a1a3a',
-    '#4a1a1a', '#1a4a3a'
-];
-
+// 🔥🔥🔥 AGREGAR ESTA LÍNEA 🔥🔥🔥
+let captureMode = 'video';
 // ============================================================
 // FUNCIÓN SEGURA
 // ============================================================
@@ -160,6 +154,7 @@ export async function openCreator() {
     zoomLevel = 1;
     flashEnabled = false;
     savedTextContent = '';
+    isZoomActive = false;
 
     const overlay = safeGetElement('creatorOverlay');
     if (!overlay) createCreatorHTML();
@@ -200,6 +195,11 @@ export function closeCreator() {
         localeUnsubscribe();
         localeUnsubscribe = null;
     }
+    
+    if (zoomTimeout) {
+        clearTimeout(zoomTimeout);
+        zoomTimeout = null;
+    }
 }
 
 // ============================================================
@@ -216,6 +216,12 @@ function resetCreatorState() {
     zoomLevel = 1;
     flashEnabled = false;
     savedTextContent = '';
+    isZoomActive = false;
+
+    if (zoomTimeout) {
+        clearTimeout(zoomTimeout);
+        zoomTimeout = null;
+    }
 
     const preview = safeGetElement('creatorPreview');
     if (preview) {
@@ -251,10 +257,20 @@ function resetCreatorState() {
         flashBtn.classList.remove('active');
         flashBtn.innerHTML = '<i class="fas fa-bolt"></i>';
     }
+
+    const zoomIndicator = safeGetElement('zoomIndicator');
+    if (zoomIndicator) {
+        zoomIndicator.style.display = 'none';
+    }
+    
+    const flashBtnEl = safeGetElement('flashBtn');
+    if (flashBtnEl) {
+        flashBtnEl.style.display = torchSupported ? 'flex' : 'none';
+    }
 }
 
 // ============================================================
-// CREAR HTML - DISEÑO MEJORADO SIN DUPLICACIÓN
+// CREAR HTML - DISEÑO MEJORADO SIN PALETA DE COLORES
 // ============================================================
 
 function createCreatorHTML() {
@@ -311,6 +327,7 @@ function createCreatorHTML() {
 
             <!-- ZOOM INDICATOR -->
             <div class="zoom-indicator" id="zoomIndicator">
+                <span class="zoom-icon"><i class="fas fa-search-plus"></i></span>
                 <span id="zoomLevel">1.0x</span>
             </div>
 
@@ -355,16 +372,6 @@ function createCreatorHTML() {
                 <button class="subtitles-close" onclick="window.closeSubtitlesStatus()">
                     <i class="fas fa-times"></i>
                 </button>
-            </div>
-
-            <!-- TEXT TOOLS -->
-            <div class="text-tools" id="textTools">
-                <div class="text-tools-scroll">
-                    ${COLOR_PALETTE.map(color => `
-                        <button class="btn-bg ${color === selectedTextBg ? 'active' : ''}" 
-                                data-color="${color}" style="background:${color};"></button>
-                    `).join('')}
-                </div>
             </div>
 
             <!-- TEXT EDITOR -->
@@ -470,14 +477,14 @@ function setupCreatorEvents() {
 
     const preview = safeGetElement('creatorPreview');
     preview?.addEventListener('touchmove', (e) => {
-        if (e.touches.length === 2 && cameraStream && !mediaType) {
+        if (e.touches.length === 2 && cameraStream && !mediaType && currentStep === 'camera') {
             e.preventDefault();
             handlePinchZoom(e);
         }
     }, { passive: false });
 
     preview?.addEventListener('dblclick', () => {
-        if (cameraStream && !mediaType) resetZoom();
+        if (cameraStream && !mediaType && currentStep === 'camera') resetZoom();
     });
 
     const captionInput = safeGetElement('creatorCaption');
@@ -496,18 +503,6 @@ function setupCreatorEvents() {
         }
     });
 
-    document.querySelectorAll('.btn-bg').forEach(btn => {
-        btn.addEventListener('click', () => {
-            document.querySelectorAll('.btn-bg').forEach(b => b.classList.remove('active'));
-            btn.classList.add('active');
-            selectedTextBg = btn.dataset.color;
-            const preview = safeGetElement('creatorPreview');
-            if (preview) preview.style.background = selectedTextBg;
-            const textarea = safeGetElement('textContent');
-            if (textarea) textarea.style.background = selectedTextBg;
-        });
-    });
-
     document.addEventListener('keydown', (e) => {
         if (e.key === 'Escape' && isCreatorOpen) closeCreator();
     });
@@ -523,11 +518,13 @@ window.openSurveyModeFromCreator = function() {
         return;
     }
     
-    // 🔥 ABRIR MODAL DE ENCUESTA SUPERPUESTO
+    const zoomIndicator = safeGetElement('zoomIndicator');
+    if (zoomIndicator) {
+        zoomIndicator.style.display = 'none';
+    }
+    
     openSurveyModal(() => {
-        // Callback cuando se publique
         console.log('📊 Encuesta publicada');
-        // Cerrar el creator también
         closeCreator();
     });
 };
@@ -545,13 +542,16 @@ function updateQualityIndicator() {
 }
 
 // ============================================================
-// 🔥 MANEJAR ZOOM CON PINCH
+// 🔥 MANEJAR ZOOM CON PINCH - CORREGIDO
 // ============================================================
 
 let initialPinchDistance = 0;
 let initialZoom = 1;
+let pinchTimeout = null;
 
 function handlePinchZoom(e) {
+    if (mediaType || currentStep !== 'camera') return;
+    
     const touch1 = e.touches[0];
     const touch2 = e.touches[1];
     
@@ -569,12 +569,18 @@ function handlePinchZoom(e) {
     let newZoom = initialZoom * scale;
     newZoom = Math.max(1, Math.min(6, newZoom));
     applyZoom(newZoom);
+    
+    const zoomIndicator = safeGetElement('zoomIndicator');
+    if (zoomIndicator && newZoom > 1.05) {
+        zoomIndicator.style.display = 'flex';
+        isZoomActive = true;
+    }
 }
 
 function applyZoom(level) {
     zoomLevel = Math.round(level * 10) / 10;
     
-    if (cameraStream) {
+    if (cameraStream && currentStep === 'camera' && !mediaType) {
         const track = cameraStream.getVideoTracks()[0];
         if (track && track.getCapabilities && track.getCapabilities().zoom) {
             const capabilities = track.getCapabilities();
@@ -591,19 +597,41 @@ function applyZoom(level) {
         }
     }
     
-    const zoomIndicator = safeGetElement('zoomLevel');
-    if (zoomIndicator) {
-        zoomIndicator.textContent = `${zoomLevel.toFixed(1)}x`;
+    const zoomLevelEl = safeGetElement('zoomLevel');
+    if (zoomLevelEl) {
+        zoomLevelEl.textContent = `${zoomLevel.toFixed(1)}x`;
     }
     
-    const zoomContainer = safeGetElement('zoomIndicator');
-    if (zoomContainer) {
-        if (zoomLevel > 1) {
-            zoomContainer.style.display = 'flex';
-        } else {
-            setTimeout(() => {
-                if (zoomLevel <= 1) zoomContainer.style.display = 'none';
-            }, 1500);
+    if (zoomTimeout) {
+        clearTimeout(zoomTimeout);
+        zoomTimeout = null;
+    }
+    
+    if (zoomLevel > 1.05) {
+        const zoomIndicator = safeGetElement('zoomIndicator');
+        if (zoomIndicator) {
+            zoomIndicator.style.display = 'flex';
+            isZoomActive = true;
+        }
+        
+        zoomTimeout = setTimeout(() => {
+            const indicator = safeGetElement('zoomIndicator');
+            if (indicator && zoomLevel <= 1.05) {
+                indicator.style.display = 'none';
+                isZoomActive = false;
+            } else if (indicator) {
+                isZoomActive = true;
+            }
+            zoomTimeout = null;
+        }, 2500);
+    } else {
+        const zoomIndicator = safeGetElement('zoomIndicator');
+        if (zoomIndicator) {
+            zoomTimeout = setTimeout(() => {
+                zoomIndicator.style.display = 'none';
+                isZoomActive = false;
+                zoomTimeout = null;
+            }, 500);
         }
     }
 }
@@ -611,6 +639,27 @@ function applyZoom(level) {
 function resetZoom() {
     applyZoom(1);
     initialPinchDistance = 0;
+    const zoomIndicator = safeGetElement('zoomIndicator');
+    if (zoomIndicator) {
+        zoomIndicator.style.display = 'none';
+        isZoomActive = false;
+    }
+    if (zoomTimeout) {
+        clearTimeout(zoomTimeout);
+        zoomTimeout = null;
+    }
+}
+
+function hideZoomIndicator() {
+    const zoomIndicator = safeGetElement('zoomIndicator');
+    if (zoomIndicator) {
+        zoomIndicator.style.display = 'none';
+        isZoomActive = false;
+    }
+    if (zoomTimeout) {
+        clearTimeout(zoomTimeout);
+        zoomTimeout = null;
+    }
 }
 
 // ============================================================
@@ -618,7 +667,7 @@ function resetZoom() {
 // ============================================================
 
 async function toggleFlash() {
-    if (!cameraStream) {
+    if (!cameraStream || currentStep !== 'camera') {
         showToast(t('story.noCamera') || 'No hay cámara activa', true);
         return;
     }
@@ -692,7 +741,6 @@ async function startCamera() {
         preview.appendChild(video);
         cameraVideo = video;
 
-        // 🔥 MEJORAR CALIDAD DE CÁMARA
         const constraints = {
             video: { 
                 facingMode: facingMode,
@@ -703,7 +751,6 @@ async function startCamera() {
             }
         };
 
-        // 🔥 INTENTAR CON CALIDAD MÁS ALTA
         try {
             const stream = await navigator.mediaDevices.getUserMedia({
                 video: {
@@ -743,7 +790,6 @@ async function startCamera() {
             };
         });
 
-        // 🔥 Verificar soporte de flash
         const track = cameraStream.getVideoTracks()[0];
         if (track) {
             const capabilities = track.getCapabilities();
@@ -754,7 +800,6 @@ async function startCamera() {
             }
         }
 
-        // 🔥 Verificar soporte de zoom
         if (track) {
             const capabilities = track.getCapabilities();
             if (!capabilities.zoom) {
@@ -776,6 +821,7 @@ async function startCamera() {
         });
 
         updateQualityIndicator();
+        resetZoom();
 
     } catch (error) {
         console.error('Error al acceder a la cámara:', error);
@@ -803,6 +849,7 @@ function showCamera() {
         preview.innerHTML = '';
         preview.style.background = '#000';
     }
+    resetZoom();
     startCamera();
 }
 
@@ -811,7 +858,7 @@ function showCamera() {
 // ============================================================
 
 async function flipCamera() {
-    if (!cameraStream) {
+    if (!cameraStream || currentStep !== 'camera') {
         showToast(t('story.noCamera') || 'No hay cámara activa', true);
         return;
     }
@@ -833,7 +880,7 @@ async function flipCamera() {
 // ============================================================
 
 function capturePhoto() {
-    if (!cameraVideo || isRecording) return;
+    if (!cameraVideo || isRecording || currentStep !== 'camera') return;
 
     const video = cameraVideo;
     const canvas = document.createElement('canvas');
@@ -867,6 +914,7 @@ function capturePhoto() {
                 if (img) img.style.transform = 'scaleX(1)';
             }
 
+            hideZoomIndicator();
             showPreviewActions();
             stopCamera();
         }
@@ -878,7 +926,7 @@ function capturePhoto() {
 // ============================================================
 
 function startRecording() {
-    if (!cameraStream) {
+    if (!cameraStream || currentStep !== 'camera') {
         showToast(t('story.waitCamera') || 'Espera a que la cámara se active', true);
         return;
     }
@@ -1051,6 +1099,8 @@ function showPreviewActions() {
     
     const flashBtn = safeGetElement('flashBtn');
     if (flashBtn) flashBtn.style.display = 'none';
+    
+    hideZoomIndicator();
 }
 
 // ============================================================
@@ -1065,25 +1115,20 @@ window.retakeMedia = function() {
     currentStep = 'camera';
     zoomLevel = 1;
     
-    // 🔥 SI ES TEXTO, VOLVER AL EDITOR DE TEXTO
     if (savedTextContent && mediaType === 'text') {
         const textarea = safeGetElement('textContent');
         if (textarea) {
             textarea.value = savedTextContent;
-            textarea.style.background = selectedTextBg;
             setTimeout(() => textarea.focus(), 100);
         }
         
         const editor = safeGetElement('textEditorContainer');
         if (editor) editor.style.display = 'flex';
         
-        const textTools = safeGetElement('textTools');
-        if (textTools) textTools.style.display = 'flex';
-        
         const preview = safeGetElement('creatorPreview');
         if (preview) {
             preview.innerHTML = '';
-            preview.style.background = selectedTextBg;
+            preview.style.background = '#1a1a2e';
         }
         
         const inputArea = safeGetElement('inputArea');
@@ -1106,11 +1151,12 @@ window.retakeMedia = function() {
         const textBtn = document.querySelector('.mode-btn[data-mode="text"]');
         if (textBtn) textBtn.classList.add('active');
         
+        hideZoomIndicator();
+        
         return;
     }
     
-    // 🔥 PARA IMAGEN/VIDEO: VOLVER A CÁMARA
-    ['captureActions', 'previewActions', 'inputArea', 'subtitlesStatus', 'textTools', 'textEditorContainer'].forEach(id => {
+    ['captureActions', 'previewActions', 'inputArea', 'subtitlesStatus', 'textEditorContainer'].forEach(id => {
         const el = safeGetElement(id);
         if (el) el.style.display = 'none';
     });
@@ -1144,6 +1190,8 @@ window.retakeMedia = function() {
     }
     
     savedTextContent = '';
+    
+    resetZoom();
     startCamera();
 };
 
@@ -1159,6 +1207,8 @@ window.useMedia = function() {
     
     const subtitlesStatus = safeGetElement('subtitlesStatus');
     if (subtitlesStatus) subtitlesStatus.style.display = 'none';
+    
+    hideZoomIndicator();
 };
 
 // ============================================================
@@ -1178,7 +1228,7 @@ window.createTextStory = function() {
     const preview = safeGetElement('creatorPreview');
     if (preview) {
         preview.innerHTML = '';
-        preview.style.background = selectedTextBg;
+        preview.style.background = '#1a1a2e';
     }
 
     const editor = safeGetElement('textEditorContainer');
@@ -1186,7 +1236,6 @@ window.createTextStory = function() {
         editor.style.display = 'flex';
         if (textarea) {
             if (!savedTextContent) textarea.value = '';
-            textarea.style.background = selectedTextBg;
             setTimeout(() => textarea.focus(), 100);
         }
     }
@@ -1205,9 +1254,6 @@ window.createTextStory = function() {
         publishBtn.disabled = true;
         publishBtn.innerHTML = `<span>${t('action.publish') || 'Publicar'}</span> <i class="fas fa-arrow-right"></i>`;
     }
-
-    const textTools = safeGetElement('textTools');
-    if (textTools) textTools.style.display = 'flex';
     
     ['captureActions', 'inputArea', 'subtitlesStatus', 'previewActions'].forEach(id => {
         const el = safeGetElement(id);
@@ -1224,6 +1270,8 @@ window.createTextStory = function() {
     document.querySelectorAll('.mode-btn').forEach(b => b.classList.remove('active'));
     const textBtn = document.querySelector('.mode-btn[data-mode="text"]');
     if (textBtn) textBtn.classList.add('active');
+    
+    hideZoomIndicator();
 };
 
 // ============================================================
@@ -1248,7 +1296,7 @@ window.confirmText = function() {
     const preview = safeGetElement('creatorPreview');
     if (preview) {
         preview.innerHTML = `
-            <div class="text-preview" style="background:${selectedTextBg};color:#fff;font-size:28px;font-weight:500;display:flex;align-items:center;justify-content:center;padding:40px;text-align:center;width:100%;height:100%;">
+            <div class="text-preview" style="background:#1a1a2e;color:#fff;font-size:28px;font-weight:500;display:flex;align-items:center;justify-content:center;padding:40px;text-align:center;width:100%;height:100%;">
                 ${text}
             </div>
         `;
@@ -1256,9 +1304,6 @@ window.confirmText = function() {
     
     const editor = safeGetElement('textEditorContainer');
     if (editor) editor.style.display = 'none';
-    
-    const textTools = safeGetElement('textTools');
-    if (textTools) textTools.style.display = 'none';
     
     const captureActions = safeGetElement('captureActions');
     if (captureActions) {
@@ -1276,14 +1321,12 @@ window.confirmText = function() {
                 }
                 const editorEl = safeGetElement('textEditorContainer');
                 if (editorEl) editorEl.style.display = 'flex';
-                const textToolsEl = safeGetElement('textTools');
-                if (textToolsEl) textToolsEl.style.display = 'flex';
                 const captureActionsEl = safeGetElement('captureActions');
                 if (captureActionsEl) captureActionsEl.style.display = 'none';
                 const previewEl = safeGetElement('creatorPreview');
                 if (previewEl) {
                     previewEl.innerHTML = '';
-                    previewEl.style.background = selectedTextBg;
+                    previewEl.style.background = '#1a1a2e';
                 }
                 const inputAreaEl = safeGetElement('inputArea');
                 if (inputAreaEl) inputAreaEl.style.display = 'none';
@@ -1325,6 +1368,8 @@ window.confirmText = function() {
         publishBtn.innerHTML = `<span>${t('action.publish') || 'Publicar'}</span> <i class="fas fa-arrow-right"></i>`;
     }
     
+    hideZoomIndicator();
+    
     showToast('✅ ' + (t('story.textReady') || 'Texto listo'));
 };
 
@@ -1335,9 +1380,6 @@ window.backToCamera = function() {
     
     const editor = safeGetElement('textEditorContainer');
     if (editor) editor.style.display = 'none';
-    
-    const textTools = safeGetElement('textTools');
-    if (textTools) textTools.style.display = 'none';
     
     const inputArea = safeGetElement('inputArea');
     if (inputArea) inputArea.style.display = 'none';
@@ -1361,6 +1403,8 @@ window.backToCamera = function() {
     }
     
     mediaType = null;
+    
+    resetZoom();
     startCamera();
 };
 
@@ -1393,6 +1437,7 @@ window.openGallery = function() {
             }
             showPreviewActions();
             stopCamera();
+            hideZoomIndicator();
             showToast('✅ ' + (t('story.imageSelected') || 'Imagen seleccionada'));
         }
         document.body.removeChild(input);
@@ -1419,6 +1464,7 @@ async function handleVideoFile(file) {
 
     showPreviewActions();
     stopCamera();
+    hideZoomIndicator();
 
     const addSubtitles = confirm('🎬 ¿Agregar subtítulos al video?');
     if (addSubtitles) {
@@ -1660,7 +1706,6 @@ window.publishStory = async function() {
             mediaUrl: mediaUrl,
             caption: caption?.value?.trim() || '',
             textContent: textContent || null,
-            textBgColor: selectedTextBg || '#1a1a2e',
             hasSubtitles: hasSubtitles || false,
             subtitles: subtitlesText || null,
             segments: segments || null
@@ -1854,7 +1899,7 @@ function injectStyles() {
         }
 
         /* ============================================================
-           TOP CONTROLS - MEJORADOS
+           TOP CONTROLS
         ============================================================ */
         .top-controls {
             position: absolute;
@@ -1938,7 +1983,7 @@ function injectStyles() {
         }
 
         /* ============================================================
-           MODE SELECTOR - MEJORADO
+           MODE SELECTOR
         ============================================================ */
         .mode-selector {
             position: absolute;
@@ -1988,7 +2033,7 @@ function injectStyles() {
         .mode-selector .mode-btn:active { transform: scale(0.92); }
 
         /* ============================================================
-           BOTONES FLOTANTES - FLIP Y FLASH MEJORADOS
+           BOTONES FLOTANTES
         ============================================================ */
         .btn-flip-camera {
             position: absolute;
@@ -2056,28 +2101,37 @@ function injectStyles() {
         ============================================================ */
         .zoom-indicator {
             position: absolute;
-            top: 168px;
-            right: 20px;
+            bottom: 120px;
+            left: 50%;
+            transform: translateX(-50%);
             z-index: 21;
-            background: rgba(0,0,0,0.7);
+            background: rgba(0,0,0,0.6);
+            backdrop-filter: blur(16px);
             border-radius: 50px;
-            padding: 5px 14px;
-            backdrop-filter: blur(12px);
-            border: 1px solid rgba(255,255,255,0.05);
+            padding: 6px 18px;
+            border: 1px solid rgba(255,255,255,0.06);
             display: none;
             align-items: center;
             justify-content: center;
-            animation: zoomPop 0.3s ease;
+            gap: 8px;
+            animation: zoomPop 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+            box-shadow: 0 4px 24px rgba(0,0,0,0.4);
+            pointer-events: none;
         }
         @keyframes zoomPop {
-            from { opacity: 0; transform: scale(0.8); }
-            to { opacity: 1; transform: scale(1); }
+            from { opacity: 0; transform: translateX(-50%) scale(0.8); }
+            to { opacity: 1; transform: translateX(-50%) scale(1); }
+        }
+        .zoom-indicator .zoom-icon {
+            font-size: 12px;
+            color: rgba(255,255,255,0.3);
         }
         .zoom-indicator span {
-            color: rgba(255,255,255,0.8);
-            font-size: 12px;
+            color: rgba(255,255,255,0.9);
+            font-size: 13px;
             font-weight: 600;
             letter-spacing: 0.3px;
+            font-variant-numeric: tabular-nums;
         }
 
         /* ============================================================
@@ -2124,7 +2178,7 @@ function injectStyles() {
         }
 
         /* ============================================================
-           BOTTOM CONTROLS - MEJORADOS
+           BOTTOM CONTROLS
         ============================================================ */
         .bottom-controls {
             position: absolute;
@@ -2179,7 +2233,7 @@ function injectStyles() {
         }
 
         /* ============================================================
-           BOTÓN CAPTURA - MEJORADO
+           BOTÓN CAPTURA
         ============================================================ */
         .bottom-controls .btn-capture {
             background: none;
@@ -2225,7 +2279,7 @@ function injectStyles() {
         }
 
         /* ============================================================
-           INPUT AREA - DESCRIPCIÓN MEJORADA
+           INPUT AREA
         ============================================================ */
         .input-area {
             position: absolute;
@@ -2287,7 +2341,7 @@ function injectStyles() {
         }
 
         /* ============================================================
-           CAPTURE ACTIONS - MEJORADOS
+           CAPTURE ACTIONS
         ============================================================ */
         .capture-actions {
             position: absolute;
@@ -2362,7 +2416,7 @@ function injectStyles() {
         }
 
         /* ============================================================
-           PREVIEW ACTIONS - MEJORADOS
+           PREVIEW ACTIONS
         ============================================================ */
         .preview-actions {
             position: absolute;
@@ -2420,7 +2474,7 @@ function injectStyles() {
         }
 
         /* ============================================================
-           SUBTITLES STATUS - MEJORADO
+           SUBTITLES STATUS
         ============================================================ */
         .subtitles-status {
             position: absolute;
@@ -2489,51 +2543,7 @@ function injectStyles() {
         }
 
         /* ============================================================
-           TEXT TOOLS - MEJORADOS
-        ============================================================ */
-        .text-tools {
-            position: absolute;
-            bottom: 140px;
-            left: 0;
-            right: 0;
-            z-index: 14;
-            display: none;
-            padding: 12px 20px;
-            background: linear-gradient(0deg, rgba(0,0,0,0.7) 0%, transparent 100%);
-        }
-        .text-tools-scroll {
-            display: flex;
-            gap: 10px;
-            overflow-x: auto;
-            padding: 4px 0;
-            -webkit-overflow-scrolling: touch;
-            justify-content: center;
-            flex-wrap: wrap;
-        }
-        .text-tools-scroll::-webkit-scrollbar { display: none; }
-        .text-tools .btn-bg {
-            min-width: 38px;
-            height: 38px;
-            border-radius: 50%;
-            border: 2px solid rgba(255,255,255,0.06);
-            cursor: pointer;
-            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-            flex-shrink: 0;
-            box-shadow: 0 2px 12px rgba(0,0,0,0.2);
-        }
-        .text-tools .btn-bg:hover {
-            transform: scale(1.1);
-            border-color: rgba(255,255,255,0.2);
-        }
-        .text-tools .btn-bg:active { transform: scale(0.85); }
-        .text-tools .btn-bg.active {
-            border-color: #fff;
-            transform: scale(1.15);
-            box-shadow: 0 0 30px rgba(255,255,255,0.15);
-        }
-
-        /* ============================================================
-           TEXT EDITOR - MEJORADO
+           TEXT EDITOR
         ============================================================ */
         .text-editor-container {
             position: absolute;
@@ -2644,8 +2654,8 @@ function injectStyles() {
             
             .btn-flip-camera { top: 66px; right: 12px; width: 36px; height: 36px; font-size: 14px; }
             .btn-flash { top: 110px; right: 12px; width: 36px; height: 36px; font-size: 14px; }
-            .zoom-indicator { top: 154px; right: 12px; }
-            .zoom-indicator span { font-size: 11px; }
+            .zoom-indicator { bottom: 100px; padding: 4px 14px; }
+            .zoom-indicator span { font-size: 12px; }
             
             .input-area { bottom: 90px; left: 16px; right: 16px; padding: 4px 0; }
             .input-area .input-wrapper input { font-size: 13px; padding: 10px 12px; padding-left: 36px; padding-right: 50px; }
@@ -2660,9 +2670,6 @@ function injectStyles() {
             
             .subtitles-status { bottom: 250px; left: 16px; right: 16px; padding: 10px 14px; gap: 10px; }
             .subtitles-status .subtitles-text span { font-size: 12px; }
-            
-            .text-tools { bottom: 120px; padding: 8px 12px; }
-            .text-tools .btn-bg { min-width: 32px; height: 32px; }
             
             .text-editor-container textarea { font-size: 20px; padding: 10px; }
             .text-editor-tools { bottom: 40px; padding: 0 16px; }
@@ -2691,7 +2698,8 @@ function injectStyles() {
             
             .btn-flip-camera { top: 60px; right: 10px; width: 32px; height: 32px; font-size: 12px; }
             .btn-flash { top: 100px; right: 10px; width: 32px; height: 32px; font-size: 12px; }
-            .zoom-indicator { top: 140px; right: 10px; }
+            .zoom-indicator { bottom: 80px; padding: 4px 12px; }
+            .zoom-indicator span { font-size: 11px; }
             
             .input-area { bottom: 80px; padding: 4px 0; }
             
@@ -2703,7 +2711,6 @@ function injectStyles() {
             .subtitles-status .subtitles-text span { font-size: 11px; }
             
             .text-editor-container textarea { font-size: 18px; height: 50%; }
-            .text-tools { bottom: 110px; }
             .text-editor-tools { bottom: 30px; }
             .recording-indicator { top: 56px; }
             .creator-preview .text-preview { font-size: 18px; padding: 20px; }
@@ -2725,5 +2732,4 @@ function injectStyles() {
     document.head.appendChild(styles);
 }
 
-// Inyectar estilos
 injectStyles();

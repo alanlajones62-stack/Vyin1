@@ -603,5 +603,39 @@
     "country": "EC",
     "region": "south_america",
     "countryName": "Ecuador"
+  },
+  {
+    "id": "1787026494853",
+    "userId": "1783122622538",
+    "mediaType": "text",
+    "mediaUrl": null,
+    "caption": "",
+    "textContent": "xd",
+    "textBgColor": "#1a1a2e",
+    "createdAt": "2026-08-18T04:14:54.853Z",
+    "expiresAt": "2026-08-19T04:14:54.853Z",
+    "views": [
+      "1783122622538"
+    ],
+    "likes": [],
+    "comments": [],
+    "score": 0,
+    "iaClassification": null,
+    "flagged": false,
+    "flagReason": null,
+    "flagConfidence": 0,
+    "hidden": false,
+    "hiddenAt": null,
+    "hiddenReason": null,
+    "hiddenByIA": false,
+    "hasSubtitles": false,
+    "subtitles": null,
+    "segments": null,
+    "language": "es",
+    "embedded": false,
+    "embeddingVersion": null,
+    "country": "EC",
+    "region": "south_america",
+    "countryName": "Ecuador"
   }
 ]

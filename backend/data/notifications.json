@@ -2998,7 +2998,7 @@
       "repliedToUserId": "1783122622538",
       "repliedToName": "Usuario Demo"
     },
-    "read": false,
+    "read": true,
     "translated": false,
     "language": "es",
     "createdAt": "2026-08-17T00:30:12.443Z"
@@ -3026,7 +3026,7 @@
       "repliedToUserId": "1783122622538",
       "repliedToName": "Usuario Demo"
     },
-    "read": false,
+    "read": true,
     "translated": false,
     "language": "es",
     "createdAt": "2026-08-17T00:32:00.214Z"
@@ -3052,7 +3052,7 @@
       "hasFile": false,
       "fileUrl": null
     },
-    "read": false,
+    "read": true,
     "translated": false,
     "language": "es",
     "createdAt": "2026-08-18T02:05:11.291Z"

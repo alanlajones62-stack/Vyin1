@@ -1,6 +1,7 @@
 // ============================================================
 // LOGIN MODULE - Pantalla de login y gestión de sesión
 // CON MODAL DE LOGIN INTEGRADO
+// 🔥 NUEVO: Actualización de contador de notificaciones al hacer login
 // ============================================================
 
 import { 
@@ -612,6 +613,18 @@ async function handleLoginSubmit(e) {
                 }, 1000);
             }
 
+            // 🔥🔥🔥 CARGAR CONTADOR DE NOTIFICACIONES DESPUÉS DEL LOGIN
+            setTimeout(async () => {
+                try {
+                    // Importar dinámicamente la función de activity-modal
+                    const { refreshNotificationCount } = await import('./activity-modal.js');
+                    await refreshNotificationCount();
+                    console.log('🔔 Contador de notificaciones actualizado después del login');
+                } catch (error) {
+                    console.warn('⚠️ Error actualizando contador de notificaciones:', error);
+                }
+            }, 1500);
+
             setTimeout(() => {
                 closeLoginModal();
                 if (typeof onLoginSuccessCallback === 'function') {
@@ -768,6 +781,17 @@ async function checkSessionAndLoad(onSuccess, onFail) {
         if (isValid) {
             const refreshedUser = getCurrentUser();
             console.log(`✅ Sesión válida para: ${refreshedUser?.fullName || refreshedUser?.username}`);
+            
+            // 🔥 CARGAR CONTADOR DE NOTIFICACIONES AL RESTAURAR SESIÓN
+            setTimeout(async () => {
+                try {
+                    const { refreshNotificationCount } = await import('./activity-modal.js');
+                    await refreshNotificationCount();
+                    console.log('🔔 Contador de notificaciones actualizado al restaurar sesión');
+                } catch (error) {
+                    console.warn('⚠️ Error actualizando contador de notificaciones:', error);
+                }
+            }, 1500);
             
             setTimeout(() => {
                 preloadCurrentUserProfile();

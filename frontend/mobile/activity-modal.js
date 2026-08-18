@@ -2,6 +2,7 @@
 // activity-modal.js - VERSIÓN COMPLETA CON SUPERPOSICIÓN Y FILTRADO DE COMENTARIOS
 // 🔥 INTEGRADO CON i18n PARA TRADUCCIÓN DE INTERFAZ
 // 🔥 CORREGIDO: Eliminación de notificaciones
+// 🔥 NUEVO: refreshNotificationCount() para actualizar contador desde fuera
 // ============================================================
 
 import { getToken, getCurrentUser, showToast, getAvatar } from './auth.js';
@@ -235,6 +236,7 @@ function initActivitySocket() {
             } else {
                 unreadCount++;
                 updateBadge();
+                refreshNotificationCount();
             }
         });
         
@@ -246,6 +248,7 @@ function initActivitySocket() {
                 }
             });
             updateBadge();
+            refreshNotificationCount();
         });
         
         socket.on('all_notifications_read', () => {
@@ -254,6 +257,7 @@ function initActivitySocket() {
             });
             unreadCount = 0;
             updateBadge();
+            refreshNotificationCount();
         });
         
         socket.on('notification_deleted', (data) => {
@@ -262,6 +266,7 @@ function initActivitySocket() {
                 item.remove();
                 notifications = notifications.filter(n => n.id !== data.notificationId);
                 updateBadge();
+                refreshNotificationCount();
                 
                 // Verificar si ya no hay notificaciones
                 if (notifications.length === 0) {
@@ -295,7 +300,74 @@ function initActivitySocket() {
                 setTimeout(translateActivityUI, 100);
             }
             updateBadge();
+            refreshNotificationCount();
         });
+        
+        socket.on('notification_count_updated', (data) => {
+            console.log(`🔔 Contador actualizado vía socket: ${data.unreadCount}`);
+            unreadCount = data.unreadCount || 0;
+            updateBadge();
+        });
+    }
+}
+
+// ============================================================
+// 🔥 ACTUALIZAR CONTADOR DESDE FUERA
+// ============================================================
+
+async function refreshNotificationCount() {
+    const token = getToken();
+    if (!token) {
+        console.log('🔒 Sin token, no se puede actualizar contador');
+        return;
+    }
+
+    try {
+        const res = await fetch(`${API_URL}/api/notifications/unread-count`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+
+        if (res.ok) {
+            const data = await res.json();
+            unreadCount = data.unreadCount || 0;
+            
+            // Actualizar badge en navegación
+            const navBadge = document.getElementById('navNotifBadge');
+            if (navBadge) {
+                if (unreadCount > 0) {
+                    navBadge.style.display = 'flex';
+                    navBadge.textContent = unreadCount > 99 ? '99+' : unreadCount;
+                } else {
+                    navBadge.style.display = 'none';
+                }
+            }
+            
+            // Actualizar badge del header (si existe)
+            const headerBadge = document.querySelector('.icon-btn .badge');
+            if (headerBadge) {
+                if (unreadCount > 0) {
+                    headerBadge.style.display = 'flex';
+                    headerBadge.textContent = unreadCount > 99 ? '99+' : unreadCount;
+                } else {
+                    headerBadge.style.display = 'none';
+                }
+            }
+            
+            // Actualizar badge interno
+            const badge = document.getElementById('notifBadge');
+            if (badge) {
+                if (unreadCount > 0) {
+                    badge.style.display = 'flex';
+                    badge.textContent = unreadCount > 99 ? '99+' : unreadCount;
+                } else {
+                    badge.style.display = 'none';
+                }
+            }
+            
+            console.log(`🔔 Contador actualizado: ${unreadCount} notificaciones no leídas`);
+        }
+    } catch (error) {
+        console.warn('⚠️ Error actualizando contador de notificaciones:', error);
     }
 }
 
@@ -307,6 +379,7 @@ function openActivityModal() {
     if (!activityOverlay) createActivityModal();
     
     isOpen = true;
+    window._activityModalOpen = true;
     activityOverlay.classList.add('active');
     document.body.style.overflow = 'hidden';
     
@@ -318,6 +391,7 @@ function openActivityModal() {
 
 function closeActivityModal() {
     isOpen = false;
+    window._activityModalOpen = false;
     if (activityOverlay) {
         activityOverlay.classList.remove('active');
         document.body.style.overflow = '';
@@ -366,6 +440,7 @@ async function loadActivityData() {
             unreadCount = data.unreadCount || 0;
             renderActivity(body);
             updateBadge();
+            refreshNotificationCount();
             // Traducir después de renderizar
             setTimeout(translateActivityUI, 100);
         } else {
@@ -404,6 +479,7 @@ async function markNotificationRead(notificationId) {
                 notif.read = true;
                 unreadCount = Math.max(0, unreadCount - 1);
                 updateBadge();
+                refreshNotificationCount();
                 
                 // Actualizar UI
                 const item = document.querySelector(`.activity-item[data-id="${notificationId}"]`);
@@ -698,6 +774,7 @@ async function deleteSingleNotification(notificationId) {
             
             // Actualizar contador
             updateBadge();
+            refreshNotificationCount();
             showToast('🗑️ ' + (data.message || t('notif.deleted') || 'Notificación eliminada'));
         } else {
             showToast(data.error || t('error.general') || 'Error al eliminar', true);
@@ -756,6 +833,7 @@ async function markAllRead() {
             unreadCount = 0;
             
             updateBadge();
+            refreshNotificationCount();
             showToast('✅ ' + (data.message || t('notif.allMarkedRead') || 'Todas las notificaciones marcadas como leídas'));
         } else {
             showToast(data.error || t('error.general') || 'Error', true);
@@ -827,6 +905,7 @@ async function clearAllActivity() {
             }
             
             updateBadge();
+            refreshNotificationCount();
             showToast('🗑️ ' + (data.message || t('notif.allCleared') || 'Todas las notificaciones eliminadas'));
         } else {
             showToast(data.error || t('error.general') || 'Error al eliminar notificaciones', true);
@@ -996,5 +1075,6 @@ export {
     updateBadge,
     markNotificationRead,
     translateActivityUI,
-    initI18nForActivity
+    initI18nForActivity,
+    refreshNotificationCount  // 🔥 NUEVO: Exportar para uso externo
 };

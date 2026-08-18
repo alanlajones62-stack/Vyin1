@@ -1,6 +1,7 @@
 // app.js - VERSIÓN COMPLETA CON FILTRO PUBLICIDAD, LOGIN MODULAR, PREFERENCIAS Y TRADUCCIÓN (i18n)
 // 🔥 CORREGIDO: Race condition en registro de vistas (debounce + pending views)
 // 🔥 NUEVO: Integración con IndexedDB para caché de feed e historias individuales
+// 🔥 NUEVO: Contador de notificaciones en tiempo real al iniciar sesión
 // ============================================================
 
 import {
@@ -26,7 +27,7 @@ import { openProfileModal, closeProfileModal, preloadCurrentUserProfile } from '
 import { openEditProfileModal, closeEditProfileModal } from './edit-profile-modal.js';
 import { openCreator, closeCreator } from './story-creator-modal.js';
 import { openExploreModal, closeExploreModal } from './explore-modal.js';
-import { openActivityModal, closeActivityModal, updateBadge } from './activity-modal.js';
+import { openActivityModal, closeActivityModal, updateBadge, refreshNotificationCount } from './activity-modal.js';
 
 // 🔥 IMPORTAR CREADOR DE PUBLICIDAD
 import { openAdCreator, closeAdCreator } from './ad-creator-modal.js';
@@ -650,6 +651,55 @@ function restoreNavToHome() {
 window.restoreNavToHome = restoreNavToHome;
 
 // ============================================================
+// 🔥 CARGAR CONTADOR DE NOTIFICACIONES
+// ============================================================
+
+async function loadNotificationCount() {
+    const token = getToken();
+    if (!token) {
+        console.log('🔒 Sin token, no se puede cargar contador de notificaciones');
+        return;
+    }
+
+    try {
+        const res = await fetch(`${API_URL}/api/notifications/unread-count`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+
+        if (res.ok) {
+            const data = await res.json();
+            const unreadCount = data.unreadCount || 0;
+            
+            // Actualizar badge en navegación
+            const navBadge = document.getElementById('navNotifBadge');
+            if (navBadge) {
+                if (unreadCount > 0) {
+                    navBadge.style.display = 'flex';
+                    navBadge.textContent = unreadCount > 99 ? '99+' : unreadCount;
+                    console.log(`🔔 ${unreadCount} notificaciones no leídas`);
+                } else {
+                    navBadge.style.display = 'none';
+                    console.log('🔔 No hay notificaciones no leídas');
+                }
+            }
+            
+            // Actualizar badge del header (si existe)
+            const headerBadge = document.querySelector('.icon-btn .badge');
+            if (headerBadge) {
+                if (unreadCount > 0) {
+                    headerBadge.style.display = 'flex';
+                    headerBadge.textContent = unreadCount > 99 ? '99+' : unreadCount;
+                } else {
+                    headerBadge.style.display = 'none';
+                }
+            }
+        }
+    } catch (error) {
+        console.warn('⚠️ Error cargando contador de notificaciones:', error);
+    }
+}
+
+// ============================================================
 // INICIALIZAR - USANDO LOGIN MODULE CON PREFERENCIAS
 // ============================================================
 
@@ -723,6 +773,12 @@ async function init() {
                 });
                 console.log('✅ Preferencias procesadas');
             }
+            
+            // 🔥🔥🔥 CARGAR CONTADOR DE NOTIFICACIONES
+            setTimeout(() => {
+                loadNotificationCount();
+                refreshNotificationCount();
+            }, 1500);
             
             feedCursor = restoreFeedCursor();
             
@@ -949,6 +1005,73 @@ function initSocket() {
                 commentsCount: story.comments.length
             });
         }
+    });
+
+    // 🔥🔥🔥 EVENTOS DE NOTIFICACIONES EN TIEMPO REAL
+    socket.on('new_notification', (notification) => {
+        console.log('🔔 Nueva notificación recibida en tiempo real');
+        
+        // Actualizar contador automáticamente
+        setTimeout(() => {
+            loadNotificationCount();
+            refreshNotificationCount();
+        }, 500);
+    });
+
+    socket.on('notification_count_updated', (data) => {
+        console.log(`🔔 Contador actualizado vía socket: ${data.unreadCount}`);
+        
+        const navBadge = document.getElementById('navNotifBadge');
+        if (navBadge) {
+            if (data.unreadCount > 0) {
+                navBadge.style.display = 'flex';
+                navBadge.textContent = data.unreadCount > 99 ? '99+' : data.unreadCount;
+            } else {
+                navBadge.style.display = 'none';
+            }
+        }
+        
+        const headerBadge = document.querySelector('.icon-btn .badge');
+        if (headerBadge) {
+            if (data.unreadCount > 0) {
+                headerBadge.style.display = 'flex';
+                headerBadge.textContent = data.unreadCount > 99 ? '99+' : data.unreadCount;
+            } else {
+                headerBadge.style.display = 'none';
+            }
+        }
+    });
+
+    socket.on('notification_read', (data) => {
+        console.log(`🔔 Notificación ${data.notificationId} marcada como leída`);
+        setTimeout(() => {
+            loadNotificationCount();
+            refreshNotificationCount();
+        }, 300);
+    });
+
+    socket.on('all_notifications_read', () => {
+        console.log('🔔 Todas las notificaciones marcadas como leídas');
+        setTimeout(() => {
+            loadNotificationCount();
+            refreshNotificationCount();
+        }, 300);
+    });
+
+    socket.on('notification_deleted', (data) => {
+        console.log(`🔔 Notificación ${data.notificationId} eliminada`);
+        setTimeout(() => {
+            loadNotificationCount();
+            refreshNotificationCount();
+        }, 300);
+    });
+
+    socket.on('all_notifications_cleared', () => {
+        console.log('🔔 Todas las notificaciones eliminadas');
+        setTimeout(() => {
+            loadNotificationCount();
+            refreshNotificationCount();
+        }, 300);
     });
 
     socket.on('disconnect', () => {
