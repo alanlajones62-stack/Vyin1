@@ -9,6 +9,8 @@
 // 🔥 CORREGIDO: Zoom oculto en modos texto/encuesta
 // 🔥 MEJORADO: UI profesional con animaciones suaves
 // 🔥 ELIMINADO: Paleta de colores (innecesaria para historias de texto)
+// 🔥 CORREGIDO: Tabs de video/foto se mantienen al volver de texto/encuesta
+// 🔥 NUEVO: Flash frontal (pantalla blanca para selfies)
 // ============================================================
 
 import { getToken, getCurrentUser, showToast } from './auth.js';
@@ -44,9 +46,10 @@ let torchSupported = false;
 let savedTextContent = '';
 let isZoomActive = false;
 let zoomTimeout = null;
-
-// 🔥🔥🔥 AGREGAR ESTA LÍNEA 🔥🔥🔥
 let captureMode = 'video';
+let frontFlashActive = false;
+let frontFlashTimeout = null;
+
 // ============================================================
 // FUNCIÓN SEGURA
 // ============================================================
@@ -80,7 +83,6 @@ function translateCreatorUI() {
     
     console.log('🌐 Traduciendo UI del creador...');
     
-    // Modo selector - SOLO Video y Foto
     const modeBtns = overlay.querySelectorAll('.mode-btn span');
     const modeLabels = [
         t('story.video') || 'Video',
@@ -90,7 +92,6 @@ function translateCreatorUI() {
         if (index < modeLabels.length) btn.textContent = modeLabels[index];
     });
     
-    // Botones barra inferior
     const btnMap = {
         '.btn-retake span': t('action.retake') || 'Rehacer',
         '.btn-use span': t('action.use') || 'Usar',
@@ -105,18 +106,15 @@ function translateCreatorUI() {
         if (el) el.textContent = text;
     });
     
-    // Placeholders
     const captionInput = overlay.querySelector('#creatorCaption');
     if (captionInput) captionInput.placeholder = t('story.captionPlaceholder') || 'Escribe una descripción...';
     
     const textInput = overlay.querySelector('#textContent');
     if (textInput) textInput.placeholder = t('story.textPlaceholder') || 'Escribe algo...';
     
-    // Botón publicar
     const publishBtn = overlay.querySelector('#publishBtn span');
     if (publishBtn) publishBtn.textContent = t('action.publish') || 'Publicar';
     
-    // Subtítulos
     const subtitlesText = overlay.querySelector('#subtitlesText');
     if (subtitlesText) {
         const current = subtitlesText.textContent;
@@ -155,6 +153,7 @@ export async function openCreator() {
     flashEnabled = false;
     savedTextContent = '';
     isZoomActive = false;
+    frontFlashActive = false;
 
     const overlay = safeGetElement('creatorOverlay');
     if (!overlay) createCreatorHTML();
@@ -200,6 +199,14 @@ export function closeCreator() {
         clearTimeout(zoomTimeout);
         zoomTimeout = null;
     }
+    
+    if (frontFlashTimeout) {
+        clearTimeout(frontFlashTimeout);
+        frontFlashTimeout = null;
+    }
+    
+    // Apagar flash frontal si está activo
+    turnOffFrontFlash();
 }
 
 // ============================================================
@@ -229,19 +236,22 @@ function resetCreatorState() {
         preview.style.background = '#000';
     }
 
-    ['inputArea', 'captureActions', 'textTools', 'subtitlesStatus', 'previewActions', 'textEditorContainer'].forEach(id => {
+    ['inputArea', 'captureActions', 'subtitlesStatus', 'previewActions', 'textEditorContainer'].forEach(id => {
         const el = safeGetElement(id);
         if (el) el.style.display = 'none';
     });
 
-    const modeSelector = safeGetElement('modeSelector');
-    if (modeSelector) modeSelector.style.display = 'flex';
-    
-    const bottomControls = safeGetElement('bottomControls');
-    if (bottomControls) bottomControls.style.display = 'flex';
-    
-    const topControls = safeGetElement('topControls');
-    if (topControls) topControls.style.display = 'flex';
+    // 🔥 CORREGIDO: Mostrar modeSelector y bottomControls SIEMPRE en modo cámara
+    if (currentStep === 'camera') {
+        const modeSelector = safeGetElement('modeSelector');
+        if (modeSelector) modeSelector.style.display = 'flex';
+        
+        const bottomControls = safeGetElement('bottomControls');
+        if (bottomControls) bottomControls.style.display = 'flex';
+        
+        const topControls = safeGetElement('topControls');
+        if (topControls) topControls.style.display = 'flex';
+    }
 
     const publishBtn = safeGetElement('publishBtn');
     if (publishBtn) {
@@ -267,10 +277,96 @@ function resetCreatorState() {
     if (flashBtnEl) {
         flashBtnEl.style.display = torchSupported ? 'flex' : 'none';
     }
+    
+    // Apagar flash frontal al resetear
+    turnOffFrontFlash();
 }
 
 // ============================================================
-// CREAR HTML - DISEÑO MEJORADO SIN PALETA DE COLORES
+// 🔥 FLASH FRONTAL (pantalla blanca para selfies)
+// ============================================================
+
+function toggleFrontFlash() {
+    if (facingMode === 'environment') {
+        showToast(t('story.flashOnlyFront') || '💡 El flash frontal solo funciona en cámara frontal', true);
+        return;
+    }
+    
+    frontFlashActive = !frontFlashActive;
+    
+    if (frontFlashActive) {
+        turnOnFrontFlash();
+    } else {
+        turnOffFrontFlash();
+    }
+    
+    const flashBtn = safeGetElement('frontFlashBtn');
+    if (flashBtn) {
+        flashBtn.classList.toggle('active', frontFlashActive);
+        flashBtn.innerHTML = frontFlashActive ? 
+            '<i class="fas fa-bolt" style="color:#ffdd00;"></i>' : 
+            '<i class="fas fa-bolt"></i>';
+    }
+}
+
+function turnOnFrontFlash() {
+    const preview = safeGetElement('creatorPreview');
+    if (!preview) return;
+    
+    // Crear overlay de flash frontal
+    let flashOverlay = preview.querySelector('.front-flash-overlay');
+    if (!flashOverlay) {
+        flashOverlay = document.createElement('div');
+        flashOverlay.className = 'front-flash-overlay';
+        flashOverlay.style.cssText = `
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: white;
+            opacity: 0;
+            z-index: 5;
+            pointer-events: none;
+            transition: opacity 0.3s ease;
+            border-radius: 16px;
+        `;
+        preview.appendChild(flashOverlay);
+    }
+    
+    // Activar con animación
+    requestAnimationFrame(() => {
+        flashOverlay.style.opacity = '0.6';
+    });
+    
+    frontFlashActive = true;
+}
+
+function turnOffFrontFlash() {
+    const preview = safeGetElement('creatorPreview');
+    if (!preview) return;
+    
+    const flashOverlay = preview.querySelector('.front-flash-overlay');
+    if (flashOverlay) {
+        flashOverlay.style.opacity = '0';
+        setTimeout(() => {
+            if (flashOverlay.parentNode) {
+                flashOverlay.remove();
+            }
+        }, 400);
+    }
+    
+    frontFlashActive = false;
+    
+    const flashBtn = safeGetElement('frontFlashBtn');
+    if (flashBtn) {
+        flashBtn.classList.remove('active');
+        flashBtn.innerHTML = '<i class="fas fa-bolt"></i>';
+    }
+}
+
+// ============================================================
+// CREAR HTML - DISEÑO MEJORADO CON BOTÓN DE FLASH FRONTAL
 // ============================================================
 
 function createCreatorHTML() {
@@ -320,8 +416,13 @@ function createCreatorHTML() {
                 <i class="fas fa-sync-alt"></i>
             </button>
 
-            <!-- FLASH BUTTON -->
+            <!-- FLASH TRASERO -->
             <button class="btn-flash" id="flashBtn" title="${t('story.flash') || 'Flash'}">
+                <i class="fas fa-bolt"></i>
+            </button>
+
+            <!-- 🔥 NUEVO: FLASH FRONTAL (pantalla blanca) -->
+            <button class="btn-front-flash" id="frontFlashBtn" title="${t('story.frontFlash') || 'Flash frontal'}">
                 <i class="fas fa-bolt"></i>
             </button>
 
@@ -459,7 +560,12 @@ function setupCreatorEvents() {
             captureMode = btn.dataset.mode;
             if (isRecording) stopRecording();
             updateQualityIndicator();
-            showCamera();
+            
+            // 🔥 CORREGIDO: Si estamos en modo texto, volver a cámara
+            if (currentStep === 'text') {
+                currentStep = 'camera';
+                showCamera();
+            }
         });
     });
 
@@ -474,6 +580,10 @@ function setupCreatorEvents() {
 
     const flashBtn = safeGetElement('flashBtn');
     flashBtn?.addEventListener('click', toggleFlash);
+
+    // 🔥 NUEVO: Flash frontal
+    const frontFlashBtn = safeGetElement('frontFlashBtn');
+    frontFlashBtn?.addEventListener('click', toggleFrontFlash);
 
     const preview = safeGetElement('creatorPreview');
     preview?.addEventListener('touchmove', (e) => {
@@ -517,6 +627,9 @@ window.openSurveyModeFromCreator = function() {
         showToast(t('story.alreadyCaptured') || 'Ya tienes un medio capturado', true);
         return;
     }
+    
+    // 🔥 CORREGIDO: Guardar el modo actual antes de abrir encuesta
+    const currentMode = captureMode;
     
     const zoomIndicator = safeGetElement('zoomIndicator');
     if (zoomIndicator) {
@@ -663,7 +776,7 @@ function hideZoomIndicator() {
 }
 
 // ============================================================
-// 🔥 MANEJAR FLASH
+// 🔥 MANEJAR FLASH TRASERO
 // ============================================================
 
 async function toggleFlash() {
@@ -796,7 +909,13 @@ async function startCamera() {
             torchSupported = !!capabilities.torch;
             const flashBtn = safeGetElement('flashBtn');
             if (flashBtn) {
-                flashBtn.style.display = torchSupported ? 'flex' : 'none';
+                flashBtn.style.display = torchSupported && facingMode === 'environment' ? 'flex' : 'none';
+            }
+            
+            // 🔥 Mostrar botón de flash frontal SOLO en cámara frontal
+            const frontFlashBtn = safeGetElement('frontFlashBtn');
+            if (frontFlashBtn) {
+                frontFlashBtn.style.display = facingMode === 'user' ? 'flex' : 'none';
             }
         }
 
@@ -815,7 +934,7 @@ async function startCamera() {
         const flipBtn = safeGetElement('flipCameraBtn');
         if (flipBtn) flipBtn.style.display = 'flex';
 
-        ['inputArea', 'captureActions', 'previewActions', 'textTools', 'subtitlesStatus', 'textEditorContainer'].forEach(id => {
+        ['inputArea', 'captureActions', 'previewActions', 'subtitlesStatus', 'textEditorContainer'].forEach(id => {
             const el = safeGetElement(id);
             if (el) el.style.display = 'none';
         });
@@ -863,6 +982,11 @@ async function flipCamera() {
         return;
     }
 
+    // Apagar flash frontal si estaba activo
+    if (frontFlashActive) {
+        turnOffFrontFlash();
+    }
+
     facingMode = facingMode === 'user' ? 'environment' : 'user';
     showToast(facingMode === 'user' ? 
         t('story.frontCamera') || '📸 Cámara frontal' : 
@@ -881,6 +1005,11 @@ async function flipCamera() {
 
 function capturePhoto() {
     if (!cameraVideo || isRecording || currentStep !== 'camera') return;
+
+    // Apagar flash frontal si está activo
+    if (frontFlashActive) {
+        turnOffFrontFlash();
+    }
 
     const video = cameraVideo;
     const canvas = document.createElement('canvas');
@@ -1100,6 +1229,9 @@ function showPreviewActions() {
     const flashBtn = safeGetElement('flashBtn');
     if (flashBtn) flashBtn.style.display = 'none';
     
+    const frontFlashBtn = safeGetElement('frontFlashBtn');
+    if (frontFlashBtn) frontFlashBtn.style.display = 'none';
+    
     hideZoomIndicator();
 }
 
@@ -1184,9 +1316,16 @@ window.retakeMedia = function() {
     
     const flashBtn = safeGetElement('flashBtn');
     if (flashBtn) {
-        flashBtn.style.display = torchSupported ? 'flex' : 'none';
+        flashBtn.style.display = torchSupported && facingMode === 'environment' ? 'flex' : 'none';
         flashBtn.classList.remove('active');
         flashBtn.innerHTML = '<i class="fas fa-bolt"></i>';
+    }
+    
+    const frontFlashBtn = safeGetElement('frontFlashBtn');
+    if (frontFlashBtn) {
+        frontFlashBtn.style.display = facingMode === 'user' ? 'flex' : 'none';
+        frontFlashBtn.classList.remove('active');
+        frontFlashBtn.innerHTML = '<i class="fas fa-bolt"></i>';
     }
     
     savedTextContent = '';
@@ -1260,12 +1399,19 @@ window.createTextStory = function() {
         if (el) el.style.display = 'none';
     });
     
-    stopCamera();
+    // 🔥 CORREGIDO: No detener la cámara al entrar en modo texto
+    // solo ocultamos la vista previa
+    if (cameraStream && cameraVideo) {
+        // Detener solo si es necesario
+        stopCamera();
+    }
 
     const flipBtn = safeGetElement('flipCameraBtn');
     if (flipBtn) flipBtn.style.display = 'none';
     const flashBtn = safeGetElement('flashBtn');
     if (flashBtn) flashBtn.style.display = 'none';
+    const frontFlashBtn = safeGetElement('frontFlashBtn');
+    if (frontFlashBtn) frontFlashBtn.style.display = 'none';
     
     document.querySelectorAll('.mode-btn').forEach(b => b.classList.remove('active'));
     const textBtn = document.querySelector('.mode-btn[data-mode="text"]');
@@ -1403,6 +1549,17 @@ window.backToCamera = function() {
     }
     
     mediaType = null;
+    
+    // 🔥 RESTAURAR EL MODO SELECCIONADO (video o foto)
+    // El botón activo ya debería estar seleccionado, pero aseguramos
+    const activeModeBtn = document.querySelector('.mode-btn.active');
+    if (activeModeBtn) {
+        captureMode = activeModeBtn.dataset.mode;
+    } else {
+        captureMode = 'video';
+        const videoBtn = document.querySelector('.mode-btn[data-mode="video"]');
+        if (videoBtn) videoBtn.classList.add('active');
+    }
     
     resetZoom();
     startCamera();
@@ -1878,13 +2035,8 @@ function injectStyles() {
             animation: textReveal 0.5s ease;
         }
 
-        @keyframes textReveal {
-            from { opacity: 0; transform: scale(0.95); }
-            to { opacity: 1; transform: scale(1); }
-        }
-
         /* ============================================================
-           FLASH EFFECT
+           FLASH EFFECT (para foto)
         ============================================================ */
         .flash-effect {
             position: absolute;
@@ -1896,6 +2048,23 @@ function injectStyles() {
         @keyframes flashEffect {
             0% { opacity: 1; }
             100% { opacity: 0; }
+        }
+
+        /* ============================================================
+           FRONT FLASH OVERLAY (pantalla blanca para selfies)
+        ============================================================ */
+        .front-flash-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: white;
+            opacity: 0;
+            z-index: 5;
+            pointer-events: none;
+            transition: opacity 0.3s ease;
+            border-radius: 16px;
         }
 
         /* ============================================================
@@ -2033,7 +2202,7 @@ function injectStyles() {
         .mode-selector .mode-btn:active { transform: scale(0.92); }
 
         /* ============================================================
-           BOTONES FLOTANTES
+           BOTONES FLOTANTES - FLIP, FLASH TRASERO Y FRONTAL
         ============================================================ */
         .btn-flip-camera {
             position: absolute;
@@ -2093,6 +2262,40 @@ function injectStyles() {
             box-shadow: 0 0 30px rgba(255,215,0,0.1);
         }
         .btn-flash:active { 
+            transform: scale(0.9); 
+        }
+
+        /* 🔥 NUEVO: BOTÓN FLASH FRONTAL */
+        .btn-front-flash {
+            position: absolute;
+            top: 168px;
+            right: 20px;
+            z-index: 21;
+            background: rgba(255,255,255,0.08);
+            border: 1px solid rgba(255,255,255,0.06);
+            border-radius: 50%;
+            width: 42px;
+            height: 42px;
+            color: #fff;
+            font-size: 16px;
+            cursor: pointer;
+            backdrop-filter: blur(12px);
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+        }
+        .btn-front-flash:hover {
+            background: rgba(255,255,255,0.15);
+            transform: scale(1.05);
+        }
+        .btn-front-flash.active {
+            background: rgba(255,215,0,0.2);
+            border-color: rgba(255,215,0,0.3);
+            box-shadow: 0 0 30px rgba(255,215,0,0.1);
+        }
+        .btn-front-flash:active { 
             transform: scale(0.9); 
         }
 
@@ -2654,6 +2857,7 @@ function injectStyles() {
             
             .btn-flip-camera { top: 66px; right: 12px; width: 36px; height: 36px; font-size: 14px; }
             .btn-flash { top: 110px; right: 12px; width: 36px; height: 36px; font-size: 14px; }
+            .btn-front-flash { top: 154px; right: 12px; width: 36px; height: 36px; font-size: 14px; }
             .zoom-indicator { bottom: 100px; padding: 4px 14px; }
             .zoom-indicator span { font-size: 12px; }
             
@@ -2698,6 +2902,7 @@ function injectStyles() {
             
             .btn-flip-camera { top: 60px; right: 10px; width: 32px; height: 32px; font-size: 12px; }
             .btn-flash { top: 100px; right: 10px; width: 32px; height: 32px; font-size: 12px; }
+            .btn-front-flash { top: 140px; right: 10px; width: 32px; height: 32px; font-size: 12px; }
             .zoom-indicator { bottom: 80px; padding: 4px 12px; }
             .zoom-indicator span { font-size: 11px; }
             
