@@ -5,7 +5,16 @@
 // 🔥 VISOR DE ARCHIVOS INTEGRADO (PDF, imágenes, videos, audio, texto)
 // 🔥 BARRA DE PROGRESO PARA SUBIDA DE ARCHIVOS
 // 🔥 OPTIMIZADO - USA LA FUNCIÓN DE SUBIDA DE story-comments.js
-// 🔥 RESPUESTAS ESTILO TIKTOK - BADGE DENTRO DEL INPUT CON BACKSPACE
+// 🔥 RESPUESTAS ESTILO TIKTOK - USANDO INPUT PRINCIPAL
+// 🔥 CORREGIDO: Las respuestas se actualizan SIN re-renderizar todo
+// 🔥 CORREGIDO: Los comentarios nuevos se agregan SIN re-renderizar todo
+// 🔥 CORREGIDO: Eliminado el indicador de respuesta (reply indicator)
+// 🔥 CORREGIDO: Apertura de teclado en móviles
+// 🔥 CORREGIDO: Cancelación automática de respuesta al cerrar teclado
+// 🔥 CORREGIDO: Mantener foco después de enviar comentario
+// 🔥 CORREGIDO: Respuestas aparecen inmediatamente en el DOM
+// 🔥 CORREGIDO: TODAS las respuestas anidadas (nivel 3,4,5...) se aplanan al nivel 2
+// 🔥 CORREGIDO: LIKES DE COMENTARIOS ELIMINADOS COMPLETAMENTE
 // ============================================================
 
 import {
@@ -16,12 +25,17 @@ import {
 import { formatNumber } from './utils.js';
 import { 
     loadComments, initComments, addCommentToCache, addReplyToCache, 
-    updateCommentLikes, updateCommentsUIWithoutReload,
+    updateCommentsUI, updateCommentsUIWithoutReload,
     uploadCommentFile, addComment,
     renderComments,
     findCommentById,
+    findParentComment,
+    findRootComment,
     commentsCache,
-    repliesVisibility
+    repliesVisibility,
+    renderRepliesOnly,
+    renderCommentFile,
+    addReplyToDOM
 } from './story-comments.js';
 
 const API_URL = window.location.origin;
@@ -34,8 +48,8 @@ let isNavigating = false;
 let userLanguage = 'es';
 let isTranslating = false;
 
-// 🔥 NUEVO: Estado para respuestas estilo TikTok (solo ID)
-let replyContext = null; // { commentId: string }
+// 🔥 Estado para respuestas (SOLO contexto, SIN indicador visual)
+let replyContext = null; // { commentId: string, userName: string }
 
 // Caché de traducciones en memoria
 let translationCache = {};
@@ -768,7 +782,6 @@ export function closeStoryModal() {
         commentInput.value = '';
         commentInput.disabled = false;
         commentInput.placeholder = 'Escribe un comentario...';
-        commentInput.style.paddingLeft = '16px';
         commentInput.style.borderColor = '';
         commentInput.style.boxShadow = '';
     }
@@ -947,14 +960,7 @@ function createModalHTML() {
                             <button class="comment-attach-btn" id="commentAttachBtn" style="display:none;" title="Adjuntar archivo">
                                 <i class="fas fa-paperclip"></i>
                             </button>
-                            <div class="input-container">
-                                <!-- 🔥 INDICADOR DE RESPUESTA - BADGE DENTRO DEL INPUT -->
-                                <span class="reply-indicator" id="replyIndicator" style="display:none;">
-                                    <i class="fas fa-reply"></i>
-                                    Respondiendo
-                                </span>
-                                <input type="text" id="commentInput" placeholder="Escribe un comentario..." maxlength="500" />
-                            </div>
+                            <input type="text" id="commentInput" placeholder="Escribe un comentario..." maxlength="500" />
                             <button id="sendCommentBtn">Enviar</button>
                         </div>
                     </div>
@@ -1056,37 +1062,19 @@ function setupModalEvents() {
     if (input) {
         const newInput = input.cloneNode(true);
         input.parentNode.replaceChild(newInput, input);
-        
-        // 🔥 Evento para Enter y Backspace
         newInput.addEventListener('keydown', (e) => {
-            // Enviar con Enter
             if (e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault();
                 handleSendComment();
             }
-            
-            // 🔥 Cancelar respuesta con Backspace (cuando el input está vacío)
-            if (e.key === 'Backspace' && replyContext && this.value === '') {
-                e.preventDefault();
-                cancelReply();
-            }
         });
-        
-        // 🔥 También cancelar cuando el usuario hace clic en el badge
-        const indicator = document.getElementById('replyIndicator');
-        if (indicator) {
-            indicator.style.cursor = 'pointer';
-            indicator.addEventListener('click', (e) => {
-                e.stopPropagation();
-                if (replyContext) {
-                    cancelReply();
-                }
-            });
-        }
     }
 
     // CONFIGURAR SUBIDA DE ARCHIVO (USA uploadCommentFile DE story-comments.js)
     setupCommentFileUpload();
+
+    // 🔥 EVENTOS PARA DETECTAR CIERRE DE TECLADO EN MÓVILES
+    setupKeyboardDetection();
 
     let touchStartX = 0;
     let touchStartY = 0;
@@ -1115,8 +1103,57 @@ function setupModalEvents() {
 }
 
 // ============================================================
+// 🔥 DETECTAR CIERRE DE TECLADO EN MÓVILES
+// ============================================================
+
+function setupKeyboardDetection() {
+    const input = document.getElementById('commentInput');
+    if (!input) return;
+
+    input.addEventListener('blur', () => {
+        if (replyContext) {
+            setTimeout(() => {
+                if (!document.activeElement || document.activeElement !== input) {
+                    const hasContent = input.value && input.value.trim().length > 0;
+                    if (!hasContent) {
+                        cancelReply();
+                        console.log('📱 Respuesta cancelada por cierre de teclado');
+                    }
+                }
+            }, 500);
+        }
+    });
+
+    document.addEventListener('touchstart', (e) => {
+        if (!replyContext) return;
+        
+        const target = e.target;
+        const isInput = target === input || input.contains(target);
+        const isSendBtn = target.id === 'sendCommentBtn' || target.closest('#sendCommentBtn');
+        const isReplyBtn = target.closest('.btn-reply-comment');
+        const isAttachBtn = target.closest('.comment-attach-btn');
+        const isModalOverlay = target.closest('.modal-overlay');
+        const isCloseBtn = target.closest('.close-btn');
+        
+        if (!isInput && !isSendBtn && !isReplyBtn && !isAttachBtn && !isModalOverlay && !isCloseBtn) {
+            const hasContent = input.value && input.value.trim().length > 0;
+            if (!hasContent) {
+                setTimeout(() => {
+                    if (replyContext) {
+                        const currentInput = document.getElementById('commentInput');
+                        if (currentInput && !document.activeElement) {
+                            cancelReply();
+                            console.log('📱 Respuesta cancelada por toque fuera del input');
+                        }
+                    }
+                }, 300);
+            }
+        }
+    }, { passive: true });
+}
+
+// ============================================================
 // CONFIGURAR SUBIDA DE ARCHIVO EN COMENTARIOS
-// USA LA FUNCIÓN uploadCommentFile DE story-comments.js
 // ============================================================
 
 function setupCommentFileUpload() {
@@ -1125,11 +1162,9 @@ function setupCommentFileUpload() {
     
     if (!attachBtn || !fileInput) return;
     
-    // Determinar si el usuario actual es el dueño de la historia
     const currentUser = getCurrentUser();
     const isStoryOwner = currentUser?.id === currentStoryData?.userId;
     
-    // Solo mostrar botón si es dueño de la historia
     if (isStoryOwner && currentStoryData) {
         attachBtn.style.display = 'flex';
     } else {
@@ -1137,7 +1172,6 @@ function setupCommentFileUpload() {
         return;
     }
     
-    // Remover listeners antiguos
     const newAttachBtn = attachBtn.cloneNode(true);
     attachBtn.parentNode.replaceChild(newAttachBtn, attachBtn);
     
@@ -1147,7 +1181,6 @@ function setupCommentFileUpload() {
         fileInput.click();
     });
     
-    // Manejar selección de archivo
     const newFileInput = fileInput.cloneNode(true);
     fileInput.parentNode.replaceChild(newFileInput, fileInput);
     
@@ -1155,7 +1188,6 @@ function setupCommentFileUpload() {
         const file = e.target.files[0];
         if (!file) return;
         
-        // Validaciones rápidas
         const maxSize = 20 * 1024 * 1024;
         if (file.size > maxSize) {
             showToast('El archivo no puede superar los 20MB', true);
@@ -1163,7 +1195,6 @@ function setupCommentFileUpload() {
             return;
         }
 
-        // Tipos permitidos
         const allowedTypes = [
             'image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/bmp',
             'video/mp4', 'video/webm', 'video/ogg', 'video/quicktime',
@@ -1179,23 +1210,19 @@ function setupCommentFileUpload() {
             return;
         }
         
-        // Mostrar indicador visual en el input
         const commentInput = document.getElementById('commentInput');
         if (commentInput) {
             commentInput.placeholder = `📎 Subiendo ${file.name}...`;
             commentInput.disabled = true;
         }
         
-        // 🔥 USAR LA FUNCIÓN DE story-comments.js (CON PROGRESO)
         const result = await uploadCommentFile(currentStoryId, file);
         
-        // Restaurar input
         if (commentInput) {
             commentInput.disabled = false;
         }
         
         if (result && result.success) {
-            // Guardar datos del archivo
             window._pendingCommentFile = {
                 fileUrl: result.fileUrl,
                 filename: result.filename,
@@ -1204,7 +1231,6 @@ function setupCommentFileUpload() {
                 mimetype: result.mimetype
             };
             
-            // Mostrar indicador de archivo adjunto
             if (commentInput) {
                 commentInput.placeholder = `📎 ${result.originalName} (${formatFileSize(result.size)}) - Escribe un comentario...`;
                 commentInput.style.borderColor = 'rgba(52,211,153,0.4)';
@@ -1225,12 +1251,9 @@ function setupCommentFileUpload() {
 }
 
 // ============================================================
-// 🔥 FUNCIONES DE RESPUESTA ESTILO TIKTOK - BADGE EN INPUT
+// 🔥 FUNCIONES DE RESPUESTA (SIN INDICADOR VISUAL)
 // ============================================================
 
-/**
- * Activa el modo de respuesta para un comentario específico
- */
 window.toggleReplyInput = function(storyId, commentId) {
     const comments = commentsCache.get(storyId);
     if (!comments) return;
@@ -1238,83 +1261,57 @@ window.toggleReplyInput = function(storyId, commentId) {
     const comment = findCommentById(comments, commentId);
     if (!comment) return;
     
+    const userName = comment.fullName || comment.username || 'Usuario';
     const commentInput = document.getElementById('commentInput');
+    
     if (!commentInput) return;
     
-    // 🔥 Si ya estamos respondiendo a este comentario, cancelar
     if (replyContext && replyContext.commentId === commentId) {
         cancelReply();
         return;
     }
     
-    // 🔥 Si estamos respondiendo a otro comentario, cancelar primero
     if (replyContext) {
         cancelReply();
     }
     
-    // 🔥 Establecer contexto de respuesta (solo ID, sin nombre)
     replyContext = {
-        commentId: commentId
+        commentId: commentId,
+        userName: userName
     };
     
-    // 🔥 Enfocar el input y mostrar el indicador
     commentInput.focus();
-    updateReplyIndicator();
+    commentInput.placeholder = `Respondiendo a @${userName}...`;
+    commentInput.style.borderColor = 'rgba(192, 132, 252, 0.3)';
+    commentInput.style.boxShadow = '0 0 0 2px rgba(192, 132, 252, 0.05)';
     
-    // 🔥 Scroll al input
+    if ('ontouchstart' in window || navigator.maxTouchPoints > 0) {
+        commentInput.click();
+        setTimeout(() => {
+            commentInput.focus();
+        }, 100);
+    }
+    
     commentInput.scrollIntoView({ behavior: 'smooth', block: 'center' });
 };
 
-/**
- * Cancela el modo de respuesta actual
- */
 function cancelReply() {
+    const hadContext = replyContext !== null;
+    
     replyContext = null;
     const commentInput = document.getElementById('commentInput');
     if (commentInput) {
-        commentInput.focus();
+        commentInput.placeholder = 'Escribe un comentario...';
+        commentInput.style.borderColor = '';
+        commentInput.style.boxShadow = '';
+        if (hadContext && ('ontouchstart' in window || navigator.maxTouchPoints > 0)) {
+            commentInput.blur();
+        }
     }
-    updateReplyIndicator();
+    window._pendingCommentFile = null;
 }
 
-// Exponer cancelReply globalmente
 window.cancelReply = cancelReply;
-
-/**
- * Actualiza el indicador de respuesta en el input (badge dentro del input)
- */
-function updateReplyIndicator() {
-    const indicator = document.getElementById('replyIndicator');
-    const inputContainer = document.querySelector('.input-container');
-    const input = document.getElementById('commentInput');
-    
-    if (!indicator || !inputContainer) return;
-    
-    if (replyContext) {
-        // 🔥 Mostrar badge
-        indicator.style.display = 'flex';
-        inputContainer.classList.add('reply-active');
-        
-        // Animación de entrada
-        indicator.style.animation = 'none';
-        requestAnimationFrame(() => {
-            indicator.style.animation = 'replyIndicatorIn 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)';
-        });
-        
-        // Ajustar padding del input
-        if (input) {
-            input.style.paddingLeft = '90px';
-        }
-    } else {
-        // 🔥 Ocultar badge
-        indicator.style.display = 'none';
-        inputContainer.classList.remove('reply-active');
-        
-        if (input) {
-            input.style.paddingLeft = '16px';
-        }
-    }
-}
 
 // ============================================================
 // ELIMINAR HISTORIA
@@ -1382,7 +1379,48 @@ async function handleDeleteStory() {
 }
 
 // ============================================================
-// 🔥 ENVIAR COMENTARIO (CON SOPORTE PARA RESPUESTAS ESTILO TIKTOK)
+// 🔥 FUNCIÓN PARA CREAR HTML DE UN COMENTARIO NUEVO (SIN LIKES)
+// ============================================================
+
+function createCommentHTML(comment, storyId, currentUserId) {
+    const isOwn = comment.userId === currentUserId;
+    const storyOwnerId = window._modalUserId || window._storyOwnerId || null;
+    const isStoryOwner = storyOwnerId === currentUserId;
+    const fileHtml = comment.hasFile ? renderCommentFile(comment) : '';
+    
+    return `
+        <div class="comment-item" data-comment-id="${comment.id}" style="animation: commentSlideIn 0.3s ease;">
+            <img class="avatar" src="${comment.avatar || getAvatar(comment.fullName)}" 
+                 alt="${comment.fullName}" 
+                 onclick="window.goToProfileUser('${comment.userId}')" />
+            <div class="comment-body">
+                <div class="comment-user" onclick="window.goToProfileUser('${comment.userId}')">
+                    ${escapeHtml(comment.fullName)}
+                    <span class="handle">@${escapeHtml(comment.username)}</span>
+                    <span class="time">${formatDate(comment.createdAt)}</span>
+                    ${isOwn ? '<span class="badge-owner" style="font-size:9px;color:rgba(52,211,153,0.6);margin-left:6px;">Tuyo</span>' : ''}
+                    ${!isOwn && isStoryOwner ? '<span class="badge-owner" style="font-size:9px;color:rgba(192,132,252,0.6);margin-left:6px;">Tu historia</span>' : ''}
+                    ${comment.hasFile ? '<span class="badge-file" style="font-size:9px;color:rgba(34,197,94,0.5);margin-left:6px;">📎</span>' : ''}
+                </div>
+                ${comment.content ? `<div class="comment-text" style="font-size:16px; line-height:1.5; color:rgba(255,255,255,0.85);">${escapeHtml(comment.content)}</div>` : ''}
+                ${fileHtml}
+                <div class="comment-meta">
+                    <button class="btn-reply-comment" onclick="window.toggleReplyInput('${storyId}', '${comment.id}')">
+                        <i class="fas fa-reply"></i> Responder
+                    </button>
+                    ${isOwn || isStoryOwner ? `
+                        <button class="btn-delete-comment" onclick="window.handleCommentDelete('${storyId}', '${comment.id}')">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    ` : ''}
+                </div>
+            </div>
+        </div>
+    `;
+}
+
+// ============================================================
+// ENVIAR COMENTARIO
 // ============================================================
 
 async function handleSendComment() {
@@ -1417,55 +1455,88 @@ async function handleSendComment() {
     }
 
     try {
-        // 🔥 Si hay contexto de respuesta, usar parentCommentId
         const parentCommentId = replyContext ? replyContext.commentId : null;
         const newComment = await addComment(currentStoryId, content, parentCommentId, fileData);
         
         if (newComment) {
             input.value = '';
             window._pendingCommentFile = null;
-            
-            // 🔥 Guardar el ID del comentario padre para expandir después
             const repliedToId = parentCommentId;
             
-            // 🔥 Cancelar respuesta si existía
             if (replyContext) {
                 cancelReply();
             }
             
             input.placeholder = 'Escribe un comentario...';
-            input.style.paddingLeft = '16px';
             input.style.borderColor = '';
             input.style.boxShadow = '';
             updateCommentCount(1);
             
-            const comments = await loadComments(currentStoryId, true);
             const currentUser = getCurrentUser();
             const container = document.getElementById('commentsList');
-            if (container) {
-                renderComments(comments, currentStoryId, currentUser?.id, container);
-            }
             
-            // 🔥 Si era una respuesta, asegurar que las respuestas se expandan
             if (repliedToId) {
-                repliesVisibility.set(repliedToId, true);
-                setTimeout(() => {
-                    const repliesContainer = document.getElementById(`replies-${repliedToId}`);
-                    if (repliesContainer) {
-                        repliesContainer.style.display = 'flex';
-                        const btn = document.querySelector(`.show-replies-btn[data-comment-id="${repliedToId}"]`);
-                        if (btn) {
-                            const total = repliesContainer.dataset.totalReplies || '0';
-                            btn.innerHTML = `
-                                <i class="fas fa-chevron-up"></i> 
-                                Ocultar ${total} respuestas
-                            `;
-                        }
+                // ES UNA RESPUESTA
+                const allComments = commentsCache.get(currentStoryId) || [];
+                let parentComment = findCommentById(allComments, repliedToId);
+                
+                if (!parentComment) {
+                    console.warn('⚠️ Padre no encontrado en caché, recargando...');
+                    await initComments(currentStoryId, 'commentsList', null, true);
+                    return;
+                }
+                
+                let rootComment = findRootComment(allComments, repliedToId);
+                if (!rootComment) {
+                    rootComment = parentComment;
+                }
+                
+                if (!rootComment.replies) rootComment.replies = [];
+                const exists = rootComment.replies.some(r => r.id === newComment.id);
+                if (!exists) {
+                    rootComment.replies.push(newComment);
+                    rootComment.replies.sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
+                    newComment._parentId = repliedToId;
+                    commentsCache.set(currentStoryId, allComments);
+                }
+                
+                repliesVisibility.set(rootComment.id, true);
+                addReplyToDOM(currentStoryId, repliedToId, newComment);
+                console.log(`✅ Respuesta agregada al DOM sin re-renderizar`);
+                
+            } else {
+                // COMENTARIO NUEVO
+                if (container) {
+                    const commentHtml = createCommentHTML(newComment, currentStoryId, currentUser?.id);
+                    
+                    const tempDiv = document.createElement('div');
+                    tempDiv.innerHTML = commentHtml;
+                    const newCommentElement = tempDiv.firstElementChild;
+                    
+                    const noComments = container.querySelector('.no-comments');
+                    if (noComments) {
+                        container.innerHTML = '';
                     }
-                }, 150);
+                    
+                    container.insertBefore(newCommentElement, container.firstChild);
+                    
+                    const countEl = document.getElementById('commentsCount');
+                    if (countEl) {
+                        const currentCount = parseInt(countEl.textContent) || 0;
+                        countEl.textContent = currentCount + 1;
+                    }
+                    
+                    console.log(`✅ Comentario nuevo agregado sin re-renderizar todo`);
+                } else {
+                    await initComments(currentStoryId, 'commentsList', null, true);
+                }
             }
             
             showToast(fileData ? '📎 Comentario con archivo adjunto' : '💬 Comentario enviado');
+            
+            setTimeout(() => {
+                input.focus();
+            }, 100);
         }
     } catch (error) {
         console.error('Error enviando comentario:', error);
@@ -1476,7 +1547,9 @@ async function handleSendComment() {
             sendBtn.disabled = false;
             sendBtn.textContent = 'Enviar';
         }
-        input.focus();
+        setTimeout(() => {
+            input.focus();
+        }, 50);
     }
 }
 
@@ -1881,7 +1954,6 @@ function renderSurveyInModal(story) {
 
     mediaContainer.innerHTML = surveyContent;
     
-    // Registrar la función de voto globalmente
     window.voteSurvey = async function(storyId, optionId) {
         await handleSurveyVote(storyId, optionId);
     };
@@ -1904,7 +1976,6 @@ async function handleSurveyVote(storyId, optionId) {
         return;
     }
 
-    // Verificar si ya votó
     if (currentStoryData?.surveyData?.voters?.includes(currentUser.id)) {
         showToast('Ya votaste en esta encuesta', true);
         return;
@@ -2007,7 +2078,6 @@ async function loadStoryData(storyId, isNavigation = false) {
         
         window._storyOwnerId = story.userId;
 
-        // Verificar si hay traducción en caché persistente
         const cachedTranslation = getTranslationFromCache(storyId, userLanguage);
         if (cachedTranslation && !story.translated && story.mediaType !== 'survey') {
             console.log('📦 Aplicando traducción desde caché persistente');
@@ -2085,7 +2155,6 @@ function updateModalUI(story) {
 
     const mediaContainer = document.getElementById('modalMedia');
     if (mediaContainer) {
-        // Si es encuesta, renderizar encuesta
         if (story.mediaType === 'survey' && story.surveyData) {
             renderSurveyInModal(story);
             return;
@@ -2205,7 +2274,6 @@ function updateModalUI(story) {
         }
     }
     
-    // CONFIGURAR BOTÓN DE ARCHIVO SEGÚN DUEÑO
     setupCommentFileUpload();
     
     setTimeout(() => updateTranslateButton(), 50);
@@ -2391,6 +2459,5 @@ export {
     renderSurveyInModal,
     setupCommentFileUpload,
     openFileViewer,
-    cancelReply,
-    updateReplyIndicator
+    cancelReply
 };

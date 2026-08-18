@@ -2972,7 +2972,7 @@
     "createdAt": "2026-08-16T05:09:33.088Z",
     "fromUsername": "AAAAA",
     "fromAvatar": "https://ui-avatars.com/api/?name=AAAAA&background=a855f7&color=fff",
-    "message": "AAAAA le dio like a tu historia: \"MISS ECUADOR\"",
+    "message": "AAAAA le dio like a tu historia",
     "icon": "❤️"
   },
   {
@@ -3015,7 +3015,7 @@
     "commentId": "1786926504819",
     "replyId": "1786926720179",
     "replyPreview": "xd",
-    "message": "AAAAA respondió a tu comentario: \"xd\"",
+    "message": "AAAAA respondió a @Usuario Demo: \"xd\"",
     "icon": "💬",
     "data": {
       "replyPreview": "xd",
@@ -3030,5 +3030,87 @@
     "translated": false,
     "language": "es",
     "createdAt": "2026-08-17T00:32:00.214Z"
+  },
+  {
+    "id": "1787018711291_bv4wqw",
+    "userId": "1783122622538",
+    "type": "comment",
+    "fromUserId": "1786667275566",
+    "fromName": "AAAAA",
+    "fromUsername": "AAAAA",
+    "fromAvatar": "https://ui-avatars.com/api/?name=AAAAA&background=a855f7&color=fff",
+    "storyId": "1787007085055",
+    "commentId": "1787018711244",
+    "commentPreview": "hola",
+    "hasFile": false,
+    "message": "AAAAA comentó en tu historia: \"hola\"",
+    "icon": "💬",
+    "data": {
+      "commentPreview": "hola",
+      "storyId": "1787007085055",
+      "commentId": "1787018711244",
+      "hasFile": false,
+      "fileUrl": null
+    },
+    "read": false,
+    "translated": false,
+    "language": "es",
+    "createdAt": "2026-08-18T02:05:11.291Z"
+  },
+  {
+    "id": "1787018763386_w0ehod",
+    "userId": "1786667275566",
+    "type": "reply",
+    "fromUserId": "1783122622538",
+    "fromName": "Usuario Demo",
+    "fromUsername": "demo",
+    "fromAvatar": "https://ui-avatars.com/api/?name=Demo&background=a855f7&color=fff",
+    "storyId": "1787007085055",
+    "commentId": "1787018711244",
+    "replyId": "1787018763326",
+    "replyPreview": "holaaa",
+    "message": "Usuario Demo respondió a tu comentario: \"holaaa\"",
+    "icon": "💬",
+    "data": {
+      "replyPreview": "holaaa",
+      "storyId": "1787007085055",
+      "commentId": "1787018711244",
+      "replyId": "1787018763326",
+      "isReplyToReply": false,
+      "repliedToUserId": "1786667275566",
+      "repliedToName": "AAAAA"
+    },
+    "read": true,
+    "translated": false,
+    "language": "es",
+    "createdAt": "2026-08-18T02:06:03.386Z"
+  },
+  {
+    "id": "1787018777757_jl3vx9",
+    "userId": "1783122622538",
+    "type": "reply_to_reply",
+    "fromUserId": "1786667275566",
+    "fromName": "AAAAA",
+    "fromUsername": "AAAAA",
+    "fromAvatar": "https://ui-avatars.com/api/?name=AAAAA&background=a855f7&color=fff",
+    "storyId": "1787007085055",
+    "commentId": "1787018763326",
+    "replyId": "1787018777702",
+    "replyPreview": "hola amigo",
+    "message": "AAAAA respondió a @Usuario Demo: \"hola amigo\"",
+    "icon": "💬",
+    "data": {
+      "replyPreview": "hola amigo",
+      "storyId": "1787007085055",
+      "commentId": "1787018763326",
+      "replyId": "1787018777702",
+      "isReplyToReply": true,
+      "repliedToUserId": "1783122622538",
+      "repliedToName": "Usuario Demo"
+    },
+    "read": true,
+    "translated": false,
+    "language": "es",
+    "createdAt": "2026-08-18T02:06:17.757Z"
   }
 ]

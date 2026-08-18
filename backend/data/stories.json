@@ -1,14 +1,14 @@
 [
   {
-    "id": "1786919037207",
+    "id": "1787007085055",
     "userId": "1783122622538",
     "mediaType": "text",
     "mediaUrl": null,
     "caption": "",
-    "textContent": "xd",
+    "textContent": "A",
     "textBgColor": "#1a1a2e",
-    "createdAt": "2026-08-16T22:23:57.208Z",
-    "expiresAt": "2026-08-17T22:23:57.208Z",
+    "createdAt": "2026-08-17T22:51:25.055Z",
+    "expiresAt": "2026-08-18T22:51:25.055Z",
     "views": [
       "1783122622538",
       "1786667275566"
@@ -18,199 +18,62 @@
     ],
     "comments": [
       {
-        "id": "1786919053082",
+        "id": "1787007089717",
         "userId": "1783122622538",
         "username": "demo",
         "fullName": "Usuario Demo",
         "avatar": "https://ui-avatars.com/api/?name=Demo&background=a855f7&color=fff",
         "content": "hola",
-        "createdAt": "2026-08-16T22:24:13.082Z",
-        "replies": [],
-        "likes": [],
-        "hasFile": false,
-        "fileUrl": null,
-        "filename": null,
-        "originalName": null,
-        "fileSize": null,
-        "fileSizeFormatted": null,
-        "mimetype": null,
-        "fileType": null,
-        "isStoryOwner": true
-      },
-      {
-        "id": "1786919082921",
-        "userId": "1783122622538",
-        "username": "demo",
-        "fullName": "Usuario Demo",
-        "avatar": "https://ui-avatars.com/api/?name=Demo&background=a855f7&color=fff",
-        "content": "JAJAJ",
-        "createdAt": "2026-08-16T22:24:42.922Z",
-        "replies": [],
-        "likes": [],
-        "hasFile": false,
-        "fileUrl": null,
-        "filename": null,
-        "originalName": null,
-        "fileSize": null,
-        "fileSizeFormatted": null,
-        "mimetype": null,
-        "fileType": null,
-        "isStoryOwner": true
-      },
-      {
-        "id": "1786919579728",
-        "userId": "1783122622538",
-        "username": "demo",
-        "fullName": "Usuario Demo",
-        "avatar": "https://ui-avatars.com/api/?name=Demo&background=a855f7&color=fff",
-        "content": "JAJAJ",
-        "createdAt": "2026-08-16T22:32:59.734Z",
+        "createdAt": "2026-08-17T22:51:29.717Z",
         "replies": [
           {
-            "id": "1786926612380",
-            "userId": "1786667275566",
-            "username": "AAAAA",
-            "fullName": "AAAAA",
-            "avatar": "https://ui-avatars.com/api/?name=AAAAA&background=a855f7&color=fff",
-            "content": "xd",
-            "createdAt": "2026-08-17T00:30:12.384Z",
-            "replies": [],
-            "likes": [],
-            "hasFile": false,
-            "fileUrl": null
-          }
-        ],
-        "likes": [],
-        "hasFile": false,
-        "fileUrl": null,
-        "filename": null,
-        "originalName": null,
-        "fileSize": null,
-        "fileSizeFormatted": null,
-        "mimetype": null,
-        "fileType": null,
-        "isStoryOwner": true
-      }
-    ],
-    "score": 0,
-    "iaClassification": null,
-    "flagged": false,
-    "flagReason": null,
-    "flagConfidence": 0,
-    "hidden": false,
-    "hiddenAt": null,
-    "hiddenReason": null,
-    "hiddenByIA": false,
-    "hasSubtitles": false,
-    "subtitles": null,
-    "segments": null,
-    "language": "es",
-    "embedded": false,
-    "embeddingVersion": null,
-    "country": "EC",
-    "region": "south_america",
-    "countryName": "Ecuador"
-  },
-  {
-    "id": "1786919724501",
-    "userId": "1783122622538",
-    "mediaType": "text",
-    "mediaUrl": null,
-    "caption": "",
-    "textContent": "xd",
-    "textBgColor": "#1a1a2e",
-    "createdAt": "2026-08-16T22:35:24.502Z",
-    "expiresAt": "2026-08-17T22:35:24.502Z",
-    "views": [
-      "1783122622538",
-      "1786667275566"
-    ],
-    "likes": [],
-    "comments": [
-      {
-        "id": "1786919736719",
-        "userId": "1783122622538",
-        "username": "demo",
-        "fullName": "Usuario Demo",
-        "avatar": "https://ui-avatars.com/api/?name=Demo&background=a855f7&color=fff",
-        "content": "xd",
-        "createdAt": "2026-08-16T22:35:36.719Z",
-        "replies": [
-          {
-            "id": "1786920862143",
+            "id": "1787007093841",
             "userId": "1783122622538",
             "username": "demo",
             "fullName": "Usuario Demo",
             "avatar": "https://ui-avatars.com/api/?name=Demo&background=a855f7&color=fff",
-            "content": "hola",
-            "createdAt": "2026-08-16T22:54:22.143Z",
+            "content": "holaaa",
+            "createdAt": "2026-08-17T22:51:33.841Z",
             "replies": [
               {
-                "id": "1786920866864",
+                "id": "1787007097888",
                 "userId": "1783122622538",
                 "username": "demo",
                 "fullName": "Usuario Demo",
                 "avatar": "https://ui-avatars.com/api/?name=Demo&background=a855f7&color=fff",
-                "content": "jaja",
-                "createdAt": "2026-08-16T22:54:26.864Z",
-                "replies": [],
-                "likes": [],
-                "hasFile": false,
-                "fileUrl": null
-              },
-              {
-                "id": "1786922608786",
-                "userId": "1783122622538",
-                "username": "demo",
-                "fullName": "Usuario Demo",
-                "avatar": "https://ui-avatars.com/api/?name=Demo&background=a855f7&color=fff",
-                "content": "xd",
-                "createdAt": "2026-08-16T23:23:28.791Z",
+                "content": "holaaaa",
+                "createdAt": "2026-08-17T22:51:37.888Z",
                 "replies": [
                   {
-                    "id": "1786926457530",
+                    "id": "1787007331095",
                     "userId": "1783122622538",
                     "username": "demo",
                     "fullName": "Usuario Demo",
                     "avatar": "https://ui-avatars.com/api/?name=Demo&background=a855f7&color=fff",
-                    "content": "xd",
-                    "createdAt": "2026-08-17T00:27:37.536Z",
-                    "replies": [
-                      {
-                        "id": "1786926468232",
-                        "userId": "1783122622538",
-                        "username": "demo",
-                        "fullName": "Usuario Demo",
-                        "avatar": "https://ui-avatars.com/api/?name=Demo&background=a855f7&color=fff",
-                        "content": "xd",
-                        "createdAt": "2026-08-17T00:27:48.232Z",
-                        "replies": [],
-                        "likes": [],
-                        "hasFile": false,
-                        "fileUrl": null
-                      }
-                    ],
+                    "content": "jajaj",
+                    "createdAt": "2026-08-17T22:55:31.095Z",
+                    "replies": [],
                     "likes": [],
                     "hasFile": false,
                     "fileUrl": null
                   },
                   {
-                    "id": "1786926504819",
+                    "id": "1787007341248",
                     "userId": "1783122622538",
                     "username": "demo",
                     "fullName": "Usuario Demo",
                     "avatar": "https://ui-avatars.com/api/?name=Demo&background=a855f7&color=fff",
                     "content": "xd",
-                    "createdAt": "2026-08-17T00:28:24.819Z",
+                    "createdAt": "2026-08-17T22:55:41.248Z",
                     "replies": [
                       {
-                        "id": "1786926720179",
-                        "userId": "1786667275566",
-                        "username": "AAAAA",
-                        "fullName": "AAAAA",
-                        "avatar": "https://ui-avatars.com/api/?name=AAAAA&background=a855f7&color=fff",
-                        "content": "xd",
-                        "createdAt": "2026-08-17T00:32:00.179Z",
+                        "id": "1787007659394",
+                        "userId": "1783122622538",
+                        "username": "demo",
+                        "fullName": "Usuario Demo",
+                        "avatar": "https://ui-avatars.com/api/?name=Demo&background=a855f7&color=fff",
+                        "content": "ya",
+                        "createdAt": "2026-08-17T23:00:59.394Z",
                         "replies": [],
                         "likes": [],
                         "hasFile": false,
@@ -225,14 +88,42 @@
                 "likes": [],
                 "hasFile": false,
                 "fileUrl": null
+              },
+              {
+                "id": "1787007681690",
+                "userId": "1783122622538",
+                "username": "demo",
+                "fullName": "Usuario Demo",
+                "avatar": "https://ui-avatars.com/api/?name=Demo&background=a855f7&color=fff",
+                "content": "ya",
+                "createdAt": "2026-08-17T23:01:21.690Z",
+                "replies": [],
+                "likes": [],
+                "hasFile": false,
+                "fileUrl": null
               }
             ],
             "likes": [],
             "hasFile": false,
             "fileUrl": null
+          },
+          {
+            "id": "1787007654298",
+            "userId": "1783122622538",
+            "username": "demo",
+            "fullName": "Usuario Demo",
+            "avatar": "https://ui-avatars.com/api/?name=Demo&background=a855f7&color=fff",
+            "content": "jaja",
+            "createdAt": "2026-08-17T23:00:54.298Z",
+            "replies": [],
+            "likes": [],
+            "hasFile": false,
+            "fileUrl": null
           }
         ],
-        "likes": [],
+        "likes": [
+          "1783122622538"
+        ],
         "hasFile": false,
         "fileUrl": null,
         "filename": null,
@@ -244,45 +135,68 @@
         "isStoryOwner": true
       },
       {
-        "id": "1786920682455",
+        "id": "1787007711750",
         "userId": "1783122622538",
         "username": "demo",
         "fullName": "Usuario Demo",
         "avatar": "https://ui-avatars.com/api/?name=Demo&background=a855f7&color=fff",
-        "content": "hola",
-        "createdAt": "2026-08-16T22:51:22.455Z",
+        "content": "xd",
+        "createdAt": "2026-08-17T23:01:51.751Z",
+        "replies": [],
+        "likes": [
+          "1783122622538"
+        ],
+        "hasFile": false,
+        "fileUrl": null,
+        "filename": null,
+        "originalName": null,
+        "fileSize": null,
+        "fileSizeFormatted": null,
+        "mimetype": null,
+        "fileType": null,
+        "isStoryOwner": true
+      },
+      {
+        "id": "1787007715764",
+        "userId": "1783122622538",
+        "username": "demo",
+        "fullName": "Usuario Demo",
+        "avatar": "https://ui-avatars.com/api/?name=Demo&background=a855f7&color=fff",
+        "content": "hola estas",
+        "createdAt": "2026-08-17T23:01:55.764Z",
         "replies": [
           {
-            "id": "1786920692162",
+            "id": "1787015258582",
             "userId": "1783122622538",
             "username": "demo",
             "fullName": "Usuario Demo",
             "avatar": "https://ui-avatars.com/api/?name=Demo&background=a855f7&color=fff",
-            "content": "hola",
-            "createdAt": "2026-08-16T22:51:32.162Z",
-            "replies": [],
-            "likes": [],
-            "hasFile": false,
-            "fileUrl": null
-          },
-          {
-            "id": "1786920852599",
-            "userId": "1783122622538",
-            "username": "demo",
-            "fullName": "Usuario Demo",
-            "avatar": "https://ui-avatars.com/api/?name=Demo&background=a855f7&color=fff",
-            "content": "hola",
-            "createdAt": "2026-08-16T22:54:12.599Z",
+            "content": "y",
+            "createdAt": "2026-08-18T01:07:38.582Z",
             "replies": [
               {
-                "id": "1786922849110",
+                "id": "1787015261384",
                 "userId": "1783122622538",
                 "username": "demo",
                 "fullName": "Usuario Demo",
                 "avatar": "https://ui-avatars.com/api/?name=Demo&background=a855f7&color=fff",
-                "content": "xd",
-                "createdAt": "2026-08-16T23:27:29.122Z",
-                "replies": [],
+                "content": "a",
+                "createdAt": "2026-08-18T01:07:41.384Z",
+                "replies": [
+                  {
+                    "id": "1787015264506",
+                    "userId": "1783122622538",
+                    "username": "demo",
+                    "fullName": "Usuario Demo",
+                    "avatar": "https://ui-avatars.com/api/?name=Demo&background=a855f7&color=fff",
+                    "content": "bueno",
+                    "createdAt": "2026-08-18T01:07:44.507Z",
+                    "replies": [],
+                    "likes": [],
+                    "hasFile": false,
+                    "fileUrl": null
+                  }
+                ],
                 "likes": [],
                 "hasFile": false,
                 "fileUrl": null
@@ -307,15 +221,171 @@
         "isStoryOwner": true
       },
       {
-        "id": "1786922923878",
+        "id": "1787007719804",
         "userId": "1783122622538",
         "username": "demo",
         "fullName": "Usuario Demo",
         "avatar": "https://ui-avatars.com/api/?name=Demo&background=a855f7&color=fff",
-        "content": "hoa",
-        "createdAt": "2026-08-16T23:28:43.878Z",
-        "replies": [],
-        "likes": [],
+        "content": "yo bien",
+        "createdAt": "2026-08-17T23:01:59.805Z",
+        "replies": [
+          {
+            "id": "1787007782216",
+            "userId": "1783122622538",
+            "username": "demo",
+            "fullName": "Usuario Demo",
+            "avatar": "https://ui-avatars.com/api/?name=Demo&background=a855f7&color=fff",
+            "content": "hola",
+            "createdAt": "2026-08-17T23:03:02.216Z",
+            "replies": [
+              {
+                "id": "1787007786090",
+                "userId": "1783122622538",
+                "username": "demo",
+                "fullName": "Usuario Demo",
+                "avatar": "https://ui-avatars.com/api/?name=Demo&background=a855f7&color=fff",
+                "content": "como estas",
+                "createdAt": "2026-08-17T23:03:06.090Z",
+                "replies": [
+                  {
+                    "id": "1787007797081",
+                    "userId": "1783122622538",
+                    "username": "demo",
+                    "fullName": "Usuario Demo",
+                    "avatar": "https://ui-avatars.com/api/?name=Demo&background=a855f7&color=fff",
+                    "content": "yo bien y tu",
+                    "createdAt": "2026-08-17T23:03:17.081Z",
+                    "replies": [
+                      {
+                        "id": "1787007813100",
+                        "userId": "1783122622538",
+                        "username": "demo",
+                        "fullName": "Usuario Demo",
+                        "avatar": "https://ui-avatars.com/api/?name=Demo&background=a855f7&color=fff",
+                        "content": "jajaj",
+                        "createdAt": "2026-08-17T23:03:33.100Z",
+                        "replies": [],
+                        "likes": [],
+                        "hasFile": false,
+                        "fileUrl": null
+                      }
+                    ],
+                    "likes": [],
+                    "hasFile": false,
+                    "fileUrl": null
+                  }
+                ],
+                "likes": [],
+                "hasFile": false,
+                "fileUrl": null
+              },
+              {
+                "id": "1787007821126",
+                "userId": "1783122622538",
+                "username": "demo",
+                "fullName": "Usuario Demo",
+                "avatar": "https://ui-avatars.com/api/?name=Demo&background=a855f7&color=fff",
+                "content": "ya",
+                "createdAt": "2026-08-17T23:03:41.126Z",
+                "replies": [],
+                "likes": [],
+                "hasFile": false,
+                "fileUrl": null
+              },
+              {
+                "id": "1787015232658",
+                "userId": "1783122622538",
+                "username": "demo",
+                "fullName": "Usuario Demo",
+                "avatar": "https://ui-avatars.com/api/?name=Demo&background=a855f7&color=fff",
+                "content": "xd",
+                "createdAt": "2026-08-18T01:07:12.660Z",
+                "replies": [
+                  {
+                    "id": "1787015242111",
+                    "userId": "1783122622538",
+                    "username": "demo",
+                    "fullName": "Usuario Demo",
+                    "avatar": "https://ui-avatars.com/api/?name=Demo&background=a855f7&color=fff",
+                    "content": "ya",
+                    "createdAt": "2026-08-18T01:07:22.112Z",
+                    "replies": [
+                      {
+                        "id": "1787015250424",
+                        "userId": "1783122622538",
+                        "username": "demo",
+                        "fullName": "Usuario Demo",
+                        "avatar": "https://ui-avatars.com/api/?name=Demo&background=a855f7&color=fff",
+                        "content": "ok",
+                        "createdAt": "2026-08-18T01:07:30.424Z",
+                        "replies": [
+                          {
+                            "id": "1787016734516",
+                            "userId": "1783122622538",
+                            "username": "demo",
+                            "fullName": "Usuario Demo",
+                            "avatar": "https://ui-avatars.com/api/?name=Demo&background=a855f7&color=fff",
+                            "content": "jajaj",
+                            "createdAt": "2026-08-18T01:32:14.516Z",
+                            "replies": [
+                              {
+                                "id": "1787016767808",
+                                "userId": "1783122622538",
+                                "username": "demo",
+                                "fullName": "Usuario Demo",
+                                "avatar": "https://ui-avatars.com/api/?name=Demo&background=a855f7&color=fff",
+                                "content": "si",
+                                "createdAt": "2026-08-18T01:32:47.808Z",
+                                "replies": [
+                                  {
+                                    "id": "1787017934321",
+                                    "userId": "1783122622538",
+                                    "username": "demo",
+                                    "fullName": "Usuario Demo",
+                                    "avatar": "https://ui-avatars.com/api/?name=Demo&background=a855f7&color=fff",
+                                    "content": "xd",
+                                    "createdAt": "2026-08-18T01:52:14.321Z",
+                                    "replies": [],
+                                    "likes": [],
+                                    "hasFile": false,
+                                    "fileUrl": null
+                                  }
+                                ],
+                                "likes": [],
+                                "hasFile": false,
+                                "fileUrl": null
+                              }
+                            ],
+                            "likes": [
+                              "1783122622538"
+                            ],
+                            "hasFile": false,
+                            "fileUrl": null
+                          }
+                        ],
+                        "likes": [],
+                        "hasFile": false,
+                        "fileUrl": null
+                      }
+                    ],
+                    "likes": [],
+                    "hasFile": false,
+                    "fileUrl": null
+                  }
+                ],
+                "likes": [],
+                "hasFile": false,
+                "fileUrl": null
+              }
+            ],
+            "likes": [],
+            "hasFile": false,
+            "fileUrl": null
+          }
+        ],
+        "likes": [
+          "1783122622538"
+        ],
         "hasFile": false,
         "fileUrl": null,
         "filename": null,
@@ -327,35 +397,17 @@
         "isStoryOwner": true
       },
       {
-        "id": "1786925863363",
+        "id": "1787018625680",
         "userId": "1783122622538",
         "username": "demo",
         "fullName": "Usuario Demo",
         "avatar": "https://ui-avatars.com/api/?name=Demo&background=a855f7&color=fff",
-        "content": "",
-        "createdAt": "2026-08-17T00:17:43.363Z",
+        "content": "hola",
+        "createdAt": "2026-08-18T02:03:45.681Z",
         "replies": [],
-        "likes": [],
-        "hasFile": true,
-        "fileUrl": "/uploads/comments/comment_1786925861152_ie9s4j_comment_1786859326677_5i3men_continental_report_2026_06_21.pdf",
-        "filename": "comment_1786925861152_ie9s4j_comment_1786859326677_5i3men_continental_report_2026_06_21.pdf",
-        "originalName": "comment_1786859326677_5i3men_continental_report_2026_06_21.pdf",
-        "fileSize": 64727,
-        "fileSizeFormatted": "63.2 KB",
-        "mimetype": "application/pdf",
-        "fileType": "pdf",
-        "isStoryOwner": true
-      },
-      {
-        "id": "1786926658798",
-        "userId": "1783122622538",
-        "username": "demo",
-        "fullName": "Usuario Demo",
-        "avatar": "https://ui-avatars.com/api/?name=Demo&background=a855f7&color=fff",
-        "content": "a",
-        "createdAt": "2026-08-17T00:30:58.798Z",
-        "replies": [],
-        "likes": [],
+        "likes": [
+          "1783122622538"
+        ],
         "hasFile": false,
         "fileUrl": null,
         "filename": null,
@@ -367,71 +419,18 @@
         "isStoryOwner": true
       },
       {
-        "id": "1786928682238",
-        "userId": "1783122622538",
-        "username": "demo",
-        "fullName": "Usuario Demo",
-        "avatar": "https://ui-avatars.com/api/?name=Demo&background=a855f7&color=fff",
-        "content": "",
-        "createdAt": "2026-08-17T01:04:42.238Z",
-        "replies": [],
-        "likes": [],
-        "hasFile": true,
-        "fileUrl": "/uploads/comments/comment_1786928671517_k8qzak_comment_1786859326677_5i3men_continental_report_2026_06_21.pdf",
-        "filename": "comment_1786928671517_k8qzak_comment_1786859326677_5i3men_continental_report_2026_06_21.pdf",
-        "originalName": "comment_1786859326677_5i3men_continental_report_2026_06_21.pdf",
-        "fileSize": 64727,
-        "fileSizeFormatted": "63.2 KB",
-        "mimetype": "application/pdf",
-        "fileType": "pdf",
-        "isStoryOwner": true
-      }
-    ],
-    "score": 0,
-    "iaClassification": null,
-    "flagged": false,
-    "flagReason": null,
-    "flagConfidence": 0,
-    "hidden": false,
-    "hiddenAt": null,
-    "hiddenReason": null,
-    "hiddenByIA": false,
-    "hasSubtitles": false,
-    "subtitles": null,
-    "segments": null,
-    "language": "es",
-    "embedded": false,
-    "embeddingVersion": null,
-    "country": "EC",
-    "region": "south_america",
-    "countryName": "Ecuador"
-  },
-  {
-    "id": "1786920640834",
-    "userId": "1783122622538",
-    "mediaType": "text",
-    "mediaUrl": null,
-    "caption": "",
-    "textContent": "t",
-    "textBgColor": "#1a1a2e",
-    "createdAt": "2026-08-16T22:50:40.836Z",
-    "expiresAt": "2026-08-17T22:50:40.836Z",
-    "views": [
-      "1783122622538",
-      "1786667275566"
-    ],
-    "likes": [],
-    "comments": [
-      {
-        "id": "1786924662555",
+        "id": "1787018637075",
         "userId": "1783122622538",
         "username": "demo",
         "fullName": "Usuario Demo",
         "avatar": "https://ui-avatars.com/api/?name=Demo&background=a855f7&color=fff",
         "content": "xd",
-        "createdAt": "2026-08-16T23:57:42.558Z",
+        "createdAt": "2026-08-18T02:03:57.075Z",
         "replies": [],
-        "likes": [],
+        "likes": [
+          "1786667275566",
+          "1783122622538"
+        ],
         "hasFile": false,
         "fileUrl": null,
         "filename": null,
@@ -443,15 +442,68 @@
         "isStoryOwner": true
       },
       {
-        "id": "1786924666307",
+        "id": "1787018711244",
+        "userId": "1786667275566",
+        "username": "AAAAA",
+        "fullName": "AAAAA",
+        "avatar": "https://ui-avatars.com/api/?name=AAAAA&background=a855f7&color=fff",
+        "content": "hola",
+        "createdAt": "2026-08-18T02:05:11.244Z",
+        "replies": [
+          {
+            "id": "1787018763326",
+            "userId": "1783122622538",
+            "username": "demo",
+            "fullName": "Usuario Demo",
+            "avatar": "https://ui-avatars.com/api/?name=Demo&background=a855f7&color=fff",
+            "content": "holaaa",
+            "createdAt": "2026-08-18T02:06:03.326Z",
+            "replies": [
+              {
+                "id": "1787018777702",
+                "userId": "1786667275566",
+                "username": "AAAAA",
+                "fullName": "AAAAA",
+                "avatar": "https://ui-avatars.com/api/?name=AAAAA&background=a855f7&color=fff",
+                "content": "hola amigo",
+                "createdAt": "2026-08-18T02:06:17.702Z",
+                "replies": [],
+                "likes": [],
+                "hasFile": false,
+                "fileUrl": null
+              }
+            ],
+            "likes": [],
+            "hasFile": false,
+            "fileUrl": null
+          }
+        ],
+        "likes": [
+          "1786667275566",
+          "1783122622538"
+        ],
+        "hasFile": false,
+        "fileUrl": null,
+        "filename": null,
+        "originalName": null,
+        "fileSize": null,
+        "fileSizeFormatted": null,
+        "mimetype": null,
+        "fileType": null,
+        "isStoryOwner": false
+      },
+      {
+        "id": "1787019822705",
         "userId": "1783122622538",
         "username": "demo",
         "fullName": "Usuario Demo",
         "avatar": "https://ui-avatars.com/api/?name=Demo&background=a855f7&color=fff",
-        "content": "hola",
-        "createdAt": "2026-08-16T23:57:46.307Z",
+        "content": "a",
+        "createdAt": "2026-08-18T02:23:42.706Z",
         "replies": [],
-        "likes": [],
+        "likes": [
+          "1783122622538"
+        ],
         "hasFile": false,
         "fileUrl": null,
         "filename": null,
@@ -463,15 +515,65 @@
         "isStoryOwner": true
       },
       {
-        "id": "1786925198166",
+        "id": "1787020559578",
         "userId": "1783122622538",
         "username": "demo",
         "fullName": "Usuario Demo",
         "avatar": "https://ui-avatars.com/api/?name=Demo&background=a855f7&color=fff",
-        "content": "hola",
-        "createdAt": "2026-08-17T00:06:38.169Z",
-        "replies": [],
-        "likes": [],
+        "content": "a",
+        "createdAt": "2026-08-18T02:35:59.579Z",
+        "replies": [
+          {
+            "id": "1787021231158",
+            "userId": "1783122622538",
+            "username": "demo",
+            "fullName": "Usuario Demo",
+            "avatar": "https://ui-avatars.com/api/?name=Demo&background=a855f7&color=fff",
+            "content": "xd",
+            "createdAt": "2026-08-18T02:47:11.160Z",
+            "replies": [
+              {
+                "id": "1787021235882",
+                "userId": "1783122622538",
+                "username": "demo",
+                "fullName": "Usuario Demo",
+                "avatar": "https://ui-avatars.com/api/?name=Demo&background=a855f7&color=fff",
+                "content": "jaja",
+                "createdAt": "2026-08-18T02:47:15.882Z",
+                "replies": [
+                  {
+                    "id": "1787024584275",
+                    "userId": "1783122622538",
+                    "username": "demo",
+                    "fullName": "Usuario Demo",
+                    "avatar": "https://ui-avatars.com/api/?name=Demo&background=a855f7&color=fff",
+                    "content": "xd",
+                    "createdAt": "2026-08-18T03:43:04.278Z",
+                    "replies": [],
+                    "likes": [
+                      "1783122622538"
+                    ],
+                    "hasFile": false,
+                    "fileUrl": null
+                  }
+                ],
+                "likes": [
+                  "1783122622538"
+                ],
+                "hasFile": false,
+                "fileUrl": null
+              }
+            ],
+            "likes": [
+              "1783122622538"
+            ],
+            "hasFile": false,
+            "fileUrl": null
+          }
+        ],
+        "likes": [
+          "1783122622538"
+        ],
         "hasFile": false,
         "fileUrl": null,
         "filename": null,

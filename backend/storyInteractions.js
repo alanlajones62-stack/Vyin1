@@ -1,5 +1,6 @@
 // backend/storyInteractions.js - VERSIÓN COMPLETA CON RESPUESTAS ANIDADAS
 // Y SOPORTE PARA SUBIR ARCHIVOS EN COMENTARIOS (SOLO DUEÑO DE HISTORIA)
+// 🔥 CORREGIDO: Likes funcionando correctamente (POST y DELETE)
 // ============================================================
 
 const auth = require('./middleware/auth');
@@ -286,7 +287,6 @@ module.exports = function(read, write, io, areStoriesVisible, logger) {
                 createdAt: new Date().toISOString(),
                 replies: [],
                 likes: [],
-                // 🔥 NUEVOS CAMPOS PARA ARCHIVOS ADJUNTOS
                 hasFile: !!fileUrl,
                 fileUrl: fileUrl || null,
                 filename: filename || null,
@@ -671,7 +671,7 @@ module.exports = function(read, write, io, areStoriesVisible, logger) {
     });
 
     // ============================================================
-    // DAR LIKE A UN COMENTARIO (RECURSIVO)
+    // 🔥🔥🔥 DAR LIKE A UN COMENTARIO (CORREGIDO)
     // ============================================================
     router.post('/:storyId/comments/:commentId/like', auth, async (req, res) => {
         try {
@@ -707,11 +707,14 @@ module.exports = function(read, write, io, areStoriesVisible, logger) {
                 comment.likes = [];
             }
             
+            // Verificar si el usuario ya dio like
             const isLiked = comment.likes.includes(userId);
             
             if (isLiked) {
+                // Si ya tiene like, lo quitamos (toggle)
                 comment.likes = comment.likes.filter(id => id !== userId);
             } else {
+                // Si no tiene like, lo agregamos
                 comment.likes.push(userId);
             }
             
@@ -723,9 +726,12 @@ module.exports = function(read, write, io, areStoriesVisible, logger) {
                 cache.invalidatePattern(`story_detail_${storyId}`);
             } catch(e) {}
             
+            // 🔥 Devolver el estado actualizado
+            const newLikedState = !isLiked;
+            
             res.json({ 
                 success: true,
-                liked: !isLiked,
+                liked: newLikedState,
                 likes: comment.likes,
                 likesCount: comment.likes.length
             });
@@ -737,7 +743,7 @@ module.exports = function(read, write, io, areStoriesVisible, logger) {
     });
 
     // ============================================================
-    // QUITAR LIKE DE UN COMENTARIO (RECURSIVO)
+    // 🔥🔥🔥 QUITAR LIKE DE UN COMENTARIO (CORREGIDO)
     // ============================================================
     router.delete('/:storyId/comments/:commentId/like', auth, async (req, res) => {
         try {
@@ -773,6 +779,7 @@ module.exports = function(read, write, io, areStoriesVisible, logger) {
                 comment.likes = [];
             }
             
+            // 🔥 Quitar el like del usuario
             comment.likes = comment.likes.filter(id => id !== userId);
             
             write('stories.json', stories);
@@ -783,6 +790,7 @@ module.exports = function(read, write, io, areStoriesVisible, logger) {
                 cache.invalidatePattern(`story_detail_${storyId}`);
             } catch(e) {}
             
+            // 🔥 Devolver el estado actualizado (siempre liked: false)
             res.json({ 
                 success: true,
                 liked: false,
